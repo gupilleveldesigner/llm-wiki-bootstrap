@@ -57,6 +57,15 @@ Claude Code에서:
 - **배포 자족성** — 필요한 모든 자산이 `assets/`에 번들되어 있어, 다른 위키가 있는 환경일 필요가 없다.
 - **비파괴** — migrate/upgrade는 기존 내용을 삭제·덮어쓰기하지 않는다. 충돌은 `.wiki-proposed` 제안 파일로 우회한다.
 
+## 유사 프로젝트와의 차이
+
+[karpathy-llm-wiki](https://github.com/Astro-Han/karpathy-llm-wiki), [claude-obsidian](https://github.com/AgriciDaniel/claude-obsidian) 같은 좋은 구현이 이미 있다. 이 프로젝트가 다르게 힘을 준 지점은 두 가지다:
+
+- **세션 인수인계 (`SAVE`)** — 세션 상태를 락·저널 기반 원자적 트랜잭션으로 저장하고 검증까지 마친 뒤에만 성공을 보고한다. 완료하지 않은 작업과 실행하지 않은 검증은 기록하지 않는다. 다음 세션은 `log.md` 하나로 이어받는다.
+- **비파괴 전환** — migrate는 기존 파일을 삭제·수정 없이 위키로 전환하고(이동은 승인 후, 복구 지도 보고), upgrade는 스킬만 백업 후 교체한다. 충돌은 덮어쓰기 대신 `.wiki-proposed` 제안 파일로 우회한다.
+
+그리고 작업 브리프를 인터뷰로 맞춤화하는 brief-tuner, 한국어 우선 문서가 있다. 대신 벡터 검색·MCP 서버·자동 스케줄링 같은 층은 의도적으로 없다 — 파일과 마크다운만으로 완결된다.
+
 ---
 
 ## English
