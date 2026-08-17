@@ -24,7 +24,7 @@
 이 저장소를 스킬 폴더에 복사한다:
 
 ```bash
-git clone https://github.com/OWNER/llm-wiki-bootstrap "$HOME/.claude/skills/llm-wiki-bootstrap"
+git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claude/skills/llm-wiki-bootstrap"
 ```
 
 Codex CLI 사용자는 같은 폴더를 `~/.codex/skills/llm-wiki-bootstrap`에 복사하면 된다 (`agents/openai.yaml` 포함).
