@@ -1,0 +1,71 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "LLM Wiki — 팟캐스트",
+	"behavior": "create",
+	"noteContentFormat": "# {{title}}\n\n## 캡처 메모\n\n- 왜 저장했는가:\n- 현재 작업과의 연결:\n- 해보고 싶은 것:\n\n## 에피소드 소개\n\n{{description}}\n\n## 쇼 노트 또는 대본\n\n{{content}}",
+	"properties": [
+		{
+			"name": "title",
+			"value": "{{title}}",
+			"type": "text"
+		},
+		{
+			"name": "source_type",
+			"value": "podcast",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "host",
+			"value": "{{author|split:\", \"|wikilink|join}}",
+			"type": "multitext"
+		},
+		{
+			"name": "podcast",
+			"value": "{{schema:isPartOf.name}}",
+			"type": "text"
+		},
+		{
+			"name": "published",
+			"value": "{{published|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "duration",
+			"value": "{{schema:duration|duration}}",
+			"type": "text"
+		},
+		{
+			"name": "created",
+			"value": "{{date|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "description",
+			"value": "{{description}}",
+			"type": "text"
+		},
+		{
+			"name": "topics",
+			"value": "",
+			"type": "multitext"
+		},
+		{
+			"name": "ingest_status",
+			"value": "pending",
+			"type": "text"
+		}
+	],
+	"triggers": [
+		"schema:@PodcastEpisode",
+		"schema:@PodcastSeries",
+		"https://open.spotify.com/episode/",
+		"https://podcasts.apple.com/"
+	],
+	"noteNameFormat": "{{title|safe_name}}",
+	"path": "raw/reference/podcasts"
+}

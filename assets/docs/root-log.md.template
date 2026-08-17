@@ -1,0 +1,14 @@
+# 세션 로그
+
+업데이트: {{TODAY}}
+세션 ID: (아직 없음 — 첫 SAVE에서 기록)
+상태: `complete`
+
+## 프로젝트 목표
+
+- llm-wiki-bootstrap 스킬로 {{PROJECT_NAME}} 볼트를 초기화했다.
+- 다음 단계: 첫 자료를 `raw/`에 넣고 `/ingest` 실행.
+
+## 완료 기준
+
+- 없음

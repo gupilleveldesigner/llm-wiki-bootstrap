@@ -1,0 +1,23 @@
+{
+  "skill_name": "ingest",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/ingest — 현재 Wiki의 새 raw 원문을 찾아 연결까지 갱신해줘.",
+      "expected_output": "현재 루트를 자동 탐지하고 raw 불변, 지식 문서 연결, 대상 Graphify 완료 게이트를 수행한다.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "D:\\Knowledge\\CookingWiki 경로에 방금 넣은 원문을 인제스트해줘. 지금 작업 폴더와 다른 Wiki야.",
+      "expected_output": "명시된 Wiki 루트를 기준으로만 읽고 쓰며 현재 작업 폴더를 대상이라고 가정하지 않는다.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Graphify를 설치하지 않은 새 LLM Wiki에 이 자료를 반영해줘.",
+      "expected_output": "로컬 문서 게이트를 적용하고 그래프가 없음을 명시하되 일반 Graphify 명령을 임의 실행하지 않는다.",
+      "files": []
+    }
+  ]
+}

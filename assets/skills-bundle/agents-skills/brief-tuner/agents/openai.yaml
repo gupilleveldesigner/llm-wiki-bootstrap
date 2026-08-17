@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brief Tuner"
+  short_description: "Interview-driven tuning of AI work-brief templates"
+  default_prompt: "Use $brief-tuner to tune my work brief templates through an interview."

@@ -1,0 +1,29 @@
+# raw/ — 불변 원본
+
+이 폴더는 Karpathy LLM Wiki 패턴의 1계층(원본 레이어)이다. 전체 운영 규칙은 루트 [[CLAUDE]]와 [[AGENTS]] 참고.
+
+## 규칙
+
+- 여기 들어온 내용은 **수정하지 않는다.** 이동·이름 정리(명확한 파일명)는 허용되지만 내용 변경은 금지.
+- 새 자료는 아래 적절한 하위 폴더에 저장한다. 맞는 폴더가 없으면 `inbox/`에 넣고 나중에 분류한다.
+- 원문을 저장한 뒤에는 `wiki/sources/`에 요약을 만들고, `wiki/index.md`·`wiki/log.md`를 갱신한다 (절차는 `instructions/wiki-operations.md`의 "Workflow routing"과 설치된 `ingest` 스킬 참고).
+
+## 하위 폴더
+
+- `personal/` — 개인 맥락, 이력, 프로젝트 기록 등 본인에 대한 원문
+- `journal/` — 일일 기록, 짧은 관찰 메모
+- `reference/` — 외부 참고 자료(가이드, 방법론 문서 등)
+  - `reference/articles/`, `reference/youtube/`, `reference/podcasts/`, `reference/books/`, `reference/research/` — Obsidian Web Clipper 템플릿(아티클/유튜브/팟캐스트/책/연구 자료)으로 수집된 자료가 자동으로 떨어지는 곳
+- `archive/` — 더 이상 활성 참고가 아닌 원문
+- `assets/` — 이미지 등 비텍스트 자료
+- `inbox/` — 분류 전 임시 보관
+
+## Web Clipper로 수집한 원문의 프런트매터
+
+`reference/` 하위 5개 폴더에 들어오는 파일은 클리퍼 템플릿이 아래 속성을 자동으로 채운다.
+
+- `source_type`: `article` | `youtube` | `podcast` | `book` | `research`
+- `source`: 원본 URL
+- `published` / `created`: 발행일 / 클립한 날짜
+- `topics`: 비어 있음 — ingest 시 LLM이 위키 `topics` taxonomy에 맞춰 채운다
+- `ingest_status`: 클리퍼가 캡처 시점에 `pending`으로 채우는 1회성 기록. **ingest 후에도 이 값을 고쳐 쓰지 않는다** — `raw/`는 절대 수정하지 않기 때문이다.

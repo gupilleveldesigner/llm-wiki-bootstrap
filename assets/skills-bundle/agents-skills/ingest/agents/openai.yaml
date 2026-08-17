@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Ingest"
+  short_description: "raw 원문을 불변으로 유지하며 Wiki에 인제스트"
+  default_prompt: "Use $ingest to scan the latest raw files and update the Wiki."

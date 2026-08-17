@@ -1,0 +1,26 @@
+---
+type: overview
+status: active
+topics:
+  - 개요
+sources: []
+created: {{TODAY}}
+updated: {{TODAY}}
+---
+
+# 현재 지식 개요
+
+<!-- BOOTSTRAP:FILL — 부트스트랩 인터뷰 내용을 바탕으로 아래 섹션을 채운다. 이 주석은 채운 뒤 삭제한다. -->
+
+## Vault의 목적
+
+{{DOMAIN_SUMMARY}}
+
+## 핵심 축
+
+(인터뷰에서 파악한 주요 관심 영역을 2~5개 항목으로 정리)
+
+## 현재 상태와 한계
+
+- 방금 부트스트랩된 빈 위키다. 아직 ingest된 원문이 없다.
+- 첫 자료를 `raw/`에 넣고 `/ingest`를 실행하면 이 문서가 실질 내용으로 갱신되기 시작한다.

@@ -1,0 +1,27 @@
+---
+name: query
+description: 현재 위치 또는 사용자가 지정한 다른 LLM Wiki의 정리된 지식층에서 질문에 답한다. index/catalog로 후보를 찾고 후보 문서의 YAML frontmatter만 먼저 읽어 관련성·상태·출처·신선도를 판정한 뒤 필요한 본문과 원문만 연다. "위키에서 찾아줘", "/query", "내가 ~했었나", "정리해서 알려줘", "다른 LLM Wiki에서 조회"처럼 Wiki 근거 답변이 필요한 요청에 사용한다.
+---
+
+# /query — frontmatter-first LLM Wiki 질의
+
+LLM Wiki의 컨텍스트는 저장 공간이 아니라 과업별 예산이다. `catalog(wiki/index.md) → frontmatter만 → 필요한 본문만 → 필요한 raw만` 순으로 점진적으로 공개하고, 후보 선별 전에는 본문을 통째로 열지 않는다.
+
+## 핵심 원칙
+
+- 사람이 관리하는 `wiki/index.md`(또는 대상 Wiki의 catalog)에서 후보를 고른 뒤, frontmatter만 먼저 읽어 관련성·상태·출처·신선도를 판정한다. 본문은 선택된 문서만 연다.
+- Wiki에 없는 내용을 지어내지 않는다. 모르면 모른다고 답한다.
+- 답변에는 실제로 읽은 Wiki 문서 경로(및 연 raw 원문 경로)를 남긴다.
+- 대상 Wiki의 `AGENTS.md`/`CLAUDE.md`와 frontmatter 스키마를 우선하며, 현재 볼트 스키마를 강제하지 않는다.
+
+## frontmatter 읽기
+
+```text
+python "<SKILL_ROOT>/scripts/query_runtime.py" status --root "<WIKI_ROOT>"
+python "<SKILL_ROOT>/scripts/query_runtime.py" frontmatter --root "<WIKI_ROOT>" --file "wiki/<후보>.md"
+```
+
+각 파일의 첫 YAML 경계까지만 출력한다. 런타임을 쓸 수 없으면 파일 시작부터 두 번째 `---`까지만 범위 읽기로 대체한다.
+
+Wiki 변경(수정·적립)은 사용자가 요청했거나 대상 규칙이 요구할 때만, 대상 Wiki의 기존 구조와 스키마를 따라 수행한다.
+

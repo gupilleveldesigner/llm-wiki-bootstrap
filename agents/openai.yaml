@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Bootstrap"
+  short_description: "LLM Wiki 볼트 신규 구축·전환·업그레이드 (new/migrate/upgrade)"
+  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki vault following SKILL.md."

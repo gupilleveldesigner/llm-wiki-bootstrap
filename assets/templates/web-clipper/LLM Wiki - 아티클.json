@@ -1,0 +1,65 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "LLM Wiki — 아티클",
+	"behavior": "create",
+	"noteContentFormat": "# {{title}}\n\n## 캡처 메모\n\n- 왜 저장했는가:\n- 현재 작업과의 연결:\n- 해보고 싶은 것:\n\n## 원문\n\n{{content}}",
+	"properties": [
+		{
+			"name": "title",
+			"value": "{{title}}",
+			"type": "text"
+		},
+		{
+			"name": "source_type",
+			"value": "article",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "author",
+			"value": "{{author|split:\", \"|wikilink|join}}",
+			"type": "multitext"
+		},
+		{
+			"name": "site",
+			"value": "{{site}}",
+			"type": "text"
+		},
+		{
+			"name": "published",
+			"value": "{{published|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "created",
+			"value": "{{date|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "description",
+			"value": "{{description}}",
+			"type": "text"
+		},
+		{
+			"name": "topics",
+			"value": "",
+			"type": "multitext"
+		},
+		{
+			"name": "ingest_status",
+			"value": "pending",
+			"type": "text"
+		}
+	],
+	"triggers": [
+		"schema:@Article",
+		"schema:@NewsArticle",
+		"schema:@BlogPosting"
+	],
+	"noteNameFormat": "{{title|safe_name}}",
+	"path": "raw/reference/articles"
+}

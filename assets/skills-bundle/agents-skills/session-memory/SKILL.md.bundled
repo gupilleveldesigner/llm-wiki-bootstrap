@@ -1,0 +1,18 @@
+---
+name: session-memory
+description: 사용자가 `SAVE`를 단독으로 입력하거나 세션 저장·다음 작업 인수인계를 요청하면 현재 상태를 log, changelog, index와 불변 JSON에 원자적으로 저장하고 검증한다. "SAVE", "세션 저장", "다음에 이어서", "작업 상태 보존" 요청에 사용한다.
+---
+
+# Session Memory
+
+1. `.session-memory/scripts/session_memory.py status`로 저장 상태와 미완료 트랜잭션을 확인한다.
+2. 현재 대화와 실제 실행 결과만 사용해 `.session-memory/pending/<unique>.json` payload를 만든다.
+3. 다음을 실행한다.
+
+   ```text
+   python ".session-memory/scripts/session_memory.py" save      --payload-file ".session-memory/pending/<unique>.json"      --consume-payload
+   ```
+
+4. `verified: true`, 세션 ID, 순번, 다음 행동을 확인해 보고한다.
+
+필수 payload 필드는 `title`, `objective`, `status`, `summary`다. 상태는 `in_progress|complete|blocked|paused`이며 진행 중이면 `next_actions`가 필요하다. 완료하지 않은 작업과 실행하지 않은 검증을 기록하지 않는다. 비밀값을 저장하지 않는다. SAVE 뒤에는 요청받지 않은 새 작업을 계속하지 않는다.

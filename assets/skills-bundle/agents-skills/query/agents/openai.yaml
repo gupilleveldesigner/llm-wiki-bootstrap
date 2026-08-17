@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Query"
+  short_description: "벡터 DB 없이 Wiki 문서를 직접 근거로 답변"
+  default_prompt: "Use $query to answer my question from the Wiki documents."

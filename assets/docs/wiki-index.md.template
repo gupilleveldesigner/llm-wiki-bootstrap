@@ -1,0 +1,36 @@
+---
+type: overview
+status: active
+topics:
+  - 인덱스
+  - 탐색
+sources: []
+created: {{TODAY}}
+updated: {{TODAY}}
+---
+
+# Wiki 인덱스
+
+질의할 때 이 문서를 먼저 읽고 관련 페이지로 이동한다.
+
+## 개요
+
+- [[overview|현재 지식 개요]] — Vault의 범위, 핵심 축, 정보 공백
+- [[questions|확인할 질문]] — 다음 수집과 정리에서 해결할 항목
+- [[log|변경 로그]] — Wiki가 어떻게 갱신되었는지 기록
+
+## 엔티티
+
+(아직 없음 — 첫 ingest에서 추가)
+
+## 개념
+
+(아직 없음 — 첫 ingest에서 추가)
+
+## 프로젝트
+
+(아직 없음 — 첫 ingest에서 추가)
+
+## 원본 요약
+
+(아직 없음 — 첫 ingest에서 추가)

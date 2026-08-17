@@ -1,0 +1,5 @@
+# 변경 이력
+
+## [{{TODAY}}] llm-wiki-bootstrap 초기화
+
+- {{PROJECT_NAME}} 볼트 생성: 3계층 구조, 라우터 문서, 스킬 4종(ingest/query/lint/session-memory), 문서 템플릿.

@@ -1,0 +1,71 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "LLM Wiki — 연구 자료",
+	"behavior": "create",
+	"noteContentFormat": "# {{title}}\n\n## 캡처 메모\n\n- 왜 저장했는가:\n- 현재 작업과의 연결:\n- 해보고 싶은 것:\n\n## 초록\n\n{{meta:name:citation_abstract}}\n\n## 원문\n\n{{content}}",
+	"properties": [
+		{
+			"name": "title",
+			"value": "{{title}}",
+			"type": "text"
+		},
+		{
+			"name": "source_type",
+			"value": "research",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "author",
+			"value": "{{meta:name:citation_author|wikilink|join}}",
+			"type": "multitext"
+		},
+		{
+			"name": "venue",
+			"value": "{{meta:name:citation_journal_title}}",
+			"type": "text"
+		},
+		{
+			"name": "published",
+			"value": "{{meta:name:citation_publication_date|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "doi",
+			"value": "{{meta:name:citation_doi}}",
+			"type": "text"
+		},
+		{
+			"name": "created",
+			"value": "{{date|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "description",
+			"value": "{{description}}",
+			"type": "text"
+		},
+		{
+			"name": "topics",
+			"value": "",
+			"type": "multitext"
+		},
+		{
+			"name": "ingest_status",
+			"value": "pending",
+			"type": "text"
+		}
+	],
+	"triggers": [
+		"schema:@ScholarlyArticle",
+		"schema:@MedicalScholarlyArticle",
+		"https://arxiv.org/",
+		"https://pubmed.ncbi.nlm.nih.gov/"
+	],
+	"noteNameFormat": "{{title|safe_name}}",
+	"path": "raw/reference/research"
+}

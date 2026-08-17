@@ -1,0 +1,10 @@
+{
+  "changelog": "changelog.md",
+  "index": ".session-memory/index.jsonl",
+  "latest_log": "log.md",
+  "project_name": "{{PROJECT_NAME}}",
+  "runtime_version": "1.0.0",
+  "schema_version": 1,
+  "sessions": ".session-memory/sessions",
+  "state": ".session-memory/state.json"
+}

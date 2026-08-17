@@ -1,0 +1,7 @@
+# 위키 로그
+
+## [{{TODAY}}] setup | llm-wiki-bootstrap으로 볼트 초기화
+
+- 3계층 구조(`raw/` → `wiki/` → `Output/`)와 라우터 문서(CLAUDE.md, AGENTS.md, instructions/)를 생성했다.
+- 스킬 설치: ingest, query, lint, session-memory (`.agents/skills/` 정본 + `.claude/skills/` 어댑터).
+- 시드 문서 생성: index.md, overview.md, questions.md, log.md.

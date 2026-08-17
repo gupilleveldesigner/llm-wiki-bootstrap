@@ -1,0 +1,67 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "LLM Wiki — 유튜브",
+	"behavior": "create",
+	"noteContentFormat": "# {{schema:name}}\n\n![]({{url}})\n\n## 캡처 메모\n\n- 왜 저장했는가:\n- 현재 작업과의 연결:\n- 해보고 싶은 것:\n\n## 설명\n\n{{description}}\n\n## 영상 내용\n\n{{content}}",
+	"properties": [
+		{
+			"name": "title",
+			"value": "{{schema:name}}",
+			"type": "text"
+		},
+		{
+			"name": "source_type",
+			"value": "youtube",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "channel",
+			"value": "{{schema:author|wikilink}}",
+			"type": "multitext"
+		},
+		{
+			"name": "published",
+			"value": "{{schema:uploadDate|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "duration",
+			"value": "{{schema:duration|duration}}",
+			"type": "text"
+		},
+		{
+			"name": "created",
+			"value": "{{date|date:\"YYYY-MM-DD\"}}",
+			"type": "date"
+		},
+		{
+			"name": "description",
+			"value": "{{description}}",
+			"type": "text"
+		},
+		{
+			"name": "topics",
+			"value": "",
+			"type": "multitext"
+		},
+		{
+			"name": "ingest_status",
+			"value": "pending",
+			"type": "text"
+		}
+	],
+	"triggers": [
+		"https://www.youtube.com/watch?v=",
+		"https://youtube.com/watch?v=",
+		"https://m.youtube.com/watch?v=",
+		"https://www.youtube.com/shorts/",
+		"https://youtu.be/"
+	],
+	"noteNameFormat": "{{schema:name|safe_name}}",
+	"path": "raw/reference/youtube"
+}

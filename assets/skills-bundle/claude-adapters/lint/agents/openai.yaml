@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Lint"
+  short_description: "Wiki 링크·스키마·최신성 문제를 점검하고 정리"
+  default_prompt: "Use $lint to audit and safely repair the Wiki."

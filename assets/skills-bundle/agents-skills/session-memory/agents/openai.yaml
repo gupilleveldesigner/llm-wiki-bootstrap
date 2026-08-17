@@ -1,0 +1,4 @@
+interface:
+  display_name: "Session Memory"
+  short_description: "Save and verify resumable project session state"
+  default_prompt: "Use $session-memory to save the current project state for the next session."
