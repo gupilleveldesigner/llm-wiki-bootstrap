@@ -29,4 +29,4 @@ Folder-specific rules live in `raw/CLAUDE.md`, `wiki/CLAUDE.md`, and `Output/CLA
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when scoped graph commands are insufficient.
 - Exact-file edits, formatting-only work, and established follow-ups should use targeted reads instead of repeating graph traversal.
 - Never run `graphify update .` directly on the curated graph. Update it through the host Graphify skill (`$graphify <WIKI_ROOT> --update` or `/graphify <WIKI_ROOT> --update`), then run `ingest_runtime.py finalize` and `verify` for validation/promotion.
-- For a single-source operation, Graphify may be absent and the result must say `validated_without_graph` plus `graph_status: not_installed`. For batch completion, the runtime installs `graphifyy` and requires a built graph; installation/build failure blocks completion.
+- For a single-source operation, Graphify may be absent and the result must say `validated_without_graph` plus `graph_status: not_installed`. For batch completion, the host Graphify skill must build the graph; missing host installation or build failure blocks completion.
