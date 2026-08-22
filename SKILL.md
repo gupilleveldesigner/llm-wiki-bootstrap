@@ -63,6 +63,7 @@ stdout의 JSON에서 `"ok": true`를 확인한다. `false`면 `error`를 사용�
 
 - `wiki/overview.md` — `BOOTSTRAP:FILL` 주석을 찾아 인터뷰 내용 기반으로 "핵심 축" 섹션을 2~5개 항목으로 채우고 주석을 삭제한다.
 - `wiki/questions.md` — 같은 방식으로 초기 정보 공백 질문 2~5개를 채우고 주석을 삭제한다.
+- `wiki/taxonomy.json` — 인터뷰에서 실제로 들은 범위를 바탕으로 초기 카테고리 3~7개를 만들고, 각 개념의 `prefLabel`, `altLabel`, `scopeNote`, `broader`를 채운다. taxonomy는 Graphify community와 별개다.
 - 루트 `CLAUDE.md`의 "볼트 소개"가 인터뷰 내용과 어긋나면 다듬는다.
 
 과장하지 않는다 — 아직 빈 위키다. 인터뷰에서 실제로 들은 것만 쓴다.

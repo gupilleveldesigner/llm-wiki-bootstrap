@@ -20,6 +20,8 @@ Folder-specific rules live in `raw/CLAUDE.md`, `wiki/CLAUDE.md`, and `Output/CLA
 - The runtime records the file ledger at `wiki/ingest-ledger.json`. Do not edit `raw/` to update statuses.
 - Query: start from `wiki/index.md`; open `raw/` only when exact source verification is necessary. Read the installed `query` skill before executing.
 - Lint: use the installed `lint` skill for broken links, isolated documents, and stale claims.
+- Category audit: run `ingest_runtime.py category-audit`; only `wiki/taxonomy.json` labels are canonical. The model must not silently invent synonym categories.
+- `wiki/taxonomy.json` follows a lightweight SKOS-shaped convention: preferred labels, alternate labels, direct broader concepts, and scope notes. See https://www.w3.org/TR/skos-reference/.
 
 ## Graphify
 

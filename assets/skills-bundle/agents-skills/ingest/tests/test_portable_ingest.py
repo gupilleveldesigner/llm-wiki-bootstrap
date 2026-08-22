@@ -27,11 +27,25 @@ def make_wiki(root: Path) -> None:
     (root / "raw" / "reference").mkdir(parents=True)
     (root / "wiki" / "sources").mkdir(parents=True)
     (root / "wiki" / "concepts").mkdir(parents=True)
+    (root / "wiki" / "taxonomy.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "scheme": {"id": "vault-topics", "prefLabel": "Test", "scopeNote": "Test taxonomy"},
+                "concepts": [
+                    {"id": "test", "prefLabel": "Test", "altLabel": ["testing"], "scopeNote": "Test documents", "broader": []}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def source_note(root: Path, raw_relative: str, title: str) -> str:
     digest = hashlib.sha256((root / raw_relative).read_bytes()).hexdigest()
-    (root / "wiki" / "concepts" / "test.md").write_text("# Test concept\n", encoding="utf-8")
+    (root / "wiki" / "concepts" / "test.md").write_text(
+        "---\ntopics: [test]\n---\n# Test concept\n", encoding="utf-8"
+    )
     return (
         "---\n"
         "type: source\n"
@@ -196,6 +210,22 @@ class PortableIngestTests(unittest.TestCase):
             self.assertIn("$graphify", result["codex"]["build"])
             self.assertIn('"', result["codex"]["build"])
             self.assertEqual(result["exit_code"], 2)
+
+    def test_category_audit_blocks_complete_batch(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-category-gate-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            raw = root / "raw" / "reference" / "source.md"
+            raw.write_text("source", encoding="utf-8")
+            (root / "wiki" / "sources" / "source.md").write_text(
+                source_note(root, "raw/reference/source.md", "Source"), encoding="utf-8"
+            )
+            (root / "wiki" / "taxonomy.json").write_text(
+                json.dumps({"version": 1, "scheme": {}, "concepts": []}), encoding="utf-8"
+            )
+            result = finalize(root, ["wiki/sources/source.md"], complete_batch=True)
+            self.assertEqual(result["status"], "category_failed")
+            self.assertTrue(any("taxonomy.json" in error for error in result["errors"]))
 
     def test_independent_graph_gate_rejects_catalog_node_with_embedded_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wiki-graph-gate-") as temporary:

@@ -82,6 +82,8 @@ Claude Code에서:
 
 Ingest completion is file-level: a catalog that only lists raw paths is not evidence. Batch completion uses the one-to-one source-summary and content-evidence gates, asks the host Graphify skill to build/update the graph with the host assistant's authentication, and requires the read-only `verify --complete-batch --require-graph` gate before reporting success. It writes `wiki/ingest-ledger.json` and loops over only failed sources when verification fails.
 
+Categories use a small SKOS-shaped controlled vocabulary in `wiki/taxonomy.json` (`prefLabel`, `altLabel`, `broader`, `scopeNote`); run `category-audit` before completing a batch. Graphify communities remain discovery aids, not taxonomy.
+
 When Graphify is missing, the ingest runtime returns host-specific `agent_action_required` instructions instead of invoking a headless CLI or asking for an unrelated provider key. After `$graphify`/`/graphify`, the host records the run manifest before verification.
 
 ## License

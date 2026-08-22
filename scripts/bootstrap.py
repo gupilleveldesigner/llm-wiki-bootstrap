@@ -45,6 +45,7 @@ DOCS = (
     ("wiki-overview.md.template", "wiki/overview.md", True),
     ("wiki-questions.md.template", "wiki/questions.md", True),
     ("wiki-log.md.template", "wiki/log.md", True),
+    ("wiki-taxonomy.json.template", "wiki/taxonomy.json", True),
     ("root-log.md.template", "log.md", True),
     ("changelog.md.template", "changelog.md", True),
     ("graphifyignore.template", ".graphifyignore", False),
@@ -59,6 +60,7 @@ PROPOSABLE_DOCS = {
     "changelog.md",
     "instructions/wiki-operations.md",
     ".graphifyignore",
+    "wiki/taxonomy.json",
 }
 
 

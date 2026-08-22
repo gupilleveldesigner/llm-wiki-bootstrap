@@ -39,6 +39,7 @@ Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르�
 - 새 페이지를 만들기 전에 `wiki/index.md`와 `Glob wiki/**/*.md`로 동일/유사 문서가 이미 있는지 확인한다 — 중복 생성 금지.
 - 카탈로그·인덱스·로그가 raw 경로를 나열하는 것만으로는 인제스트로 인정하지 않는다.
 - 기본 스키마에서는 원문마다 `wiki/sources/<원문>.md`를 만들고 `type: source`와 raw 경로 정확히 1개를 기록한다. `raw_sha256`, `key_claims`, `entities`, `concepts`, `reflected_docs`, `relations` 수치와 핵심 주장·엔티티·개념·반영 문서 섹션도 채운다. 이 1:1 source 요약이 파일별 완료 근거다.
+- 카테고리는 `wiki/taxonomy.json`의 통제어휘만 사용한다. `prefLabel`은 정식명, `altLabel`은 동의어/약어, `broader`는 상위 개념, `scopeNote`는 적용 범위다. Graphify community 이름을 taxonomy로 복사하지 않는다.
 
 ## 0. 무엇이 "인제스트 안 됨"인가
 
@@ -110,6 +111,7 @@ Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르�
     - 그래프가 없으면 런타임이 `agent_action_required`와 호스트별 명령을 반환한다. Codex는 `python -m pip install graphifyy && graphify install --platform codex` 후 `$graphify <WIKI_ROOT>`를 실행하고, Claude는 `python -m pip install graphifyy && graphify install` 후 `/graphify <WIKI_ROOT>`를 실행한다. Python에서 bare `graphify <WIKI_ROOT>`를 직접 실행하지 않는다. 항상 그래프를 탐색에 사용하려면 Codex의 `graphify codex install` 또는 Claude의 `graphify claude install`을 선택적으로 추가한다.
     - 기존 그래프를 갱신할 때도 Codex의 `$graphify <WIKI_ROOT> --update` 또는 Claude의 `/graphify <WIKI_ROOT> --update`를 사용한다. `graphify update` subprocess는 사용하지 않는다.
     - Graphify 실행이 끝나면 반드시 런타임의 `record-graphify-run --host codex|claude`를 실행한다. 이 기록은 호스트 스킬 실행, 현재 `graph.json` 해시, 이후 stale graph 검증에 사용한다.
+    - `category-audit`가 실패하면 새 topic 문자열을 즉시 발명하지 말고, taxonomy에 개념·동의어·scopeNote를 추가하거나 `wiki/questions.md`에 분류 결정을 남긴 뒤 다시 실행한다.
     - 배치 전체를 완료했다고 보고하려면 마지막 호출에 `--complete-batch`를 붙인다. `pending`, `rejected` 또는 `catalog_only`가 하나라도 남으면 런타임이 실패시킨다.
     - finalize 직후 독립 검증 게이트를 실행한다:
       ```text

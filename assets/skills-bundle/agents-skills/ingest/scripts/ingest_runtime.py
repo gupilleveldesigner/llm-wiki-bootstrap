@@ -27,6 +27,7 @@ from find_uningested import (
     scan,
     source_summary_quality,
 )
+from audit_categories import audit as audit_categories
 
 
 TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*", re.MULTILINE)
@@ -413,6 +414,19 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
             "exit_code": 2,
         }
 
+    category_result = audit_categories(root)
+    if complete_batch and not category_result["valid"]:
+        errors = ["Category audit failed.", *category_result["errors"]]
+        write_ingest_ledger(root, scan_result, graph="category_failed", errors=errors, completion="incomplete")
+        return {
+            "status": "category_failed",
+            "root": str(root),
+            "coverage": coverage,
+            "category_audit": category_result,
+            "errors": errors,
+            "exit_code": 2,
+        }
+
     strategy = graph_strategy(root)
     if complete_batch and strategy == "none":
         action = graphify_agent_action(root)
@@ -603,6 +617,8 @@ def independent_graph_input_files(root: Path) -> list[Path]:
                 continue
             if layer.name == "wiki" and not (layer / "sources") in path.parents and path.name.casefold() in OPERATIONAL_WIKI_FILES:
                 continue
+            if relative.casefold() == "wiki/taxonomy.json":
+                continue
             if relative.casefold() == ".graphifyignore":
                 continue
             files.append(path)
@@ -756,6 +772,9 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         changed = {Path(value).as_posix().casefold() for value in changed_files}
         records = [record for record in records if record["relative"].casefold() in changed]
     errors: list[str] = []
+    category_result = audit_categories(root)
+    if complete_batch and not category_result["valid"]:
+        errors.extend(["Category audit failed.", *category_result["errors"]])
     verified = 0
     covered: set[str] = set()
     catalog_only: set[str] = set()
@@ -838,6 +857,7 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         "coverage": coverage,
         "graph_status": graph,
         "graph_counts": counts,
+        "category_audit": category_result,
         "errors": errors,
         "exit_code": 0 if not errors else 2,
     }
@@ -871,7 +891,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Portable LLM Wiki ingest support")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("status", "scan", "finalize", "verify", "record-graphify-run", "recover"):
+    for name in ("status", "scan", "finalize", "verify", "category-audit", "record-graphify-run", "recover"):
         child = subparsers.add_parser(name)
         child.add_argument(
             "--root",
@@ -937,6 +957,10 @@ def main() -> int:
         return int(result["exit_code"])
     if args.command == "verify":
         result = verify(root, require_graph=args.require_graph, complete_batch=args.complete_batch)
+        print_json(result)
+        return int(result["exit_code"])
+    if args.command == "category-audit":
+        result = audit_categories(root)
         print_json(result)
         return int(result["exit_code"])
     if args.command == "record-graphify-run":

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "scheme": {
+    "id": "vault-topics",
+    "prefLabel": "{{PROJECT_NAME}} topic taxonomy",
+    "scopeNote": "Controlled vocabulary for Wiki topics; keep Graphify communities separate."
+  },
+  "concepts": []
+}
