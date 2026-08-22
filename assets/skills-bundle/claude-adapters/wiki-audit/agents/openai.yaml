@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Audit"
+  short_description: "Audit Wiki environment and Graphify alignment"
+  default_prompt: "Use $wiki-audit to audit the current Wiki environment and Graphify integration without modifying files."

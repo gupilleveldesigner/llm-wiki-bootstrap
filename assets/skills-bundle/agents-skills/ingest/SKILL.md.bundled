@@ -109,6 +109,7 @@ Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르�
     - 대상에 `tools/graphify_knowledge/finalize_ingest.py`가 있으면 그 Wiki의 고급 후보 검증·원자적 승격 절차를 실행한다.
     - 표준 그래프가 루트 `graphify-out/`에 있으면 `WIKI_ROOT`, `wiki/graphify-out/`에 있으면 `WIKI_ROOT/wiki`를 Graphify 작업공간으로 갱신한다.
     - 그래프가 없으면 런타임이 `agent_action_required`와 호스트별 명령을 반환한다. Codex는 `python -m pip install graphifyy && graphify install --platform codex` 후 `$graphify <WIKI_ROOT>`를 실행하고, Claude는 `python -m pip install graphifyy && graphify install` 후 `/graphify <WIKI_ROOT>`를 실행한다. Python에서 bare `graphify <WIKI_ROOT>`를 직접 실행하지 않는다. 항상 그래프를 탐색에 사용하려면 Codex의 `graphify codex install` 또는 Claude의 `graphify claude install`을 선택적으로 추가한다.
+    - Codex에서 Graphify의 병렬 추출을 사용하려면 `~/.codex/config.toml`의 `[features] multi_agent = true`를 확인한다. 없으면 병렬을 요구하지 않고 순차 실행으로 진행한다.
     - 기존 그래프를 갱신할 때도 Codex의 `$graphify <WIKI_ROOT> --update` 또는 Claude의 `/graphify <WIKI_ROOT> --update`를 사용한다. `graphify update` subprocess는 사용하지 않는다.
     - Graphify 실행이 끝나면 반드시 런타임의 `record-graphify-run --host codex|claude`를 실행한다. 이 기록은 호스트 스킬 실행, 현재 `graph.json` 해시, 이후 stale graph 검증에 사용한다.
     - `category-audit`가 실패하면 새 topic 문자열을 즉시 발명하지 말고, taxonomy에 개념·동의어·scopeNote를 추가하거나 `wiki/questions.md`에 분류 결정을 남긴 뒤 다시 실행한다.

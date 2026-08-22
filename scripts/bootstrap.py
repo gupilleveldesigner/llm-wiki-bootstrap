@@ -52,7 +52,7 @@ DOCS = (
     ("session-memory-config.json.template", ".session-memory/config.json", True),
 )
 
-SKILLS = ("ingest", "query", "lint", "session-memory", "brief-tuner")
+SKILLS = ("ingest", "query", "lint", "session-memory", "brief-tuner", "wiki-audit")
 PROPOSABLE_DOCS = {
     "CLAUDE.md",
     "AGENTS.md",

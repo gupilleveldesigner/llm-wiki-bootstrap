@@ -1,0 +1,23 @@
+---
+name: wiki-audit
+description: LLM Wiki의 설치된 운영 스킬·현재 실행 환경·Graphify 플랫폼 연동과 최신 Graphify v8 계약의 정합성을 읽기 전용으로 검사한다. "위키 환경 점검", "스킬 점검", "Graphify 연동 확인", "/wiki-audit" 요청에 사용한다.
+---
+
+# /wiki-audit — 설치·환경·Graphify 정합성 점검
+
+변경하거나 그래프를 빌드하지 않고 다음을 검사한다.
+
+1. 현재 Wiki root, Python, `.agents`/`.claude` 운영 스킬, taxonomy, `.graphifyignore`
+2. 현재 호스트의 Graphify CLI와 Codex/Claude Graphify skill 설치 상태
+3. 설치된 `ingest` 번들과 현재 루트 문서의 Graphify 호출 규칙
+4. 최신 공식 Graphify v8 README의 Codex/Claude 설치·호출·update·multi-agent·ignore 계약과의 일치
+
+실행:
+
+```text
+python "<SKILL_ROOT>/scripts/wiki_audit.py" all --root "<WIKI_ROOT>" --json
+```
+
+`WIKI_ROOT`를 생략하면 현재 작업공간에서 `raw/`+`wiki/`를 찾는다. 최신 README를 읽을 수 없는 환경에서는 `--offline`을 사용해 로컬 환경 검사만 수행하고, 정합성 검사를 통과했다고 보고하지 않는다.
+
+결과가 `failed`이면 수정이나 Graphify 실행을 시작하지 말고 `errors`를 먼저 해결한다. 이 스킬은 API key를 묻거나 Graphify semantic extraction을 실행하지 않는다.

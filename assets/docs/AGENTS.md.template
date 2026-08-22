@@ -19,5 +19,6 @@ Claude와 공유하는 규칙(위키 라우팅, 세션 라우팅)의 정본은 �
 - Ingest → `.agents/skills/ingest/SKILL.md`를 읽는다.
 - Query → `.agents/skills/query/SKILL.md`를 읽고 `wiki/index.md`에서 시작한다.
 - Lint → `.agents/skills/lint/SKILL.md`를 읽는다.
+- Wiki Audit → `.agents/skills/wiki-audit/SKILL.md`를 읽는다. 이 점검은 읽기 전용이다.
 
 위키 변경·폭넓은 탐색 전 필독: [`instructions/wiki-operations.md`](instructions/wiki-operations.md)

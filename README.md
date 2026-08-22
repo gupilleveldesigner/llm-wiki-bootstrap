@@ -9,12 +9,13 @@
 한 번의 대화로 다음이 셋업된다:
 
 - **3계층 폴더 구조** — `raw/`(원문, 불변) → `wiki/`(요약·연결된 지식) → `Output/`(산출물). Karpathy의 "LLM이 관리하는 위키" 구조를 따른다.
-- **운영 스킬 5종** — 볼트 안에 설치되어 이후 세션에서 바로 쓸 수 있다:
+- **운영 스킬 6종** — 볼트 안에 설치되어 이후 세션에서 바로 쓸 수 있다:
   - `ingest` — raw에 넣은 원문을 위키로 요약·연결
   - `query` — frontmatter 우선 탐색으로 위키에서 근거 있는 답변
   - `lint` — 깨진 링크·고아 문서·신선도 점검
   - `session-memory` — `SAVE` 한 마디로 세션 상태를 원자적으로 보존
   - `brief-tuner` — AI 작업 브리프 템플릿을 인터뷰로 내 작업 패턴에 맞게 최적화
+  - `wiki-audit` — 설치 환경과 Graphify 최신 계약의 읽기 전용 정합성 점검
 - **라우터 문서** — CLAUDE.md / AGENTS.md가 매 세션 AI에게 볼트 규칙을 알려준다.
 - **Obsidian Web Clipper 템플릿** — 웹 아티클·유튜브·책·팟캐스트를 `raw/reference/`로 자동 수집 (선택).
 - **graphify 지식 그래프** — 설치돼 있으면 볼트 전체를 그래프로 연결 (선택).
@@ -72,7 +73,7 @@ Claude Code에서:
 
 **llm-wiki-bootstrap** scaffolds a complete AI-operated knowledge vault (LLM Wiki) from a single conversation, for Claude Code or Codex CLI.
 
-**What you get**: a 3-layer structure (`raw/` immutable sources → `wiki/` distilled knowledge → `Output/` deliverables, after Karpathy's LLM-managed wiki idea), five operational skills installed into the vault (`ingest`, `query`, `lint`, `session-memory`, `brief-tuner`), router docs (CLAUDE.md / AGENTS.md), optional Obsidian Web Clipper templates, and optional graphify knowledge-graph integration.
+**What you get**: a 3-layer structure (`raw/` immutable sources → `wiki/` distilled knowledge → `Output/` deliverables, after Karpathy's LLM-managed wiki idea), six operational skills installed into the vault (`ingest`, `query`, `lint`, `session-memory`, `brief-tuner`, `wiki-audit`), router docs (CLAUDE.md / AGENTS.md), optional Obsidian Web Clipper templates, and optional graphify knowledge-graph integration.
 
 **Install**: clone into `~/.claude/skills/llm-wiki-bootstrap` (Claude Code) or `~/.codex/skills/llm-wiki-bootstrap` (Codex). Requires Python 3.10+; Graphify is optional and should be installed through its host integration (`graphify install --platform codex` or `graphify install`).
 

@@ -5,7 +5,7 @@ description: LLM Wiki 볼트(Karpathy 3계층 raw/wiki/Output)를 구축·전환
 
 # LLM Wiki Bootstrap
 
-폴더를 완전한 LLM Wiki 볼트로 만든다. 결과물: 3계층 폴더 구조 + 라우터 문서 + 운영 스킬 5종(ingest/query/lint/session-memory/brief-tuner) + Obsidian 편의 자산 + (가능하면) graphify 지식 그래프.
+폴더를 완전한 LLM Wiki 볼트로 만든다. 결과물: 3계층 폴더 구조 + 라우터 문서 + 운영 스킬 6종(ingest/query/lint/session-memory/brief-tuner/wiki-audit) + Obsidian 편의 자산 + (가능하면) graphify 지식 그래프.
 
 이 스킬은 배포용이다 — 이 스킬을 실행하는 환경에 다른 위키가 있을 필요가 없다. 필요한 모든 자산은 `assets/`에 번들되어 있다.
 
@@ -55,7 +55,7 @@ config JSON을 임시 파일로 쓴 뒤 번들 스크립트를 실행한다:
 python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상 폴더>" --config "<config.json 경로>"
 ```
 
-stdout의 JSON에서 `"ok": true`를 확인한다. `false`면 `error`를 사용자에게 보고하고 중단한다. 스크립트가 하는 일: 폴더 구조 생성, 스킬 5종 설치(`.agents/skills/` 정본 + `.claude/skills/` 어댑터), 문서 템플릿 렌더링, `.session-memory/` 초기화, `templates/`(문서 템플릿 + web-clipper)를 배치.
+stdout의 JSON에서 `"ok": true`를 확인한다. `false`면 `error`를 사용자에게 보고하고 중단한다. 스크립트가 하는 일: 폴더 구조 생성, 스킬 6종 설치(`.agents/skills/` 정본 + `.claude/skills/` 어댑터), 문서 템플릿 렌더링, `.session-memory/` 초기화, `templates/`(문서 템플릿 + web-clipper)를 배치.
 
 ## 4. 도메인 맞춤 문서 마무리
 
@@ -100,7 +100,7 @@ python ".session-memory/scripts/session_memory.py" status
 사용자에게 보고한다:
 
 1. 생성된 구조 요약 (트리 형태, 핵심 폴더만).
-2. 설치된 스킬 5종과 각각의 용도 한 줄씩.
+2. 설치된 스킬 6종과 각각의 용도 한 줄씩.
 3. **다음 단계 안내**:
    - 첫 자료를 `raw/`(또는 `raw/inbox/`)에 넣고 `/ingest` 실행 → 위키가 채워지기 시작한다.
    - 작업을 마칠 때 `SAVE`를 입력하면 세션 상태가 보존된다.
