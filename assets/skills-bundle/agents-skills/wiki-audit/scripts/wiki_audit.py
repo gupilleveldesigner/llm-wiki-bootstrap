@@ -143,6 +143,11 @@ def environment_audit(root: Path) -> dict[str, Any]:
     checks["codex_multi_agent_config"]["multi_agent_true"] = codex_multi_agent_enabled(config_body)
     if not checks["codex_multi_agent_config"]["multi_agent_true"]:
         warnings.append("Codex multi_agent=true is not enabled; Graphify can run sequentially but not in parallel.")
+    if not checks["graphify_cli"]["version"]:
+        warnings.append("Graphify CLI is not installed; batch ingest will require host installation before completion.")
+    for key, host in (("codex_graphify_skill", "Codex"), ("claude_graphify_skill", "Claude")):
+        if not checks[key]["exists"]:
+            warnings.append(f"{host} Graphify host skill is not installed; install it before using {host}'s host action.")
     if not checks["codex_hook"]["exists"]:
         warnings.append("Codex Graphify always-on hook is not installed; explicit $graphify still works.")
     return {"status": "ok" if not errors else "failed", "checks": checks, "warnings": warnings, "errors": errors}
