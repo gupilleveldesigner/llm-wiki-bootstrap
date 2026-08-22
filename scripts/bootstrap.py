@@ -165,6 +165,26 @@ def upgrade(target: Path, config_path: Path) -> dict:
         proposals.append(proposal.relative_to(target).as_posix())
         graphifyignore_status = "proposal"
 
+    taxonomy_source = ASSETS / "docs/wiki-taxonomy.json.template"
+    taxonomy_destination = target / "wiki" / "taxonomy.json"
+    taxonomy_status = "unchanged"
+    project_name = target.name
+    config_destination = target / ".session-memory/config.json"
+    if config_destination.is_file():
+        try:
+            project_name = str(json.loads(config_destination.read_text(encoding="utf-8")).get("project_name") or project_name)
+        except (OSError, json.JSONDecodeError):
+            pass
+    taxonomy_content = taxonomy_source.read_text(encoding="utf-8").replace("{{PROJECT_NAME}}", project_name)
+    if not taxonomy_destination.exists():
+        write_text(taxonomy_destination, taxonomy_content)
+        taxonomy_status = "created"
+    elif taxonomy_destination.read_text(encoding="utf-8") != taxonomy_content:
+        proposal = taxonomy_destination.with_name(taxonomy_destination.name + ".wiki-proposed")
+        write_text(proposal, taxonomy_content)
+        proposals.append(proposal.relative_to(target).as_posix())
+        taxonomy_status = "proposal"
+
     return {
         "ok": True,
         "target": str(target.resolve()),
@@ -174,6 +194,7 @@ def upgrade(target: Path, config_path: Path) -> dict:
         "refreshed_skills": list(SKILLS),
         "copied_templates": copied_templates,
         "graphifyignore": graphifyignore_status,
+        "taxonomy": taxonomy_status,
     }
 
 
