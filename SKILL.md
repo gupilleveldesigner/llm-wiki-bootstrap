@@ -71,8 +71,12 @@ stdout의 JSON에서 `"ok": true`를 확인한다. `false`면 `error`를 사용�
 
 `graphify --version`으로 CLI 존재를 확인한다.
 
-- **설치돼 있으면**: 대상 폴더에서 초기 그래프를 빌드한다. graphify 스킬이 설치된 환경이면 그 스킬의 빌드 파이프라인을 따르고, 스킬 없이 CLI만 있으면 `graphify <대상 폴더>`를 실행한다. 최초 부트스트랩 시점에는 정본(curated) 그래프가 없으므로 전체 빌드가 안전하다. 빌드 후에는 **`graphify update .`를 직접 실행하지 말라는 규칙**이 볼트 문서에 이미 들어 있다(갱신은 ingest 완료 게이트가 담당).
-- **없으면**: 배치 완료 게이트에서 `python -m pip install graphifyy`를 실행하고 초기 그래프를 만든다. 설치·빌드가 실패하면 완료를 선언하지 않는다. 단일 소스 작업은 로컬 검증만 가능하지만 `validated_without_graph`로 명시한다.
+- **Codex**: `python -m pip install graphifyy && graphify install --platform codex` 후 `$graphify <대상 폴더>`를 사용한다. Codex의 현재 인증과 병렬 서브에이전트를 Graphify 스킬이 사용하므로, Python에서 `graphify <대상 폴더>`를 직접 실행하지 않는다. 병렬 처리를 쓰려면 `~/.codex/config.toml`의 `[features] multi_agent = true`를 먼저 확인한다.
+- 항상 그래프를 탐색에 사용하려면 선택적으로 `graphify codex install`을 실행해 `AGENTS.md`/Codex hook을 설치한다. 이 명령은 그래프 생성 자체가 아니라 탐색 시 `GRAPH_REPORT.md`를 먼저 읽게 하는 상시 안내다.
+- **Claude Code**: `python -m pip install graphifyy && graphify install` 후 `/graphify <대상 폴더>`를 사용한다.
+- **갱신**: 원문/Wiki 변경 후 호스트에 맞는 `$graphify <대상 폴더> --update` 또는 `/graphify <대상 폴더> --update`를 실행한다. `graphify update`를 Python subprocess로 직접 호출하지 않는다.
+- Graphify 실행 후 `ingest_runtime.py record-graphify-run --host codex|claude`를 기록하고, 그 뒤 `verify --complete-batch --require-graph`를 실행한다.
+- **없으면**: Graphify 설치·호스트 스킬 실행을 안내하고 완료 게이트를 `agent_action_required`로 중단한다. 설치·빌드가 실패하면 완료를 선언하지 않는다. 단일 소스 작업은 로컬 검증만 가능하지만 `validated_without_graph`로 명시한다.
 
 ## 6. 스모크 체크
 

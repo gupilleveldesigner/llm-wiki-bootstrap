@@ -78,8 +78,10 @@ def normalize_changed_file(root: Path, value: str) -> tuple[Path, str]:
 
 def graph_status(root: Path, strategy: str | None = None) -> str:
     strategy = strategy or graph_strategy(root)
-    if strategy in {"curated-finalizer", "graphify-cli"}:
+    if strategy == "curated-finalizer":
         return "configured"
+    if strategy == "graphify-cli":
+        return "configured" if graphify_executable() else "graph_present"
     if strategy == "curated-finalizer-missing":
         return "blocked"
     if strategy == "ambiguous-graph-layout":
@@ -97,20 +99,28 @@ def graphify_executable() -> str | None:
     return next((candidate for candidate in candidates if candidate and Path(candidate).is_file()), None)
 
 
-def ensure_graphify() -> dict[str, Any]:
-    executable = graphify_executable()
-    if executable:
-        return {"status": "present", "executable": executable}
-    exit_code = run_command([sys.executable, "-m", "pip", "install", "graphifyy"], cwd=Path.cwd())
-    executable = graphify_executable()
-    if exit_code != 0 or not executable:
-        return {
-            "status": "install_failed",
-            "executable": None,
-            "error": "Graphify was not available and installing graphifyy did not produce a graphify executable.",
-            "exit_code": exit_code,
-        }
-    return {"status": "installed", "executable": executable}
+def graphify_agent_action(root: Path) -> dict[str, Any]:
+    target = f'"{root}"'
+    runtime = 'python "<SKILL_ROOT>/scripts/ingest_runtime.py"'
+    return {
+        "status": "agent_action_required",
+        "root": str(root),
+        "codex": {
+            "install": "python -m pip install graphifyy && graphify install --platform codex",
+            "build": f"$graphify {target}",
+            "update": f"$graphify {target} --update",
+            "record": f'{runtime} record-graphify-run --root {target} --host codex',
+            "always_on_optional": "graphify codex install",
+        },
+        "claude": {
+            "install": "python -m pip install graphifyy && graphify install",
+            "build": f"/graphify {target}",
+            "update": f"/graphify {target} --update",
+            "record": f'{runtime} record-graphify-run --root {target} --host claude',
+            "always_on_optional": "graphify claude install",
+        },
+        "note": "Run Graphify through the host AI skill so its platform authentication is used. Do not run bare graphify <path> from Python.",
+    }
 
 
 def graph_counts(root: Path, workspace: Path | None = None) -> dict[str, int]:
@@ -127,6 +137,27 @@ def graph_counts(root: Path, workspace: Path | None = None) -> dict[str, int]:
         "nodes": len(nodes) if isinstance(nodes, (list, dict)) else 0,
         "links": len(links) if isinstance(links, (list, dict)) else 0,
     }
+
+
+def record_graphify_run(root: Path, host: str) -> dict[str, Any]:
+    graph_path = (graph_workspace(root) or root) / "graphify-out" / "graph.json"
+    if not graph_path.is_file():
+        return {"status": "graph_missing", "root": str(root), "exit_code": 2}
+    payload = {
+        "version": 1,
+        "host": host,
+        "graph": graph_path.relative_to(root).as_posix(),
+        "graph_sha256": raw_sha256(graph_path),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "inputs": {
+            path.relative_to(root).as_posix(): raw_sha256(path)
+            for path in independent_graph_input_files(root)
+            if path.is_file()
+        },
+    }
+    destination = graph_path.with_name(".graphify-host-run.json")
+    destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"status": "recorded", "root": str(root), "host": host, "manifest": str(destination), "exit_code": 0}
 
 
 def coverage_summary(root: Path) -> dict[str, int]:
@@ -383,49 +414,17 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
         }
 
     strategy = graph_strategy(root)
-    if complete_batch and strategy in {"none", "graphify-cli"}:
-        needs_initial_build = strategy == "none"
-        installation = (
-            ensure_graphify()
-            if graphify_executable() is None
-            else {"status": "present", "executable": graphify_executable()}
-        )
-        if installation["status"] not in {"present", "installed"}:
-            errors = [str(installation.get("error", "Graphify installation failed."))]
-            write_ingest_ledger(root, scan_result, graph="not_installed", errors=errors, completion="incomplete")
-            return {
-                "status": "graphify_install_failed",
-                "root": str(root),
-                "coverage": coverage,
-                "graph_status": "not_installed",
-                "errors": errors,
-                "exit_code": 2,
-            }
-        executable = str(installation["executable"])
-        build_exit_code = run_command([executable, str(root)], cwd=root) if needs_initial_build else 0
-        if build_exit_code != 0:
-            errors = [f"Initial Graphify build failed with exit code {build_exit_code}."]
-            write_ingest_ledger(root, scan_result, graph="blocked", errors=errors, completion="incomplete")
-            return {
-                "status": "graphify_bootstrap_failed",
-                "root": str(root),
-                "coverage": coverage,
-                "graph_status": "blocked",
-                "errors": errors,
-                "exit_code": 2,
-            }
-        strategy = graph_strategy(root)
-        if needs_initial_build and strategy == "none":
-            errors = ["Graphify exited successfully but did not create graphify-out/graph.json."]
-            write_ingest_ledger(root, scan_result, graph="blocked", errors=errors, completion="incomplete")
-            return {
-                "status": "graphify_bootstrap_failed",
-                "root": str(root),
-                "coverage": coverage,
-                "graph_status": "blocked",
-                "errors": errors,
-                "exit_code": 2,
-            }
+    if complete_batch and strategy == "none":
+        action = graphify_agent_action(root)
+        errors = ["Graphify has no graph.json; run the host Graphify skill before finalization."]
+        write_ingest_ledger(root, scan_result, graph="agent_action_required", errors=errors, completion="incomplete")
+        return {
+            **action,
+            "coverage": coverage,
+            "graph_status": "agent_action_required",
+            "errors": errors,
+            "exit_code": 2,
+        }
     workspace = graph_workspace(root)
     graph = graph_status(root, strategy)
 
@@ -498,23 +497,14 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
     if strategy == "graphify-cli":
         if workspace is None:
             raise RuntimeError("Graphify workspace resolution failed.")
-        executable = graphify_executable()
-        if executable is None:
-            return completed_payload({
-                "status": "graphify_unavailable",
-                "root": str(root),
-                "strategy": strategy,
-                "errors": ["graphify-out/graph.json exists but the graphify CLI is unavailable."],
-                "exit_code": 2,
-            }, write_ledger=False)
-        exit_code = run_command([executable, "update", str(workspace)], cwd=workspace)
         return completed_payload({
-            "status": "updated" if exit_code == 0 else "graphify_update_failed",
+            "status": "graph_present",
             "root": str(root),
             "graph_workspace": str(workspace),
             "strategy": strategy,
-            "exit_code": exit_code,
-        }, write_ledger=exit_code == 0)
+            "note": "Graphify was run by the host AI; this gate only verifies its output.",
+            "exit_code": 0,
+        })
 
     return completed_payload({
         "status": "validated_without_graph",
@@ -597,6 +587,28 @@ def independent_raw_exclusions(root: Path) -> dict[str, list[str]]:
     return result
 
 
+def independent_graph_input_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for layer in (root / "raw", root / "wiki"):
+        if not layer.is_dir():
+            continue
+        for path in sorted(layer.rglob("*"), key=lambda item: item.as_posix()):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(root).as_posix()
+            parts = {part.casefold() for part in path.relative_to(layer).parts}
+            if "graphify-out" in parts:
+                continue
+            if layer.name == "raw" and path.parent == layer and path.name.casefold() in HOST_INSTRUCTION_FILES:
+                continue
+            if layer.name == "wiki" and not (layer / "sources") in path.parents and path.name.casefold() in OPERATIONAL_WIKI_FILES:
+                continue
+            if relative.casefold() == ".graphifyignore":
+                continue
+            files.append(path)
+    return files
+
+
 def independent_source_records(root: Path) -> list[dict[str, Any]]:
     sources_root = root / "wiki" / "sources"
     pages = list(sources_root.rglob("*.md")) if sources_root.is_dir() else []
@@ -664,6 +676,20 @@ def independent_graph_check(root: Path, records: Sequence[dict[str, Any]]) -> li
         if not source_ids:
             errors.append(f"Graphify has no node for source summary: {record['relative']}")
             continue
+        raw_ids = {
+            node_id
+            for node_id, identity in node_identity.items()
+            if record["raw_targets"] and matches(identity, record["raw_targets"][0])
+        }
+        if not raw_ids:
+            errors.append(f"Graphify has no raw node for source: {record['raw_targets'][0] if record['raw_targets'] else record['relative']}")
+        elif not any(
+            isinstance(link, dict)
+            and str(link.get("source", link.get("from", ""))) in source_ids
+            and str(link.get("target", link.get("to", ""))) in raw_ids
+            for link in links
+        ):
+            errors.append(f"Graphify has no source-to-raw edge: {record['relative']}")
         reflected_targets: list[set[str]] = []
         for target in record["wiki_targets"]:
             ids = {node_id for node_id, identity in node_identity.items() if matches(identity, target)}
@@ -685,6 +711,40 @@ def independent_graph_check(root: Path, records: Sequence[dict[str, Any]]) -> li
             if not connected:
                 errors.append(f"Graphify has no source-to-reflected-document edge: {record['relative']} -> {target}")
     return errors
+
+
+def graph_freshness_error(root: Path) -> str | None:
+    workspace = graph_workspace(root)
+    graph_path = (workspace or root) / "graphify-out" / "graph.json"
+    if not graph_path.is_file():
+        return f"Graphify graph is missing: {graph_path}"
+    inputs = independent_graph_input_files(root)
+    latest = max((path.stat().st_mtime for path in inputs if path.is_file()), default=0)
+    if graph_path.stat().st_mtime + 1 < latest:
+        return "Graphify graph is older than the latest raw/Wiki input; run the host Graphify --update skill."
+    return None
+
+
+def graphify_host_manifest_error(root: Path) -> str | None:
+    workspace = graph_workspace(root)
+    graph_path = (workspace or root) / "graphify-out" / "graph.json"
+    manifest_path = graph_path.with_name(".graphify-host-run.json")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return "Graphify host-run manifest is missing; record the completed $graphify or /graphify run."
+    if manifest.get("host") not in {"codex", "claude"}:
+        return "Graphify host-run manifest has an unsupported host."
+    if manifest.get("graph_sha256") != raw_sha256(graph_path):
+        return "Graphify host-run manifest does not match the current graph.json."
+    current_inputs = {
+        path.relative_to(root).as_posix(): raw_sha256(path)
+        for path in independent_graph_input_files(root)
+        if path.is_file()
+    }
+    if manifest.get("inputs") != current_inputs:
+        return "Graphify host-run manifest inputs are stale or incomplete; rerun the host Graphify skill."
+    return None
 
 
 def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = False, changed_files: Sequence[str] | None = None) -> dict[str, Any]:
@@ -749,8 +809,14 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
     graph = graph_status(root, strategy)
     counts = graph_counts(root, graph_workspace(root))
     if require_graph:
-        if graph != "configured":
+        if graph not in {"configured", "graph_present"}:
             errors.append(f"Graphify is not ready: {graph}")
+        host_manifest_error = graphify_host_manifest_error(root)
+        if host_manifest_error:
+            errors.append(host_manifest_error)
+        freshness_error = graph_freshness_error(root)
+        if freshness_error:
+            errors.append(freshness_error)
         if verified and counts["nodes"] == 0:
             errors.append("Graphify has no verified source nodes")
         if verified and counts["links"] == 0:
@@ -805,7 +871,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Portable LLM Wiki ingest support")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("status", "scan", "finalize", "verify", "recover"):
+    for name in ("status", "scan", "finalize", "verify", "record-graphify-run", "recover"):
         child = subparsers.add_parser(name)
         child.add_argument(
             "--root",
@@ -827,6 +893,8 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "verify":
             child.add_argument("--require-graph", action="store_true")
             child.add_argument("--complete-batch", action="store_true")
+        if name == "record-graphify-run":
+            child.add_argument("--host", choices=("codex", "claude"), required=True)
     return parser
 
 
@@ -869,6 +937,10 @@ def main() -> int:
         return int(result["exit_code"])
     if args.command == "verify":
         result = verify(root, require_graph=args.require_graph, complete_batch=args.complete_batch)
+        print_json(result)
+        return int(result["exit_code"])
+    if args.command == "record-graphify-run":
+        result = record_graphify_run(root, args.host)
         print_json(result)
         return int(result["exit_code"])
     result = recover(root)

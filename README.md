@@ -29,7 +29,7 @@ git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claud
 
 Codex CLI 사용자는 같은 폴더를 `~/.codex/skills/llm-wiki-bootstrap`에 복사하면 된다 (`agents/openai.yaml` 포함).
 
-**요구사항**: Claude Code 또는 Codex CLI, Python 3.10+. graphify는 선택(`pip install graphifyy`).
+**요구사항**: Claude Code 또는 Codex CLI, Python 3.10+. Graphify는 선택이며, 사용할 때는 호스트 스킬로 설치한다(`graphify install --platform codex` 또는 `graphify install`).
 
 ## 사용
 
@@ -74,13 +74,15 @@ Claude Code에서:
 
 **What you get**: a 3-layer structure (`raw/` immutable sources → `wiki/` distilled knowledge → `Output/` deliverables, after Karpathy's LLM-managed wiki idea), five operational skills installed into the vault (`ingest`, `query`, `lint`, `session-memory`, `brief-tuner`), router docs (CLAUDE.md / AGENTS.md), optional Obsidian Web Clipper templates, and optional graphify knowledge-graph integration.
 
-**Install**: clone into `~/.claude/skills/llm-wiki-bootstrap` (Claude Code) or `~/.codex/skills/llm-wiki-bootstrap` (Codex). Requires Python 3.10+; graphify is optional (`pip install graphifyy`).
+**Install**: clone into `~/.claude/skills/llm-wiki-bootstrap` (Claude Code) or `~/.codex/skills/llm-wiki-bootstrap` (Codex). Requires Python 3.10+; Graphify is optional and should be installed through its host integration (`graphify install --platform codex` or `graphify install`).
 
 **Use**: run `/llm-wiki-bootstrap` or just say "set up a knowledge vault for my cooking research". Three modes are auto-detected: **new** (empty folder), **migrate** (convert an existing folder non-destructively), **upgrade** (refresh the installed skills of an existing wiki, with backup). After setup: drop sources into `raw/` and run `/ingest`; type `SAVE` to persist session state for the next session.
 
 **Design principles**: immutable `raw/`, self-contained distribution (everything bundled under `assets/`), and non-destructive modes — conflicts become `.wiki-proposed` proposal files instead of overwrites.
 
-Ingest completion is file-level: a catalog that only lists raw paths is not evidence. Batch completion uses the one-to-one source-summary and content-evidence gates, installs `graphifyy` when Graphify is missing, and requires the read-only `verify --complete-batch --require-graph` gate before reporting success. It writes `wiki/ingest-ledger.json` and loops over only failed sources when verification fails.
+Ingest completion is file-level: a catalog that only lists raw paths is not evidence. Batch completion uses the one-to-one source-summary and content-evidence gates, asks the host Graphify skill to build/update the graph with the host assistant's authentication, and requires the read-only `verify --complete-batch --require-graph` gate before reporting success. It writes `wiki/ingest-ledger.json` and loops over only failed sources when verification fails.
+
+When Graphify is missing, the ingest runtime returns host-specific `agent_action_required` instructions instead of invoking a headless CLI or asking for an unrelated provider key. After `$graphify`/`/graphify`, the host records the run manifest before verification.
 
 ## License
 

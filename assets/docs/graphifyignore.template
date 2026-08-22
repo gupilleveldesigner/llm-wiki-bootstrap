@@ -1,0 +1,21 @@
+# Graphify should read raw sources and curated knowledge, not vault operations.
+.git/
+.agents/
+.claude/
+.session-memory/
+Output/
+templates/
+instructions/
+graphify-out/
+CLAUDE.md
+AGENTS.md
+README.md
+log.md
+changelog.md
+raw/CLAUDE.md
+wiki/CLAUDE.md
+wiki/index.md
+wiki/overview.md
+wiki/questions.md
+wiki/log.md
+wiki/ingest-ledger.json

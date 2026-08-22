@@ -47,6 +47,7 @@ DOCS = (
     ("wiki-log.md.template", "wiki/log.md", True),
     ("root-log.md.template", "log.md", True),
     ("changelog.md.template", "changelog.md", True),
+    ("graphifyignore.template", ".graphifyignore", False),
     ("session-memory-config.json.template", ".session-memory/config.json", True),
 )
 
@@ -57,6 +58,7 @@ PROPOSABLE_DOCS = {
     "log.md",
     "changelog.md",
     "instructions/wiki-operations.md",
+    ".graphifyignore",
 }
 
 
@@ -95,7 +97,7 @@ def install_skills(target: Path) -> None:
 
 
 def upgrade(target: Path, config_path: Path) -> dict:
-    if not (((target / "raw").exists() and (target / "wiki").exists()) or (target / ".agents").exists()):
+    if not ((target / "raw").is_dir() and (target / "wiki").is_dir()):
         raise ValueError("target is not an LLM Wiki; use --mode new or migrate")
 
     backup_dir = None
@@ -148,6 +150,19 @@ def upgrade(target: Path, config_path: Path) -> dict:
         write_text(proposal, content)
         proposals.append(proposal.relative_to(target).as_posix())
 
+    graphifyignore_source = ASSETS / "docs/graphifyignore.template"
+    graphifyignore_destination = target / ".graphifyignore"
+    graphifyignore_status = "unchanged"
+    graphifyignore_content = graphifyignore_source.read_text(encoding="utf-8")
+    if not graphifyignore_destination.exists():
+        write_text(graphifyignore_destination, graphifyignore_content)
+        graphifyignore_status = "created"
+    elif graphifyignore_destination.read_text(encoding="utf-8") != graphifyignore_content:
+        proposal = graphifyignore_destination.with_name(graphifyignore_destination.name + ".wiki-proposed")
+        write_text(proposal, graphifyignore_content)
+        proposals.append(proposal.relative_to(target).as_posix())
+        graphifyignore_status = "proposal"
+
     return {
         "ok": True,
         "target": str(target.resolve()),
@@ -156,12 +171,15 @@ def upgrade(target: Path, config_path: Path) -> dict:
         "proposals": proposals,
         "refreshed_skills": list(SKILLS),
         "copied_templates": copied_templates,
+        "graphifyignore": graphifyignore_status,
     }
 
 
 def bootstrap(target: Path, config_path: Path, mode: str = "new") -> dict:
     if mode == "upgrade":
         return upgrade(target, config_path)
+    if mode == "new" and target.exists() and any(target.iterdir()):
+        raise ValueError("target is not empty; use --mode migrate for an existing folder")
     markers = ("raw", "wiki", ".agents", "CLAUDE.md") if mode == "new" else ("raw", "wiki", ".agents")
     if target.exists() and any((target / name).exists() for name in markers):
         if mode == "migrate":

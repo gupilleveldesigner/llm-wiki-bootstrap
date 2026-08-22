@@ -25,4 +25,5 @@ Karpathy LLM Wiki 패턴의 2계층(위키 레이어). **전체 워크플로우�
 - 새 문서를 만들면 반드시 `index.md`에 링크를 추가한다.
 - 카탈로그가 raw 경로를 나열하는 것만으로는 인제스트로 인정하지 않는다. 기본 스키마에서는 원문별 `sources/<원문>.md` 1개가 필요하다.
 - 배치 완료 전 `ingest_runtime.py verify --complete-batch --require-graph`를 통과해야 한다.
+- Graphify가 필요하면 Claude는 `/graphify`, Codex는 `$graphify`를 사용한다. Python에서 bare `graphify <path>`를 직접 실행하지 않는다.
 - 새 템플릿은 `templates/`의 기존 템플릿을 따른다.

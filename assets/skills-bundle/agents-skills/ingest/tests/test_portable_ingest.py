@@ -19,7 +19,7 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from find_uningested import resolve_wiki_root, scan  # noqa: E402
-from ingest_runtime import finalize, graph_strategy, graph_workspace, validate_changed_files, verify  # noqa: E402
+from ingest_runtime import finalize, graph_strategy, graph_workspace, record_graphify_run, validate_changed_files, verify  # noqa: E402
 from install_to_wiki import JOURNAL_NAME, LOCK_NAME, install, install_lock, recover_install  # noqa: E402
 
 
@@ -110,41 +110,51 @@ class PortableIngestTests(unittest.TestCase):
             (root / "wiki" / "sources" / "left.md").write_text(
                 source_note(root, "raw/reference/left.md", "Left"), encoding="utf-8"
             )
-            def fake_command(command, *, cwd):
-                if len(command) >= 2 and command[1] == str(root):
-                    graph_out = root / "graphify-out"
-                    graph_out.mkdir()
-                    (graph_out / "graph.json").write_text(
-                        json.dumps(
-                            {
-                                "nodes": [
-                                    {"id": "source", "source_file": "wiki/sources/done.md"},
-                                    {"id": "left", "source_file": "wiki/sources/left.md"},
-                                    {"id": "concept", "source_file": "wiki/concepts/test.md"},
-                                ],
-                                "links": [
-                                    {"source": "source", "target": "concept"},
-                                    {"source": "left", "target": "concept"},
-                                ],
-                            }
-                        ),
-                        encoding="utf-8",
-                    )
-                return 0
+            action = finalize(
+                root,
+                ["wiki/sources/done.md", "wiki/sources/left.md"],
+                complete_batch=True,
+            )
+            self.assertEqual(action["status"], "agent_action_required")
 
-            with patch("ingest_runtime.ensure_graphify", return_value={"status": "installed", "executable": "graphify"}), \
-                patch("ingest_runtime.graphify_executable", return_value="graphify"), \
-                patch("ingest_runtime.run_command", side_effect=fake_command):
+            graph_out = root / "graphify-out"
+            graph_out.mkdir()
+            (graph_out / "graph.json").write_text(
+                json.dumps(
+                    {
+                        "nodes": [
+                            {"id": "source", "source_file": "wiki/sources/done.md"},
+                            {"id": "left", "source_file": "wiki/sources/left.md"},
+                            {"id": "concept", "source_file": "wiki/concepts/test.md"},
+                            {"id": "raw-done", "source_file": "raw/reference/done.md"},
+                            {"id": "raw-left", "source_file": "raw/reference/left.md"},
+                        ],
+                        "links": [
+                            {"source": "source", "target": "concept"},
+                            {"source": "left", "target": "concept"},
+                            {"source": "source", "target": "raw-done"},
+                            {"source": "left", "target": "raw-left"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(record_graphify_run(root, "codex")["status"], "recorded")
+            with patch("ingest_runtime.graphify_executable", return_value=None):
                 complete = finalize(
                     root,
                     ["wiki/sources/done.md", "wiki/sources/left.md"],
                     complete_batch=True,
                 )
-            self.assertEqual(complete["status"], "updated", complete)
-            self.assertEqual(complete["graph_status"], "configured")
-            self.assertEqual(complete["graph_counts"], {"nodes": 3, "links": 2})
+            self.assertEqual(complete["status"], "graph_present", complete)
+            self.assertEqual(complete["graph_status"], "graph_present")
+            self.assertEqual(complete["graph_counts"], {"nodes": 5, "links": 4})
             self.assertEqual(complete["completion"], "complete")
             self.assertTrue((root / "wiki" / "ingest-ledger.json").is_file())
+            (root / "raw" / "reference" / "done.md").write_text("changed", encoding="utf-8")
+            stale = verify(root, complete_batch=True, require_graph=True)
+            self.assertEqual(stale["status"], "verification_failed")
+            self.assertTrue(any("inputs are stale" in error for error in stale["errors"]))
 
     def test_quality_gate_rejects_placeholder_source_and_independent_verify_reports_it(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wiki-quality-") as temporary:
@@ -169,7 +179,7 @@ class PortableIngestTests(unittest.TestCase):
             self.assertEqual(verified["status"], "verification_failed")
             self.assertTrue(any("Source summary has invalid" in error for error in verified["errors"]))
 
-    def test_graphify_install_failure_blocks_complete_batch(self) -> None:
+    def test_graphify_host_action_is_required_before_complete_batch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wiki-graphify-") as temporary:
             root = Path(temporary)
             make_wiki(root)
@@ -179,12 +189,12 @@ class PortableIngestTests(unittest.TestCase):
                 source_note(root, "raw/reference/source.md", "Source"), encoding="utf-8"
             )
 
-            with patch(
-                "ingest_runtime.ensure_graphify",
-                return_value={"status": "install_failed", "error": "pip failed", "exit_code": 1},
-            ), patch("ingest_runtime.graphify_executable", return_value=None):
+            with patch("ingest_runtime.graphify_executable", return_value=None):
                 result = finalize(root, ["wiki/sources/source.md"], complete_batch=True)
-            self.assertEqual(result["status"], "graphify_install_failed")
+            self.assertEqual(result["status"], "agent_action_required")
+            self.assertIn("graphify install --platform codex", result["codex"]["install"])
+            self.assertIn("$graphify", result["codex"]["build"])
+            self.assertIn('"', result["codex"]["build"])
             self.assertEqual(result["exit_code"], 2)
 
     def test_independent_graph_gate_rejects_catalog_node_with_embedded_paths(self) -> None:
@@ -350,11 +360,9 @@ class PortableIngestTests(unittest.TestCase):
                 "ingest_runtime.run_command", return_value=0
             ) as run:
                 finalized = finalize(root, ["wiki/concepts/설계.md"])
-            self.assertEqual(finalized["status"], "updated")
+            self.assertEqual(finalized["status"], "graph_present")
             self.assertEqual(Path(finalized["graph_workspace"]), (root / "wiki").resolve())
-            command, kwargs = run.call_args
-            self.assertEqual(Path(command[0][2]), (root / "wiki").resolve())
-            self.assertEqual(kwargs["cwd"], (root / "wiki").resolve())
+            self.assertFalse(run.called)
 
     def test_portable_gate_rejects_empty_missing_and_escaped_sources(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wiki-portable-") as temporary:
