@@ -66,6 +66,17 @@ def write_text(path: Path, text: str) -> None:
         file.write(text.replace("\r\n", "\n").replace("\r", "\n"))
 
 
+def seed_ingest_ledger(target: Path) -> None:
+    ledger = {
+        "version": 1,
+        "updated": datetime.now().astimezone().isoformat(),
+        "graphify": "not_checked",
+        "counts": {"pending": 0, "verified": 0, "skipped": 0, "catalog_only": 0},
+        "sources": [],
+    }
+    write_text(target / "wiki" / "ingest-ledger.json", json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
+
+
 def load_config(config_path: Path, keys: tuple[str, ...]) -> dict:
     with config_path.open(encoding="utf-8", newline="") as file:
         config = json.load(file)
@@ -189,6 +200,7 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new") -> dict:
             proposals.append(destination.relative_to(target).as_posix())
         write_text(destination, content)
         rendered_docs.append(destination_name)
+    seed_ingest_ledger(target)
 
     result = {
         "ok": True,

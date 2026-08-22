@@ -5,10 +5,10 @@ description: Claude에서 명령이 실행된 프로젝트 또는 사용자가 �
 
 # /ingest 호스트 어댑터
 
-이 파일은 중복 규칙의 불일치를 막기 위한 어댑터다. 인제스트 작업을 시작하기 전에 반드시 다음 기준 파일을 끝까지 읽고 그대로 따른다.
+이 파일은 중복 규칙의 불일치를 막기 위한 어댑터다. 인제스트 작업 전에 다음 기준 파일을 끝까지 읽고 그대로 따른다.
 
 - [`../../../.agents/skills/ingest/SKILL.md`](../../../.agents/skills/ingest/SKILL.md)
 
-특히 `raw/` 불변, 충돌 시 `status: review`, 연결 계약, `finalize_ingest.py` 완료 게이트, 원자적 그래프 승격 규칙은 생략할 수 없다.
+특히 `raw/` 불변, 1원문=1 source 요약, 카탈로그만으로 완료 선언 금지, `--complete-batch` 완료 게이트, 파일별 장부, Graphify 미설치 시 `validated_without_graph` 보고 규칙은 생략할 수 없다.
 
-명령을 실행할 때는 이 어댑터의 `scripts/ingest_runtime.py`를 사용한다. 사용자가 경로를 주지 않았으면 `--root`를 붙이지 않고 런타임이 반환한 `root`를 이번 작업의 `WIKI_ROOT`로 사용한다. 래퍼는 같은 대상 Wiki에 설치된 공용 `.agents` 정본을 실행하므로 Claude와 Codex가 동일한 판정 코드를 사용한다.
+명령을 실행할 때는 이 어댑터의 `scripts/ingest_runtime.py`를 사용한다. 래퍼는 같은 대상 Wiki에 설치된 공용 `.agents` 정본을 실행하므로 Claude와 Codex가 동일한 판정 코드를 사용한다.

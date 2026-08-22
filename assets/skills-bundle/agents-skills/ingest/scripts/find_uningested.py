@@ -23,6 +23,15 @@ MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 TEXT_SUFFIXES = {".md", ".txt", ".markdown", ".csv", ".json", ".yaml", ".yml"}
 ATTACHMENT_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif"}
 HOST_INSTRUCTION_FILES = {"agents.md", "claude.md", "gemini.md"}
+OPERATIONAL_WIKI_FILES = {
+    "agents.md",
+    "claude.md",
+    "index.md",
+    "log.md",
+    "overview.md",
+    "questions.md",
+    "readme.md",
+}
 
 
 def configure_utf8_stdout() -> None:
@@ -91,6 +100,35 @@ def frontmatter(text: str) -> str:
     return parts[1] if len(parts) == 3 else ""
 
 
+def frontmatter_value(text: str, key: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(key)}:\s*(.*)$", frontmatter(text))
+    return match.group(1).strip().strip("\"'") if match else ""
+
+
+def source_summary_quality(text: str) -> bool:
+    """Reject placeholder source pages before they can prove ingestion."""
+    body = text.split("---", 2)[-1] if text.startswith("---") else text
+    if len(re.findall(r"(?m)^##+\s+", body)) < 3:
+        return False
+    for key in ("key_claims", "entities", "concepts", "reflected_docs", "relations", "evidence_spans", "raw_sha256"):
+        value = frontmatter_value(text, key)
+        if key == "raw_sha256":
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", value):
+                return False
+        else:
+            try:
+                count = int(value)
+            except ValueError:
+                return False
+            if count < 0 or (key not in {"entities", "relations"} and count == 0):
+                return False
+    return (
+        "## 근거" in body
+        and any(line.lstrip().startswith(">") for line in body.splitlines())
+        and any(not normalized(target).startswith("raw/") for target in WIKILINK_RE.findall(body))
+    )
+
+
 def normalized(value: str) -> str:
     return value.strip().strip('"\'').replace("\\", "/").removeprefix("./").casefold()
 
@@ -101,6 +139,36 @@ def keys(value: str) -> set[str]:
     if value.endswith(".md"):
         result.add(value[:-3])
     return result
+
+
+def raw_targets(text: str) -> set[str]:
+    targets = WIKILINK_RE.findall(text) + PLAIN_RAW_PATH_RE.findall(text)
+    return {
+        normalized(target)
+        for target in targets
+        if normalized(target).startswith("raw/")
+    }
+
+
+def is_operational_wiki_file(path: Path) -> bool:
+    return path.parent.name.casefold() != "sources" and path.name.casefold() in OPERATIONAL_WIKI_FILES
+
+
+def is_source_summary(path: Path, text: str, wiki_root: Path, source_pages_exist: bool) -> bool:
+    """Only a one-to-one source note can prove that a raw file was ingested."""
+    targets = raw_targets(text)
+    if len(targets) != 1 or is_operational_wiki_file(path) or not source_summary_quality(text):
+        return False
+    try:
+        path.relative_to(wiki_root / "sources")
+        in_sources = True
+    except ValueError:
+        in_sources = False
+    if source_pages_exist and not in_sources:
+        return False
+    if in_sources:
+        return frontmatter_value(text, "type").casefold() == "source"
+    return not source_pages_exist
 
 
 def is_blank(path: Path) -> bool:
@@ -152,23 +220,20 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
     sources_root = root / "wiki" / "sources"
     raw_files = sorted((p for p in raw_root.rglob("*") if p.is_file()), key=lambda p: p.as_posix())
 
+    source_pages = list(sources_root.rglob("*.md"))
+    source_pages_exist = bool(source_pages)
     referenced: set[str] = set()
-    source_pages = list(sources_root.glob("*.md"))
-    if source_pages:
-        reference_pages = [(source, True) for source in source_pages]
-    else:
-        reference_pages = [
-            (page, False)
-            for page in wiki_root.rglob("*.md")
-            if "graphify-out" not in {part.casefold() for part in page.relative_to(wiki_root).parts}
-        ]
-    for source, frontmatter_only in reference_pages:
-        text = source.read_text(encoding="utf-8-sig")
-        scope = frontmatter(text) if frontmatter_only else text
-        targets = WIKILINK_RE.findall(scope) + PLAIN_RAW_PATH_RE.findall(scope)
-        for target in targets:
-            if normalized(target).startswith("raw/"):
-                referenced.update(keys(target))
+    catalog_referenced: set[str] = set()
+    for page in wiki_root.rglob("*.md"):
+        if "graphify-out" in {part.casefold() for part in page.relative_to(wiki_root).parts}:
+            continue
+        text = page.read_text(encoding="utf-8-sig")
+        targets = raw_targets(text)
+        target_keys = {key for target in targets for key in keys(target)}
+        if is_source_summary(page, text, wiki_root, source_pages_exist):
+            referenced.update(target_keys)
+        else:
+            catalog_referenced.update(target_keys)
 
     ingested_notes = []
     for path in raw_files:
@@ -177,7 +242,13 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
             ingested_notes.append(path)
     embedded = resolve_embeds(raw_root, ingested_notes, raw_files)
 
-    result: dict[str, list[dict[str, object]]] = {"pending": [], "ingested": [], "skipped": []}
+    result: dict[str, list[dict[str, object]]] = {
+        "pending": [],
+        "ingested": [],
+        "skipped": [],
+        "rejected": [],
+        "catalog_only": [],
+    }
     for path in raw_files:
         rel = path.relative_to(root).as_posix()
         item: dict[str, object] = {
@@ -190,14 +261,17 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
             item["reason"] = "folder instructions"
             result["skipped"].append(item)
         elif is_blank(path):
-            item["reason"] = "empty file"
-            result["skipped"].append(item)
+            item["reason"] = "empty file requires explicit rejection evidence"
+            result["rejected"].append(item)
         elif path_keys & referenced:
-            item["reason"] = "represented by wiki/sources frontmatter"
+            item["reason"] = "represented by a one-to-one source summary"
             result["ingested"].append(item)
         elif path_keys & embedded:
             item["reason"] = "embedded attachment in an ingested raw note"
             result["skipped"].append(item)
+        elif path_keys & catalog_referenced:
+            item["reason"] = "referenced by a catalog or non-source note only"
+            result["catalog_only"].append(item)
         else:
             result["pending"].append(item)
 
@@ -227,7 +301,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    for name in ("pending", "ingested", "skipped"):
+    for name in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
         print(f"{name}: {len(result[name])}")
         for item in result[name]:
             reason = f" - {item['reason']}" if "reason" in item else ""

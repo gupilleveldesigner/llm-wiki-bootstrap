@@ -113,6 +113,11 @@ def ignored(_directory: str, names: list[str]) -> set[str]:
     return {name for name in names if name == "__pycache__" or name.endswith(".pyc")}
 
 
+def normalize_bundle(stage: Path) -> None:
+    for bundled in stage.rglob("SKILL.md.bundled"):
+        bundled.rename(bundled.with_name("SKILL.md"))
+
+
 def tree_hash(path: Path) -> str:
     digest = hashlib.sha256()
     for file_path in sorted((item for item in path.rglob("*") if item.is_file()), key=lambda item: item.as_posix()):
@@ -127,10 +132,16 @@ def tree_hash(path: Path) -> str:
 
 def package_specs(target_root: Path, transaction_id: str) -> list[dict[str, Any]]:
     source_root = source_vault()
-    rows = [
-        ("agents", source_root / ".agents" / "skills" / "ingest", target_root / ".agents" / "skills" / "ingest"),
-        ("claude", source_root / ".claude" / "skills" / "ingest", target_root / ".claude" / "skills" / "ingest"),
-    ]
+    if (source_root / "skills-bundle").is_dir():
+        rows = [
+            ("agents", source_root / "skills-bundle" / "agents-skills" / "ingest", target_root / ".agents" / "skills" / "ingest"),
+            ("claude", source_root / "skills-bundle" / "claude-adapters" / "ingest", target_root / ".claude" / "skills" / "ingest"),
+        ]
+    else:
+        rows = [
+            ("agents", source_root / ".agents" / "skills" / "ingest", target_root / ".agents" / "skills" / "ingest"),
+            ("claude", source_root / ".claude" / "skills" / "ingest", target_root / ".claude" / "skills" / "ingest"),
+        ]
     specs: list[dict[str, Any]] = []
     for name, source, destination in rows:
         if not source.is_dir():
@@ -268,6 +279,7 @@ def install(
                 source = Path(str(row["source"]))
                 stage = Path(str(row["stage"]))
                 shutil.copytree(source, stage, ignore=ignored)
+                normalize_bundle(stage)
                 row["stage_hash"] = tree_hash(stage)
                 payload["status"] = f"{row['name']}_staged"
                 atomic_write_json(journal_path, payload)

@@ -80,6 +80,8 @@ Claude Code에서:
 
 **Design principles**: immutable `raw/`, self-contained distribution (everything bundled under `assets/`), and non-destructive modes — conflicts become `.wiki-proposed` proposal files instead of overwrites.
 
+Ingest completion is file-level: a catalog that only lists raw paths is not evidence. Batch completion uses the one-to-one source-summary and content-evidence gates, installs `graphifyy` when Graphify is missing, and requires the read-only `verify --complete-batch --require-graph` gate before reporting success. It writes `wiki/ingest-ledger.json` and loops over only failed sources when verification fails.
+
 ## License
 
 MIT

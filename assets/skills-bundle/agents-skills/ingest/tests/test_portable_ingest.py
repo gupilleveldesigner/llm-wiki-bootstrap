@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -18,7 +19,7 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from find_uningested import resolve_wiki_root, scan  # noqa: E402
-from ingest_runtime import finalize, graph_strategy, graph_workspace, validate_changed_files  # noqa: E402
+from ingest_runtime import finalize, graph_strategy, graph_workspace, validate_changed_files, verify  # noqa: E402
 from install_to_wiki import JOURNAL_NAME, LOCK_NAME, install, install_lock, recover_install  # noqa: E402
 
 
@@ -26,6 +27,25 @@ def make_wiki(root: Path) -> None:
     (root / "raw" / "reference").mkdir(parents=True)
     (root / "wiki" / "sources").mkdir(parents=True)
     (root / "wiki" / "concepts").mkdir(parents=True)
+
+
+def source_note(root: Path, raw_relative: str, title: str) -> str:
+    digest = hashlib.sha256((root / raw_relative).read_bytes()).hexdigest()
+    (root / "wiki" / "concepts" / "test.md").write_text("# Test concept\n", encoding="utf-8")
+    return (
+        "---\n"
+        "type: source\n"
+        "topics: [test]\n"
+        f"sources: [[{raw_relative}]]\n"
+        f"raw_sha256: {digest}\n"
+        "key_claims: 1\nentities: 1\nconcepts: 1\nreflected_docs: 1\nrelations: 0\nevidence_spans: 1\n"
+        "---\n"
+        f"# {title}\n\n"
+        "## 핵심 주장\n\n확인된 주장\n\n"
+        "## 엔티티와 개념\n\n확인된 엔티티와 개념\n\n"
+        "## 근거\n\n> source\n\n"
+        "## Wiki에 반영된 문서\n\n[[concepts/test]]\n"
+    )
 
 
 class PortableIngestTests(unittest.TestCase):
@@ -37,8 +57,7 @@ class PortableIngestTests(unittest.TestCase):
             (root / "raw" / "reference" / "인제스트됨.md").write_text("source", encoding="utf-8")
             (root / "raw" / "reference" / "새 문서—테스트.md").write_text("pending", encoding="utf-8")
             (root / "wiki" / "sources" / "인제스트됨.md").write_text(
-                "---\nsources:\n  - \"[[raw/reference/인제스트됨.md]]\"\n---\n",
-                encoding="utf-8",
+                source_note(root, "raw/reference/인제스트됨.md", "인제스트됨"), encoding="utf-8"
             )
             nested = root / "wiki" / "concepts"
 
@@ -56,6 +75,162 @@ class PortableIngestTests(unittest.TestCase):
             make_wiki(second)
 
             self.assertEqual(resolve_wiki_root(second, start=first / "wiki"), second.resolve())
+
+    def test_catalog_citations_do_not_count_as_ingest(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-catalog-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            for name in ("one.md", "two.md"):
+                (root / "raw" / "reference" / name).write_text("source", encoding="utf-8")
+            (root / "wiki" / "sources" / "catalog.md").write_text(
+                "---\ntype: overview\nsources:\n  - [[raw/reference/one.md]]\n  - [[raw/reference/two.md]]\n---\n",
+                encoding="utf-8",
+            )
+
+            result = scan(root)
+            self.assertEqual(result["ingested"], [])
+            self.assertEqual({item["path"] for item in result["catalog_only"]}, {
+                "raw/reference/one.md",
+                "raw/reference/two.md",
+            })
+
+    def test_complete_batch_requires_source_coverage_and_handles_missing_graphify(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-batch-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            (root / "raw" / "reference" / "done.md").write_text("source", encoding="utf-8")
+            (root / "raw" / "reference" / "left.md").write_text("source", encoding="utf-8")
+            changed = root / "wiki" / "sources" / "done.md"
+            changed.write_text(source_note(root, "raw/reference/done.md", "Done"), encoding="utf-8")
+
+            partial = finalize(root, ["wiki/sources/done.md"], complete_batch=True)
+            self.assertEqual(partial["status"], "coverage_failed")
+            self.assertEqual(partial["coverage"]["pending"], 1)
+
+            (root / "wiki" / "sources" / "left.md").write_text(
+                source_note(root, "raw/reference/left.md", "Left"), encoding="utf-8"
+            )
+            def fake_command(command, *, cwd):
+                if len(command) >= 2 and command[1] == str(root):
+                    graph_out = root / "graphify-out"
+                    graph_out.mkdir()
+                    (graph_out / "graph.json").write_text(
+                        json.dumps(
+                            {
+                                "nodes": [
+                                    {"id": "source", "source_file": "wiki/sources/done.md"},
+                                    {"id": "left", "source_file": "wiki/sources/left.md"},
+                                    {"id": "concept", "source_file": "wiki/concepts/test.md"},
+                                ],
+                                "links": [
+                                    {"source": "source", "target": "concept"},
+                                    {"source": "left", "target": "concept"},
+                                ],
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                return 0
+
+            with patch("ingest_runtime.ensure_graphify", return_value={"status": "installed", "executable": "graphify"}), \
+                patch("ingest_runtime.graphify_executable", return_value="graphify"), \
+                patch("ingest_runtime.run_command", side_effect=fake_command):
+                complete = finalize(
+                    root,
+                    ["wiki/sources/done.md", "wiki/sources/left.md"],
+                    complete_batch=True,
+                )
+            self.assertEqual(complete["status"], "updated", complete)
+            self.assertEqual(complete["graph_status"], "configured")
+            self.assertEqual(complete["graph_counts"], {"nodes": 3, "links": 2})
+            self.assertEqual(complete["completion"], "complete")
+            self.assertTrue((root / "wiki" / "ingest-ledger.json").is_file())
+
+    def test_quality_gate_rejects_placeholder_source_and_independent_verify_reports_it(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-quality-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            raw = root / "raw" / "reference" / "source.md"
+            raw.write_text("source", encoding="utf-8")
+            page = root / "wiki" / "sources" / "source.md"
+            page.write_text(
+                "---\ntype: source\ntopics: [test]\nsources: [[raw/reference/source.md]]\n---\n# Placeholder\n",
+                encoding="utf-8",
+            )
+
+            result = scan(root)
+            self.assertEqual(result["ingested"], [])
+            self.assertEqual(result["catalog_only"][0]["path"], "raw/reference/source.md")
+            failed = finalize(root, ["wiki/sources/source.md"])
+            ledger = json.loads((root / "wiki" / "ingest-ledger.json").read_text(encoding="utf-8"))
+            self.assertEqual(failed["status"], "validation_failed")
+            self.assertTrue(ledger["errors"])
+            verified = verify(root, complete_batch=True, require_graph=True)
+            self.assertEqual(verified["status"], "verification_failed")
+            self.assertTrue(any("Source summary has invalid" in error for error in verified["errors"]))
+
+    def test_graphify_install_failure_blocks_complete_batch(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-graphify-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            raw = root / "raw" / "reference" / "source.md"
+            raw.write_text("source", encoding="utf-8")
+            (root / "wiki" / "sources" / "source.md").write_text(
+                source_note(root, "raw/reference/source.md", "Source"), encoding="utf-8"
+            )
+
+            with patch(
+                "ingest_runtime.ensure_graphify",
+                return_value={"status": "install_failed", "error": "pip failed", "exit_code": 1},
+            ), patch("ingest_runtime.graphify_executable", return_value=None):
+                result = finalize(root, ["wiki/sources/source.md"], complete_batch=True)
+            self.assertEqual(result["status"], "graphify_install_failed")
+            self.assertEqual(result["exit_code"], 2)
+
+    def test_independent_graph_gate_rejects_catalog_node_with_embedded_paths(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-graph-gate-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            raw = root / "raw" / "reference" / "source.md"
+            raw.write_text("source", encoding="utf-8")
+            (root / "wiki" / "sources" / "source.md").write_text(
+                source_note(root, "raw/reference/source.md", "Source"), encoding="utf-8"
+            )
+            graph_out = root / "graphify-out"
+            graph_out.mkdir()
+            (graph_out / "graph.json").write_text(
+                json.dumps(
+                    {
+                        "nodes": [
+                            {
+                                "id": "Imported Episodes",
+                                "description": "raw/reference/source.md concepts/test",
+                            }
+                        ],
+                        "links": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("ingest_runtime.graphify_executable", return_value="graphify"):
+                result = verify(root, complete_batch=True, require_graph=True)
+            self.assertEqual(result["status"], "verification_failed")
+            self.assertTrue(any("no node for source summary" in error for error in result["errors"]))
+
+    def test_independent_gate_blocks_unexplained_empty_raw_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-rejected-") as temporary:
+            root = Path(temporary)
+            make_wiki(root)
+            raw = root / "raw" / "reference" / "source.md"
+            raw.write_text("source", encoding="utf-8")
+            (root / "wiki" / "sources" / "source.md").write_text(
+                source_note(root, "raw/reference/source.md", "Source"), encoding="utf-8"
+            )
+            (root / "raw" / "reference" / "empty.md").write_text("", encoding="utf-8")
+
+            result = verify(root, complete_batch=True)
+            self.assertEqual(result["status"], "verification_failed")
+            self.assertEqual(result["coverage"]["rejected"], 1)
 
     def test_external_git_worktree_uses_primary_checkout_wiki_without_root_argument(self) -> None:
         if shutil.which("git") is None:
@@ -150,9 +325,15 @@ class PortableIngestTests(unittest.TestCase):
             (root / "raw" / "documents").mkdir(parents=True)
             (root / "wiki" / "concepts").mkdir(parents=True)
             (root / "raw" / "documents" / "정본.md").write_text("source", encoding="utf-8")
+            (root / "wiki" / "concepts" / "test.md").write_text("# Test concept\n", encoding="utf-8")
             changed = root / "wiki" / "concepts" / "설계.md"
             changed.write_text(
-                "---\ntags: [design, project]\nsource: raw/documents/정본.md\n---\n# 설계\n",
+                "---\n"
+                "tags: [design, project]\n"
+                "source: raw/documents/정본.md\n"
+                f"raw_sha256: {hashlib.sha256(b'source').hexdigest()}\n"
+                "key_claims: 1\nentities: 1\nconcepts: 1\nreflected_docs: 1\nrelations: 0\nevidence_spans: 1\n"
+                "---\n# 설계\n\n## 핵심 주장\n내용\n\n## 엔티티와 개념\n내용\n\n## 근거\n> source\n\n## 반영 문서\n[[concepts/test]]\n",
                 encoding="utf-8",
             )
             graph_out = root / "wiki" / "graphify-out"

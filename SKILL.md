@@ -14,6 +14,7 @@ description: LLM Wiki 볼트(Karpathy 3계층 raw/wiki/Output)를 구축·전환
 - Python 3.10+. 실행 명령을 이 순서로 찾는다: `python --version` → `py -3 --version` → `python3 --version` → (Windows) `%LOCALAPPDATA%\Programs\Python\Python3*\python.exe` 글롭 탐색 후 가장 높은 버전의 **전체 경로**. Microsoft Store 스텁(`...\WindowsApps\python.exe` — 실행하면 스토어 안내가 뜨거나 프로세스 생성이 실패)은 유효한 Python이 아니므로 건너뛴다. 성공한 명령/경로를 이후 모든 `python` 호출 자리에 그대로 사용한다. 전부 실패하면 설치를 안내하고 중단한다.
 - graphify는 선택 사항이다 — 5단계에서 다룬다. 없어도 위키는 완전히 동작한다.
 - 이 스킬은 Claude Code와 Codex 어느 쪽에서 실행돼도 같은 절차를 따른다. 질문 도구(AskUserQuestion 등)가 없는 환경이면 채팅으로 묻고, 비대화형 실행이라 물을 수 없으면 합리적 기본값으로 진행하되 가정한 값을 보고에 명시한다.
+- 원문 보관·카탈로그 생성·그래프 파일 생성은 인제스트 완료의 증거가 아니다. 원문마다 `wiki/sources/<원문>.md` 1개를 만들고 완료 게이트의 수치를 확인한다.
 
 ## 1. 대상 폴더 확정과 모드 판정
 
@@ -71,7 +72,7 @@ stdout의 JSON에서 `"ok": true`를 확인한다. `false`면 `error`를 사용�
 `graphify --version`으로 CLI 존재를 확인한다.
 
 - **설치돼 있으면**: 대상 폴더에서 초기 그래프를 빌드한다. graphify 스킬이 설치된 환경이면 그 스킬의 빌드 파이프라인을 따르고, 스킬 없이 CLI만 있으면 `graphify <대상 폴더>`를 실행한다. 최초 부트스트랩 시점에는 정본(curated) 그래프가 없으므로 전체 빌드가 안전하다. 빌드 후에는 **`graphify update .`를 직접 실행하지 말라는 규칙**이 볼트 문서에 이미 들어 있다(갱신은 ingest 완료 게이트가 담당).
-- **없으면**: 그래프 없이 완료한다. ingest 스킬은 그래프가 없어도 `validated_without_graph`로 정상 동작한다. 사용자에게 나중에 연결하는 방법을 안내한다: `pip install graphifyy` 후 볼트 루트에서 `graphify .` 1회 실행. 설치는 사용자 동의를 받은 경우에만 실행한다.
+- **없으면**: 배치 완료 게이트에서 `python -m pip install graphifyy`를 실행하고 초기 그래프를 만든다. 설치·빌드가 실패하면 완료를 선언하지 않는다. 단일 소스 작업은 로컬 검증만 가능하지만 `validated_without_graph`로 명시한다.
 
 ## 6. 스모크 체크
 
@@ -85,6 +86,7 @@ python ".session-memory/scripts/session_memory.py" status
 - ingest status가 대상 폴더를 `root`로 반환하는지 확인.
 - session-memory status가 오류 없이 상태를 반환하는지 확인.
 - `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`가 실제로 존재하고 플레이스홀더(`{{`)가 남아 있지 않은지 확인.
+- 배치 인제스트 후에는 반드시 `ingest_runtime.py verify --complete-batch --require-graph`를 실행한다. 실패한 원문만 다시 읽어 `scan → ingest → finalize → verify` 루프를 통과시킨다.
 
 실패한 항목은 숨기지 말고 그대로 보고한다.
 
@@ -100,6 +102,7 @@ python ".session-memory/scripts/session_memory.py" status
    - `templates/`의 작업 브리프 템플릿을 자기 작업 패턴에 맞추고 싶으면 `/brief-tuner` 인터뷰를 실행한다.
    - Obsidian 사용자라면: 이 폴더를 볼트로 열고, `templates/web-clipper/`의 JSON을 Obsidian Web Clipper 확장에 임포트하면 웹 자료가 `raw/reference/` 하위로 자동 수집된다 (임포트 방법은 `templates/web-clipper/README.md`).
    - graphify를 연결하지 않았다면 연결 방법 한 줄.
+   - 인제스트 완료 보고에는 `입력 원문 / 처리 완료 / 검증 완료 / 제외 / 실패·미처리 / 그래프 노드 / 그래프 링크` 수치를 포함한다. 실패·미처리가 0이 아니면 반드시 `미완료`라고 보고한다.
 
 ## migrate 모드 — 기존 프로젝트 폴더를 위키로 전환
 

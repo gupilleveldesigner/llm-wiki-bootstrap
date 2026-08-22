@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import unquote
@@ -17,7 +19,14 @@ SCRIPT_ROOT = Path(__file__).resolve().parent
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
-from find_uningested import PLAIN_RAW_PATH_RE, configure_utf8_stdout, resolve_wiki_root, scan
+from find_uningested import (
+    OPERATIONAL_WIKI_FILES,
+    PLAIN_RAW_PATH_RE,
+    configure_utf8_stdout,
+    resolve_wiki_root,
+    scan,
+    source_summary_quality,
+)
 
 
 TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*", re.MULTILINE)
@@ -67,6 +76,145 @@ def normalize_changed_file(root: Path, value: str) -> tuple[Path, str]:
     return candidate, relative
 
 
+def graph_status(root: Path, strategy: str | None = None) -> str:
+    strategy = strategy or graph_strategy(root)
+    if strategy in {"curated-finalizer", "graphify-cli"}:
+        return "configured"
+    if strategy == "curated-finalizer-missing":
+        return "blocked"
+    if strategy == "ambiguous-graph-layout":
+        return "ambiguous"
+    return "not_installed" if graphify_executable() is None else "not_configured"
+
+
+def graphify_executable() -> str | None:
+    candidates = [shutil.which("graphify")]
+    executable_root = Path(sys.executable).resolve().parent
+    candidates.extend(
+        str(executable_root / name)
+        for name in ("graphify", "graphify.exe", "Scripts/graphify", "Scripts/graphify.exe")
+    )
+    return next((candidate for candidate in candidates if candidate and Path(candidate).is_file()), None)
+
+
+def ensure_graphify() -> dict[str, Any]:
+    executable = graphify_executable()
+    if executable:
+        return {"status": "present", "executable": executable}
+    exit_code = run_command([sys.executable, "-m", "pip", "install", "graphifyy"], cwd=Path.cwd())
+    executable = graphify_executable()
+    if exit_code != 0 or not executable:
+        return {
+            "status": "install_failed",
+            "executable": None,
+            "error": "Graphify was not available and installing graphifyy did not produce a graphify executable.",
+            "exit_code": exit_code,
+        }
+    return {"status": "installed", "executable": executable}
+
+
+def graph_counts(root: Path, workspace: Path | None = None) -> dict[str, int]:
+    graph = (workspace or root) / "graphify-out" / "graph.json"
+    if not graph.is_file():
+        return {"nodes": 0, "links": 0}
+    try:
+        payload = json.loads(graph.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {"nodes": 0, "links": 0}
+    nodes = payload.get("nodes", []) if isinstance(payload, dict) else []
+    links = payload.get("links", payload.get("edges", [])) if isinstance(payload, dict) else []
+    return {
+        "nodes": len(nodes) if isinstance(nodes, (list, dict)) else 0,
+        "links": len(links) if isinstance(links, (list, dict)) else 0,
+    }
+
+
+def coverage_summary(root: Path) -> dict[str, int]:
+    result = scan(root)
+    return {name: len(result.get(name, [])) for name in ("pending", "ingested", "skipped", "rejected", "catalog_only")}
+
+
+def write_ingest_ledger(
+    root: Path,
+    scan_result: dict[str, list[dict[str, object]]],
+    *,
+    graph: str,
+    errors: Sequence[str] = (),
+    completion: str | None = None,
+) -> None:
+    """Persist file-level evidence without touching raw/ files."""
+    entries: list[dict[str, object]] = []
+    for state in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
+        for item in scan_result.get(state, []):
+            entries.append(
+                {
+                    "path": item["path"],
+                    "status": "verified" if state == "ingested" else state,
+                    "reason": item.get("reason"),
+                    "modified": item.get("modified"),
+                }
+            )
+    counts = {state: 0 for state in ("pending", "verified", "skipped", "rejected", "catalog_only")}
+    for entry in entries:
+        counts[str(entry["status"])] = counts.get(str(entry["status"]), 0) + 1
+        related = [
+            error
+            for error in errors
+            if str(entry["path"]).casefold() in error.casefold()
+            or Path(str(entry["path"])).name.casefold() in error.casefold()
+        ]
+        if related:
+            entry["errors"] = related
+    ledger = {
+        "version": 1,
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "graphify": graph,
+        "counts": counts,
+        "completion": completion or ("complete" if not errors else "incomplete"),
+        "errors": list(errors),
+        "sources": sorted(entries, key=lambda entry: str(entry["path"])),
+    }
+    destination = root / "wiki" / "ingest-ledger.json"
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(destination)
+
+
+def raw_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def evidence_quotes_match(raw_path: Path, note_text: str) -> bool:
+    raw_text: str | None = None
+    if raw_path.suffix.casefold() == ".pdf":
+        extractor = shutil.which("pdftotext")
+        if extractor:
+            completed = subprocess.run(
+                [extractor, "-layout", str(raw_path), "-"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if completed.returncode == 0:
+                raw_text = completed.stdout.decode("utf-8", errors="replace")
+    else:
+        for encoding in ("utf-8-sig", "utf-16", "cp949", "latin-1"):
+            try:
+                raw_text = raw_path.read_text(encoding=encoding)
+                break
+            except (OSError, UnicodeDecodeError):
+                continue
+    if raw_text is None:
+        return False
+    raw_text = " ".join(raw_text.split())
+    quotes = [line.lstrip()[1:].strip() for line in note_text.splitlines() if line.lstrip().startswith(">")]
+    return bool(quotes) and any(" ".join(quote.split()) in raw_text for quote in quotes if quote)
+
+
 def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str]:
     """Apply portable minimum gates before any graph-specific finalizer."""
     if not changed_files:
@@ -87,6 +235,10 @@ def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str
             errors.append(f"{relative}: YAML frontmatter is required")
             continue
 
+        if path.name.casefold() in OPERATIONAL_WIKI_FILES and not relative.casefold().startswith("wiki/sources/"):
+            errors.append(f"{relative}: catalog/operational documents cannot complete an ingest")
+            continue
+
         topics = frontmatter_value(frontmatter, "topics") or frontmatter_value(frontmatter, "tags")
         source_fields = "\n".join(
             value
@@ -103,16 +255,40 @@ def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str
             errors.append(f"{relative}: a raw source citation is required")
         else:
             cited_targets = WIKILINK_RE.findall(source_scope) + PLAIN_RAW_PATH_RE.findall(source_scope)
-            raw_targets = list(
+            raw_paths = list(
                 dict.fromkeys(
                     unquote(target.strip()).replace("\\", "/").removeprefix("./")
                     for target in cited_targets
                     if target.strip().replace("\\", "/").removeprefix("./").casefold().startswith("raw/")
                 )
             )
-            if not raw_targets:
+            if not raw_paths:
                 errors.append(f"{relative}: source citation must include a raw/ file path")
-            for target in raw_targets:
+            if relative.casefold().startswith("wiki/sources/"):
+                source_type = frontmatter_value(frontmatter, "type").strip("\"'").casefold()
+                if source_type != "source":
+                    errors.append(f"{relative}: source summaries must have type: source")
+                if len(raw_paths) != 1:
+                    errors.append(f"{relative}: source summaries must cite exactly one raw file; catalogs are not ingest evidence")
+                if not source_summary_quality(text):
+                    errors.append(
+                        f"{relative}: source evidence must include non-placeholder claims, entities, concepts, reflected_docs, raw_sha256, and Wiki links"
+                    )
+                body = text.split("---", 2)[-1] if text.startswith("---") else text
+                for link in WIKILINK_RE.findall(body):
+                    target = link.strip().replace("\\", "/").removeprefix("./")
+                    if target.casefold().startswith("raw/"):
+                        continue
+                    target_path = Path(target)
+                    candidates = [
+                        root / "wiki" / target_path,
+                        root / "wiki" / target_path.with_suffix(".md"),
+                        root / target_path,
+                        root / target_path.with_suffix(".md"),
+                    ]
+                    if not any(candidate.is_file() for candidate in candidates):
+                        errors.append(f"{relative}: reflected Wiki link does not exist: {target}")
+            for target in raw_paths:
                 candidate = (root / target).resolve()
                 try:
                     candidate.relative_to(raw_root)
@@ -124,6 +300,14 @@ def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str
                     candidates.append(candidate.with_suffix(".md"))
                 if not any(path.is_file() for path in candidates):
                     errors.append(f"{relative}: raw source does not exist: {target}")
+                elif relative.casefold().startswith("wiki/sources/"):
+                    declared_hash = frontmatter_value(frontmatter, "raw_sha256").strip("\"'").casefold()
+                    raw_path = next(path for path in candidates if path.is_file())
+                    actual_hash = raw_sha256(raw_path)
+                    if declared_hash != actual_hash:
+                        errors.append(f"{relative}: raw_sha256 does not match the cited raw file")
+                    if not evidence_quotes_match(raw_path, text):
+                        errors.append(f"{relative}: evidence quote does not match the cited raw file")
     return errors
 
 
@@ -175,13 +359,106 @@ def run_command(command: Sequence[str], *, cwd: Path) -> int:
     return completed.returncode
 
 
-def finalize(root: Path, changed_files: Sequence[str]) -> dict[str, Any]:
+def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool = False) -> dict[str, Any]:
     errors = validate_changed_files(root, changed_files)
     if errors:
+        scan_result = scan(root)
+        write_ingest_ledger(root, scan_result, graph="not_checked", errors=errors, completion="incomplete")
         return {"status": "validation_failed", "root": str(root), "errors": errors, "exit_code": 2}
 
+    scan_result = scan(root)
+    coverage = {name: len(scan_result.get(name, [])) for name in ("pending", "ingested", "skipped", "rejected", "catalog_only")}
+    if complete_batch and (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"]):
+        errors = [
+            "Batch completion requires zero pending, rejected, and catalog-only raw sources.",
+            f"pending={coverage['pending']}, rejected={coverage['rejected']}, catalog_only={coverage['catalog_only']}",
+        ]
+        write_ingest_ledger(root, scan_result, graph="not_checked", errors=errors, completion="incomplete")
+        return {
+            "status": "coverage_failed",
+            "root": str(root),
+            "coverage": coverage,
+            "errors": errors,
+            "exit_code": 2,
+        }
+
     strategy = graph_strategy(root)
+    if complete_batch and strategy in {"none", "graphify-cli"}:
+        needs_initial_build = strategy == "none"
+        installation = (
+            ensure_graphify()
+            if graphify_executable() is None
+            else {"status": "present", "executable": graphify_executable()}
+        )
+        if installation["status"] not in {"present", "installed"}:
+            errors = [str(installation.get("error", "Graphify installation failed."))]
+            write_ingest_ledger(root, scan_result, graph="not_installed", errors=errors, completion="incomplete")
+            return {
+                "status": "graphify_install_failed",
+                "root": str(root),
+                "coverage": coverage,
+                "graph_status": "not_installed",
+                "errors": errors,
+                "exit_code": 2,
+            }
+        executable = str(installation["executable"])
+        build_exit_code = run_command([executable, str(root)], cwd=root) if needs_initial_build else 0
+        if build_exit_code != 0:
+            errors = [f"Initial Graphify build failed with exit code {build_exit_code}."]
+            write_ingest_ledger(root, scan_result, graph="blocked", errors=errors, completion="incomplete")
+            return {
+                "status": "graphify_bootstrap_failed",
+                "root": str(root),
+                "coverage": coverage,
+                "graph_status": "blocked",
+                "errors": errors,
+                "exit_code": 2,
+            }
+        strategy = graph_strategy(root)
+        if needs_initial_build and strategy == "none":
+            errors = ["Graphify exited successfully but did not create graphify-out/graph.json."]
+            write_ingest_ledger(root, scan_result, graph="blocked", errors=errors, completion="incomplete")
+            return {
+                "status": "graphify_bootstrap_failed",
+                "root": str(root),
+                "coverage": coverage,
+                "graph_status": "blocked",
+                "errors": errors,
+                "exit_code": 2,
+            }
     workspace = graph_workspace(root)
+    graph = graph_status(root, strategy)
+
+    def completed_payload(payload: dict[str, Any], *, write_ledger: bool = True) -> dict[str, Any]:
+        payload["coverage"] = coverage
+        payload["graph_status"] = graph
+        payload["graph_counts"] = graph_counts(root, workspace)
+        payload["completion"] = (
+            "complete_without_graph"
+            if graph in {"not_installed", "not_configured"} and not (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"])
+            else "complete"
+            if not (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"])
+            else "partial"
+        )
+        if payload.get("exit_code") == 0:
+            verification = verify(
+                root,
+                require_graph=complete_batch,
+                complete_batch=complete_batch,
+                changed_files=None if complete_batch else changed_files,
+            )
+            payload["verification"] = verification
+            if not verification["verified"]:
+                payload["status"] = "verification_failed"
+                payload["completion"] = "incomplete"
+                payload["errors"] = list(dict.fromkeys([*(payload.get("errors") or []), *verification["errors"]]))
+                payload["exit_code"] = 2
+                write_ledger = False
+        if write_ledger:
+            write_ingest_ledger(root, scan_result, graph=graph, completion=str(payload["completion"]))
+        elif payload.get("exit_code") != 0:
+            write_ingest_ledger(root, scan_result, graph=graph, errors=payload.get("errors", ()), completion="incomplete")
+        return payload
     if strategy == "curated-finalizer":
         command = [
             graph_python(root, workspace),
@@ -193,58 +470,310 @@ def finalize(root: Path, changed_files: Sequence[str]) -> dict[str, Any]:
             _, relative = normalize_changed_file(root, changed_file)
             command.extend(["--changed-file", relative])
         exit_code = run_command(command, cwd=root)
-        return {
+        return completed_payload({
             "status": "promoted" if exit_code == 0 else "graph_finalizer_failed",
             "root": str(root),
             "strategy": strategy,
             "exit_code": exit_code,
-        }
+        }, write_ledger=exit_code == 0)
 
     if strategy == "curated-finalizer-missing":
-        return {
+        return completed_payload({
             "status": "graph_finalizer_missing",
             "root": str(root),
             "strategy": strategy,
             "errors": ["Curated graph marker exists, so generic graphify update was refused."],
             "exit_code": 2,
-        }
+        }, write_ledger=False)
 
     if strategy == "ambiguous-graph-layout":
-        return {
+        return completed_payload({
             "status": "ambiguous_graph_layout",
             "root": str(root),
             "strategy": strategy,
             "errors": ["Both root/graphify-out and wiki/graphify-out exist; choose one canonical graph first."],
             "exit_code": 2,
-        }
+        }, write_ledger=False)
 
     if strategy == "graphify-cli":
         if workspace is None:
             raise RuntimeError("Graphify workspace resolution failed.")
-        executable = shutil.which("graphify")
+        executable = graphify_executable()
         if executable is None:
-            return {
+            return completed_payload({
                 "status": "graphify_unavailable",
                 "root": str(root),
                 "strategy": strategy,
                 "errors": ["graphify-out/graph.json exists but the graphify CLI is unavailable."],
                 "exit_code": 2,
-            }
+            }, write_ledger=False)
         exit_code = run_command([executable, "update", str(workspace)], cwd=workspace)
-        return {
+        return completed_payload({
             "status": "updated" if exit_code == 0 else "graphify_update_failed",
             "root": str(root),
             "graph_workspace": str(workspace),
             "strategy": strategy,
             "exit_code": exit_code,
-        }
+        }, write_ledger=exit_code == 0)
 
-    return {
+    return completed_payload({
         "status": "validated_without_graph",
         "root": str(root),
         "strategy": strategy,
         "note": "Wiki files passed portable gates; this Wiki has no graph to update.",
         "exit_code": 0,
+    })
+
+
+def independent_frontmatter(text: str) -> str:
+    if not text.startswith("---"):
+        return ""
+    parts = text.split("---", 2)
+    return parts[1] if len(parts) == 3 else ""
+
+
+def independent_field(frontmatter: str, key: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(key)}:\s*(.*)$", frontmatter)
+    return match.group(1).strip().strip("\"'") if match else ""
+
+
+def independent_int(frontmatter: str, key: str) -> int | None:
+    value = independent_field(frontmatter, key)
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def independent_raw_targets(text: str) -> list[str]:
+    front = independent_frontmatter(text)
+    scope = "\n".join(part for part in (front, text) if part)
+    targets = WIKILINK_RE.findall(scope) + PLAIN_RAW_PATH_RE.findall(scope)
+    return list(dict.fromkeys(
+        unquote(target.strip()).replace("\\", "/").removeprefix("./")
+        for target in targets
+        if target.strip().replace("\\", "/").removeprefix("./").casefold().startswith("raw/")
+    ))
+
+
+def independent_wiki_targets(root: Path, text: str) -> list[str]:
+    body = text.split("---", 2)[-1] if text.startswith("---") else text
+    return [target.strip().replace("\\", "/").removeprefix("./") for target in WIKILINK_RE.findall(body) if not target.casefold().startswith("raw/")]
+
+
+def independent_raw_files(root: Path) -> list[Path]:
+    excluded = {"agents.md", "claude.md", "gemini.md"}
+    attachments = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif"}
+    files: list[Path] = []
+    for path in sorted((root / "raw").rglob("*"), key=lambda item: item.as_posix()):
+        if not path.is_file() or (path.parent == root / "raw" and path.name.casefold() in excluded):
+            continue
+        if path.suffix.casefold() in attachments:
+            continue
+        try:
+            if not path.read_bytes().strip():
+                continue
+        except OSError:
+            continue
+        files.append(path)
+    return files
+
+
+def independent_raw_exclusions(root: Path) -> dict[str, list[str]]:
+    attachments = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif"}
+    result = {"rejected": [], "skipped": []}
+    for path in sorted((root / "raw").rglob("*"), key=lambda item: item.as_posix()):
+        if not path.is_file() or (path.parent == root / "raw" and path.name.casefold() in {"agents.md", "claude.md", "gemini.md"}):
+            continue
+        relative = path.relative_to(root).as_posix()
+        if path.suffix.casefold() in attachments:
+            result["skipped"].append(relative)
+            continue
+        try:
+            if not path.read_bytes().strip():
+                result["rejected"].append(relative)
+        except OSError:
+            result["rejected"].append(relative)
+    return result
+
+
+def independent_source_records(root: Path) -> list[dict[str, Any]]:
+    sources_root = root / "wiki" / "sources"
+    pages = list(sources_root.rglob("*.md")) if sources_root.is_dir() else []
+    if not pages:
+        pages = [
+            path
+            for path in (root / "wiki").rglob("*.md")
+            if "graphify-out" not in {part.casefold() for part in path.relative_to(root / "wiki").parts}
+            and path.name.casefold() not in OPERATIONAL_WIKI_FILES
+        ]
+    records: list[dict[str, Any]] = []
+    for page in pages:
+        text = page.read_text(encoding="utf-8-sig")
+        front = independent_frontmatter(text)
+        records.append(
+            {
+                "path": page,
+                "relative": page.relative_to(root).as_posix(),
+                "text": text,
+                "frontmatter": front,
+                "raw_targets": independent_raw_targets(text),
+                "wiki_targets": independent_wiki_targets(root, text),
+            }
+        )
+    return records
+
+
+def independent_graph_check(root: Path, records: Sequence[dict[str, Any]]) -> list[str]:
+    workspace = graph_workspace(root)
+    graph_path = (workspace or root) / "graphify-out" / "graph.json"
+    try:
+        payload = json.loads(graph_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return [f"Graphify graph is unreadable: {graph_path}"]
+    if not isinstance(payload, dict):
+        return ["Graphify graph root must be an object"]
+    nodes = payload.get("nodes", [])
+    links = payload.get("links", payload.get("edges", []))
+    if not isinstance(nodes, list) or not isinstance(links, list):
+        return ["Graphify graph must expose list-shaped nodes and links"]
+    node_identity: dict[str, str] = {}
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            continue
+        node_id = str(node.get("id", node.get("key", index)))
+        source_file = node.get("source_file")
+        if isinstance(source_file, str) and source_file.strip():
+            node_identity[node_id] = source_file.replace("\\", "/").casefold().removeprefix("./")
+
+    def matches(identity: str, target: str) -> bool:
+        target = target.replace("\\", "/").casefold().removeprefix("./")
+        variants = {target, target.removeprefix("wiki/")}
+        if not Path(target).suffix:
+            variants.update({f"{variant}.md" for variant in tuple(variants)})
+        return identity in variants or identity.removeprefix("wiki/") in variants
+
+    errors: list[str] = []
+    for record in records:
+        source_targets = [record["relative"]]
+        source_ids = {
+            node_id
+            for node_id, identity in node_identity.items()
+            if any(matches(identity, target) for target in source_targets)
+        }
+        if not source_ids:
+            errors.append(f"Graphify has no node for source summary: {record['relative']}")
+            continue
+        reflected_targets: list[set[str]] = []
+        for target in record["wiki_targets"]:
+            ids = {node_id for node_id, identity in node_identity.items() if matches(identity, target)}
+            reflected_targets.append(ids)
+            if not ids:
+                errors.append(f"Graphify has no node for reflected doc of {record['relative']}: {target}")
+        for target, reflected_ids in zip(record["wiki_targets"], reflected_targets):
+            if not reflected_ids:
+                continue
+            connected = False
+            for link in links:
+                if not isinstance(link, dict):
+                    continue
+                left = str(link.get("source", link.get("from", "")))
+                right = str(link.get("target", link.get("to", "")))
+                if (left in source_ids and right in reflected_ids) or (right in source_ids and left in reflected_ids):
+                    connected = True
+                    break
+            if not connected:
+                errors.append(f"Graphify has no source-to-reflected-document edge: {record['relative']} -> {target}")
+    return errors
+
+
+def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = False, changed_files: Sequence[str] | None = None) -> dict[str, Any]:
+    """Independent read-only verifier; deliberately does not call scan() or finalize gates."""
+    raw_files = independent_raw_files(root)
+    exclusions = independent_raw_exclusions(root)
+    records = independent_source_records(root)
+    if changed_files and not complete_batch:
+        changed = {Path(value).as_posix().casefold() for value in changed_files}
+        records = [record for record in records if record["relative"].casefold() in changed]
+    errors: list[str] = []
+    verified = 0
+    covered: set[str] = set()
+    catalog_only: set[str] = set()
+    for record in records:
+        record_error_count = len(errors)
+        targets = record["raw_targets"]
+        if len(targets) != 1:
+            if len(targets) > 1:
+                catalog_only.update(target.casefold() for target in targets)
+            continue
+        target = targets[0]
+        raw_path = (root / target).resolve()
+        if not raw_path.is_file() or root.joinpath("raw") not in raw_path.parents:
+            errors.append(f"Missing or escaped raw source: {target}")
+            continue
+        front = record["frontmatter"]
+        if root.joinpath("wiki", "sources") in record["path"].parents and independent_field(front, "type").casefold() != "source":
+            errors.append(f"Source summary type is not source: {record['relative']}")
+        strict_record = complete_batch or root.joinpath("wiki", "sources") in record["path"].parents
+        if strict_record:
+            if len(re.findall(r"(?m)^##+\s+", record["text"].split("---", 2)[-1])) < 3:
+                errors.append(f"Source summary has too few sections: {record['relative']}")
+            for key in ("key_claims", "concepts", "reflected_docs", "evidence_spans"):
+                value = independent_int(front, key)
+                if value is None or value <= 0:
+                    errors.append(f"Source summary has invalid {key}: {record['relative']}")
+            declared_hash = independent_field(front, "raw_sha256").casefold()
+            if declared_hash != raw_sha256(raw_path):
+                errors.append(f"Source hash mismatch: {record['relative']}")
+            if not evidence_quotes_match(raw_path, record["text"]):
+                errors.append(f"Raw evidence quote mismatch: {record['relative']}")
+        for target_doc in record["wiki_targets"]:
+            candidates = [root / "wiki" / target_doc, root / "wiki" / f"{target_doc}.md", root / target_doc, root / f"{target_doc}.md"]
+            if not any(candidate.is_file() for candidate in candidates):
+                errors.append(f"Reflected Wiki document is missing: {target_doc}")
+        if not any(target.casefold().startswith("raw/") for target in targets):
+            errors.append(f"Source summary has no raw citation: {record['relative']}")
+        if len(errors) == record_error_count:
+            verified += 1
+        covered.add(target.casefold())
+
+    raw_keys = {path.relative_to(root).as_posix().casefold() for path in raw_files}
+    missing = raw_keys - covered
+    if complete_batch:
+        errors.extend(f"Raw source is rejected or empty: {path}" for path in exclusions["rejected"])
+        errors.extend(f"Raw attachment lacks independent evidence: {path}" for path in exclusions["skipped"])
+        errors.extend(f"Raw source has no independent source record: {path}" for path in sorted(missing))
+        errors.extend(f"Catalog-only raw source: {path}" for path in sorted(catalog_only))
+
+    strategy = graph_strategy(root)
+    graph = graph_status(root, strategy)
+    counts = graph_counts(root, graph_workspace(root))
+    if require_graph:
+        if graph != "configured":
+            errors.append(f"Graphify is not ready: {graph}")
+        if verified and counts["nodes"] == 0:
+            errors.append("Graphify has no verified source nodes")
+        if verified and counts["links"] == 0:
+            errors.append("Graphify has no verified source links")
+        errors.extend(independent_graph_check(root, records))
+
+    coverage = {
+        "input": len(raw_files),
+        "verified": verified,
+        "pending": len(missing),
+        "catalog_only": len(catalog_only),
+        "rejected": 0,
+        "skipped": len(exclusions["skipped"]),
+    }
+    coverage["rejected"] = len(exclusions["rejected"])
+    return {
+        "status": "verified" if not errors else "verification_failed",
+        "verified": not errors,
+        "coverage": coverage,
+        "graph_status": graph,
+        "graph_counts": counts,
+        "errors": errors,
+        "exit_code": 0 if not errors else 2,
     }
 
 
@@ -276,7 +805,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Portable LLM Wiki ingest support")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("status", "scan", "finalize", "recover"):
+    for name in ("status", "scan", "finalize", "verify", "recover"):
         child = subparsers.add_parser(name)
         child.add_argument(
             "--root",
@@ -290,6 +819,14 @@ def build_parser() -> argparse.ArgumentParser:
             child.add_argument("--json", action="store_true")
         if name == "finalize":
             child.add_argument("--changed-file", action="append", default=[])
+            child.add_argument(
+                "--complete-batch",
+                action="store_true",
+                help="Fail unless no raw files remain pending or catalog-only.",
+            )
+        if name == "verify":
+            child.add_argument("--require-graph", action="store_true")
+            child.add_argument("--complete-batch", action="store_true")
     return parser
 
 
@@ -309,6 +846,9 @@ def main() -> int:
                 "root": str(root),
                 "graph_strategy": graph_strategy(root),
                 "graph_workspace": str(workspace) if workspace is not None else None,
+                "graph_status": graph_status(root),
+                "coverage": coverage_summary(root),
+                "graph_counts": graph_counts(root, workspace),
             }
         )
         return 0
@@ -317,14 +857,18 @@ def main() -> int:
         if args.json:
             print_json(result)
         else:
-            for name in ("pending", "ingested", "skipped"):
+            for name in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
                 print(f"{name}: {len(result[name])}")
                 for item in result[name]:
                     reason = f" - {item['reason']}" if "reason" in item else ""
                     print(f"  - {item['path']} ({item['modified']}){reason}")
         return 0
     if args.command == "finalize":
-        result = finalize(root, args.changed_file)
+        result = finalize(root, args.changed_file, complete_batch=args.complete_batch)
+        print_json(result)
+        return int(result["exit_code"])
+    if args.command == "verify":
+        result = verify(root, require_graph=args.require_graph, complete_batch=args.complete_batch)
         print_json(result)
         return int(result["exit_code"])
     result = recover(root)
