@@ -4,10 +4,11 @@
 
 ## 공통 규칙
 
-Claude와 공유하는 규칙(위키 라우팅, 세션 라우팅)의 정본은 루트 `CLAUDE.md`다. 아래 두 규칙은 절대 놓치면 안 되므로 중복 기재한다:
+Claude와 공유하는 규칙(위키 라우팅, 세션 라우팅)의 정본은 루트 `CLAUDE.md`다. 아래 규칙은 절대 놓치면 안 되므로 중복 기재한다:
 
 - 사용자가 다른 언어를 요청하지 않는 한 한국어를 사용한다.
 - `raw/`의 내용은 절대 수정하지 않는다.
+- 볼트 프로파일은 `{{VAULT_PROFILE}}`이며, `.llm-wiki.json`이 정식 프로파일 마커다.
 
 ## 세션 라우터
 
@@ -20,5 +21,6 @@ Claude와 공유하는 규칙(위키 라우팅, 세션 라우팅)의 정본은 �
 - Query → `.agents/skills/query/SKILL.md`를 읽고 `wiki/index.md`에서 시작한다.
 - Lint → `.agents/skills/lint/SKILL.md`를 읽는다.
 - Wiki Audit → `.agents/skills/wiki-audit/SKILL.md`를 읽는다. 이 점검은 읽기 전용이다.
+{{PROFILE_ROUTER}}
 
 위키 변경·폭넓은 탐색 전 필독: [`instructions/wiki-operations.md`](instructions/wiki-operations.md)

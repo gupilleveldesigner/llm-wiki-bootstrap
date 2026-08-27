@@ -1,0 +1,21 @@
+# {{PROJECT_NAME}} — Canon Overview
+
+Last reviewed: {{TODAY}}
+
+이 문서는 Evidence profile의 검토된 Canon 진입점이다. 아직 검토된 항목이 없다면 비어 있는 것이 정상이다.
+
+## Confirmed
+
+<!-- canon-review를 거쳐 채운다. -->
+
+## Supported
+
+<!-- 프로젝트가 현재 채택하지만 CONFIRMED는 아닌 지식을 기록한다. -->
+
+## Hypotheses under review
+
+<!-- Canon 후보이지만 아직 승격하지 않은 핵심 가설만 링크한다. -->
+
+## Open conflicts
+
+<!-- wiki/conflicts/의 중요한 미해결 충돌을 링크한다. -->

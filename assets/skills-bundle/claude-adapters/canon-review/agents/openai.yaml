@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canon Review"
+  short_description: "Evidence Claim의 Canon 승격 근거를 검토"
+  default_prompt: "Read the canonical .agents canon-review skill and apply its evidence gate."

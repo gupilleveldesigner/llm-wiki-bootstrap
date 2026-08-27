@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canon Review"
+  short_description: "Evidence Claim의 Canon 승격 근거를 검토"
+  default_prompt: "Use $canon-review to review evidence, lineage, conflicts, and experiments before recommending any Canon change."

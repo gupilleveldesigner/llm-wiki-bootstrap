@@ -4,13 +4,13 @@
     {
       "id": 0,
       "prompt": "요리 공부용으로 LLM 위키 하나 만들어줘. 위치는 <OUTPUTS>/cooking-wiki, 이름은 Cooking Wiki. 유튜브 요리 영상이랑 레시피 아티클을 주로 모을 거고, 최종적으로는 나만의 레시피북을 만들고 싶어.",
-      "expected_output": "3계층 구조(raw/wiki/Output) + 라우터 문서 + 스킬 4종 설치 + 도메인 맞춤 overview/questions가 채워진 완전한 볼트",
+      "expected_output": "standard profile의 3계층 구조(raw/wiki/Output) + 라우터 문서 + 기본 스킬 6종 + 도메인 맞춤 overview/questions가 채워진 완전한 볼트",
       "files": []
     },
     {
       "id": 1,
       "prompt": "나 등산 다니면서 찍은 기록이랑 코스 정보 같은 걸 모아두는 세컨드브레인을 만들고 싶어. 나중에 블로그 글로 정리할 거야. <OUTPUTS>/hiking-brain 폴더에 셋업해줘. AI가 관리해주는 구조면 좋겠어.",
-      "expected_output": "'위키'라는 단어 없이도 스킬이 트리거되어 동일한 완전한 볼트가 구축됨",
+      "expected_output": "'위키'라는 단어 없이도 스킬이 트리거되고 standard profile로 비파괴 원칙을 지키는 완전한 볼트가 구축됨",
       "files": []
     },
     {
@@ -18,6 +18,12 @@
       "prompt": "<OUTPUTS>/existing-vault 에 LLM 위키 새로 구축해줘. 주제는 사진 촬영 연구야.",
       "expected_output": "대상 폴더에 기존 위키 마커(CLAUDE.md, raw/)가 있으므로 덮어쓰지 않고 중단·보고. 기존 파일 무변경.",
       "files": ["existing-vault (사전 배치: CLAUDE.md + raw/ + wiki/)"]
+    },
+    {
+      "id": 3,
+      "prompt": "<OUTPUTS>/reverse-engineering-wiki 에 여러 LLM 분석, 실행 로그, 프롬프트 실험을 모을 연구 위키를 만들어줘. 관찰한 사실과 가설을 분리하고, 서로 충돌하는 주장과 실험을 보존하고, 최종 결론은 원문까지 추적할 수 있어야 해.",
+      "expected_output": "evidence profile 자동 선택. .llm-wiki.json profile=evidence, claims/canon/conflicts/experiments/questions와 disposable .wiki-cache 생성, canon-review 추가 설치, Canon 자동 승격 금지 규칙 활성화.",
+      "files": []
     }
   ]
 }

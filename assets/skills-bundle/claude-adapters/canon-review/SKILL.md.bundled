@@ -1,0 +1,12 @@
+---
+name: canon-review
+description: Evidence profile LLM Wiki에서 Claim의 근거·출처 독립성·충돌·실험을 검토해 Canon 승격/유지/반려 추천을 만든다. 기본은 읽기 전용이며 명시적인 변경 요청 없이 Canon을 수정하지 않는다.
+---
+
+# canon-review 인스톨 어댑터
+
+작업을 시작하기 전에 반드시 다음 정본을 끝까지 읽고 그대로 따른다.
+
+- [`../../../.agents/skills/canon-review/SKILL.md`](../../../.agents/skills/canon-review/SKILL.md)
+
+특히 source lineage 독립성 확인과 **Canon 자동 승격 금지** 규칙은 생략할 수 없다.
