@@ -1,4 +1,4 @@
 interface:
   display_name: "LLM Wiki Bootstrap"
-  short_description: "LLM Wiki lifecycle(new/migrate/upgrade) + standard/evidence profile"
-  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki and choose the standard or evidence profile according to SKILL.md."
+  short_description: "LLM Wiki 구축·전환·GitHub 최신 업그레이드 + standard/evidence profile"
+  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki. For upgrade, resolve and apply the official GitHub repository's latest default-branch commit; never silently fall back to a local bundle."

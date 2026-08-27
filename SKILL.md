@@ -1,152 +1,213 @@
 ---
 name: llm-wiki-bootstrap
-description: LLM Wiki 볼트(Karpathy 3계층 raw/wiki/Output)를 구축·전환·업그레이드한다. lifecycle mode는 new/migrate/upgrade, vault profile은 standard/evidence로 분리한다. Evidence profile은 Raw→Source→Claim→Evidence/Conflict/Experiment→reviewed Canon 구조, source lineage, epistemic state, canon-review를 추가한다. 폴더 구조·CLAUDE.md/AGENTS.md 라우터·문서 템플릿 생성, ingest/query/lint/session-memory/brief-tuner/wiki-audit 스킬 설치, Obsidian Web Clipper 템플릿 배치, graphify 연결까지 처리한다. 사용자가 "LLM 위키 만들어줘", "세컨드브레인 구축", "지식 볼트 셋업", "이 폴더를 위키로 전환", "위키 업그레이드", "Evidence Wiki", "근거/가설/실험을 분리하는 연구 위키"를 말하거나 개인 지식관리/AI 연구 지식베이스를 새로 시작하거나 기존 폴더를 위키화하고 싶다는 의도를 보이면 사용한다. 기존 위키의 내용 수정·질의에는 사용하지 않는다(설치된 ingest/query/lint/canon-review 담당).
+description: LLM Wiki 볼트를 신규 구축(new), 기존 일반 폴더에서 비파괴 전환(migrate), 또는 기존 Wiki를 GitHub의 gupilleveldesigner/llm-wiki-bootstrap 최신 기본 브랜치 커밋 기준으로 업그레이드(upgrade)한다. Vault profile은 standard/evidence로 분리한다. Evidence profile은 Raw→Source→Claim→Evidence/Conflict/Experiment→reviewed Canon 구조와 source lineage, epistemic state, canon-review를 추가한다. 사용자가 "LLM 위키 만들어줘", "세컨드브레인 구축", "이 폴더를 위키로 전환", "위키 최신버전으로 업그레이드", "스킬 최신화", "Evidence Wiki", "근거/가설/실험을 분리하는 연구 위키"를 말하거나 개인 지식관리/AI 연구 지식베이스를 새로 시작·전환·업그레이드하려는 의도를 보이면 사용한다. 기존 Wiki의 일상 ingest/query/lint/canon-review 작업에는 해당 설치 스킬을 사용한다.
 ---
 
 # LLM Wiki Bootstrap
 
-폴더를 완전한 LLM Wiki 볼트로 만든다. 기본 결과물은 3계층 폴더 구조 + 라우터 문서 + 운영 스킬 6종(ingest/query/lint/session-memory/brief-tuner/wiki-audit) + Obsidian 편의 자산 + (가능하면) graphify 지식 그래프다. `evidence` profile에서는 `canon-review`와 Evidence 계층/템플릿이 추가된다.
+폴더를 Claude Code / Codex가 운영하는 LLM Wiki로 구축·전환·업그레이드한다.
 
-이 스킬은 배포용이다 — 이 스킬을 실행하는 환경에 다른 위키가 있을 필요가 없다. 필요한 모든 자산은 `assets/`에 번들되어 있다.
+핵심 축은 두 개다.
 
-## 핵심 모델: mode와 profile을 분리한다
+- lifecycle mode: `new` / `migrate` / `upgrade`
+- vault profile: `standard` / `evidence`
 
-두 축을 섞지 않는다.
+둘을 섞지 않는다.
 
-### Lifecycle mode — 대상 폴더에 어떤 작업을 하는가
+## 절대 규칙
 
-- `new` — 빈 폴더에 신규 구축
-- `migrate` — 자료가 쌓인 일반 폴더를 비파괴 전환
-- `upgrade` — 기존 LLM Wiki의 운영 자산을 백업 후 갱신
-
-### Vault profile — 어떤 방식으로 지식을 관리하는가
-
-- `standard` — 일반 `raw → wiki → Output`
-- `evidence` — `Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon`
-
-따라서 `new+evidence`, `migrate+evidence`, `upgrade+evidence`가 모두 가능하다. Evidence profile은 `.llm-wiki.json`에 기록한다. manifest가 없는 기존 위키는 호환성을 위해 `standard`로 취급한다. Evidence → Standard 다운그레이드는 `upgrade`로 자동 수행하지 않는다.
+1. `raw/`는 불변이다. 기존 Raw를 수정·삭제하지 않는다.
+2. `migrate`는 기존 파일을 임의로 이동하지 않는다. 이동 계획을 제시하고 사용자 승인 후 수행한다.
+3. `upgrade`는 **GitHub 공식 저장소의 최신 기본 브랜치 HEAD**를 먼저 조회한다.
+4. `upgrade`는 GitHub 조회/다운로드/검증이 실패하면 대상 Wiki를 수정하지 않는다. 로컬 번들로 조용히 fallback하지 않는다.
+5. 오프라인에서 로컬 번들을 쓰려면 사용자가 명시적으로 요청했을 때만 `--source local`을 사용한다.
+6. 기존 운영 스킬은 교체 전에 `.wiki-upgrade-bak/<timestamp>/`에 백업한다.
+7. Evidence의 Claim은 자동으로 Canon으로 승격하지 않는다.
+8. `.wiki-proposed`가 생기면 기존 문서를 덮어쓰지 않고 차이를 검토한다.
+9. 실패한 검증을 성공으로 보고하지 않는다.
 
 ## 전제 조건
 
-- Python 3.10+. 실행 명령을 이 순서로 찾는다: `python --version` → `py -3 --version` → `python3 --version` → (Windows) `%LOCALAPPDATA%\Programs\Python\Python3*\python.exe` 글롭 탐색 후 가장 높은 버전의 **전체 경로**. Microsoft Store 스텁(`...\WindowsApps\python.exe`)은 유효한 Python이 아니므로 건너뛴다. 성공한 명령/경로를 이후 모든 `python` 호출 자리에 그대로 사용한다. 전부 실패하면 설치를 안내하고 중단한다.
-- graphify는 선택 사항이다. 없어도 위키는 동작하지만 배치 인제스트의 기존 Graphify 완료 게이트는 그대로 따른다.
-- Claude Code와 Codex 어느 쪽에서 실행돼도 같은 절차를 따른다. 질문 도구가 없는 환경이면 채팅으로 묻고, 비대화형이면 합리적 기본값으로 진행하되 가정을 보고한다.
-- 원문 보관·카탈로그 생성·그래프 파일 생성은 인제스트 완료의 증거가 아니다. 원문마다 `wiki/sources/<원문>.md` 1개를 만들고 완료 게이트의 수치를 확인한다.
+- Python 3.10+
+- Claude Code 또는 Codex
+- 온라인 `upgrade`에는 GitHub HTTPS 접근 가능 환경
+- Graphify는 선택 사항이지만 batch ingest의 기존 완료 계약이 Graphify를 요구하면 그 계약을 따른다.
 
-## 1. 대상 폴더 확정과 lifecycle mode 판정
+Python 실행기는 `python` → `py -3` → `python3` 순으로 찾고, Windows Microsoft Store stub은 유효한 Python으로 취급하지 않는다.
 
-사용자가 경로를 줬으면 그 경로를 쓴다. 안 줬으면 어디에 만들지 물어본다.
+# 1. Lifecycle mode 판정
 
-| 대상 폴더 상태 | 사용자 의도 | mode |
+| 대상 상태 | 사용자 의도 | mode |
 |---|---|---|
-| 비어 있거나 없음 | 새 위키 | **new** |
-| 파일은 있지만 위키 마커(`raw/`, `wiki/`, `.agents/`) 없음 | 이 폴더를 위키로 전환 | **migrate** |
-| 위키 마커 있음 | 재구축·업그레이드·최신화 | **upgrade** |
-| 위키 마커 있음 | "새로 만들어줘" (전환·갱신 불명) | 중단하고 기존 지식을 덮지 않는 upgrade를 안내 |
+| 비어 있거나 없음 | 새 Wiki | `new` |
+| 파일은 있으나 Wiki marker 없음 | Wiki로 전환 | `migrate` |
+| `raw/` + `wiki/` 등 기존 Wiki | 최신화/업그레이드 | `upgrade` |
 
-의도가 모호하면 한 번 물어본다. 물을 수 없으면 위키 마커가 있는 대상엔 upgrade, 마커 없이 파일만 있는 대상엔 migrate를 택한다. 둘 다 기존 내용을 파괴하지 않는다.
+기존 Wiki에 "새로 만들어줘"처럼 파괴 가능성이 있는 표현이 오면 덮어쓰지 말고 `upgrade`가 비파괴 경로임을 설명한다.
 
-## 2. Vault profile 판정
+# 2. Vault profile 판정
 
-사용자가 profile을 명시하면 그대로 사용한다. 명시하지 않았으면 목적을 보고 판정한다.
+사용자가 명시하면 그대로 사용한다.
 
-### `standard` 기본값
+## standard
 
-다음과 같은 일반 지식관리/학습/자료 정리:
+일반 공부, 자료 정리, 세컨드브레인, 프로젝트 메모, 기사/영상/책 요약에 사용한다.
 
-- 개인 공부 Wiki
-- 기사/유튜브/책 요약·연결
-- 프로젝트 메모 정리
-- 세컨드 브레인
+```text
+raw → wiki → Output
+```
 
-### `evidence`를 선택할 신호
+## evidence
 
-다음 중 하나가 명확하면 Evidence profile을 권장/선택한다.
+다음 신호가 핵심이면 Evidence profile을 선택한다.
 
-- 역공학 또는 내부 구현 추정
-- 여러 LLM의 분석을 Source로 누적
-- "관찰된 사실"과 "추론/가설"을 분리해야 함
-- 출처 계보(provenance/lineage)가 중요함
-- 상충 주장과 반증 기록을 보존해야 함
-- 가설 → 통제 실험 → 결론의 연구 루프가 핵심임
-- 모든 결론을 원문까지 trace해야 함
+- 역공학/숨겨진 구현 추정
+- 여러 LLM 분석을 누적
+- 관찰과 추론/가설을 분리
+- provenance/source lineage 필요
+- conflicting/rejected claim 보존
+- hypothesis → experiment → conclusion 연구 루프
+- 모든 결론을 원문까지 trace
 
-애매하면 `standard`를 기본으로 한다. 단, 기존 위키의 `upgrade`에서는 `.llm-wiki.json` profile을 보존하고, manifest가 없을 때만 standard로 본다.
+```text
+Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon
+```
 
-Evidence profile의 핵심 문장은 다음이다.
+핵심 문장:
 
 > **“LLM이 말했다”와 “우리가 확인했다”를 같은 것으로 취급하지 않는다.**
 
-## 3. 짧은 인터뷰
+`upgrade`에서 profile을 생략하면 `.llm-wiki.json`의 기존 profile을 보존한다. manifest 없는 legacy Wiki는 `standard`로 본다. Evidence → Standard 자동 downgrade는 금지한다.
 
-사용자의 요청에 이미 답이 들어 있으면 묻지 않는다. 빠진 항목만 한 번에 묻는다.
+# 3. 짧은 인터뷰
 
-1. **위키 주제와 목적** — 무엇을 모으고 최종적으로 무엇을 만들고 싶은가?
-2. **주로 모을 자료 유형** — 영상, 아티클, 개인 메모, 프로젝트 기록, 로그, LLM 분석, 실험 결과 등.
-3. **프로젝트 이름** — 폴더명과 문서에 쓸 이름.
+이미 받은 정보는 다시 묻지 않는다. 빠진 항목만 최대 한 번에 묻는다.
 
-답을 받으면 한 문장의 `domain_summary`를 만든다.
+1. Wiki 주제와 목적
+2. 주로 모을 자료 유형
+3. 프로젝트 이름
 
-## 4. 스캐폴드 실행
+이 정보로 `project_name`, `domain_summary`, 초기 overview/questions/taxonomy를 만든다.
 
-config JSON:
+# 4. new / migrate 스캐폴드
+
+config 예:
 
 ```json
-{"project_name": "<프로젝트 이름>", "domain_summary": "<한 문장 도메인 요약>"}
+{"project_name":"My Wiki","domain_summary":"프로젝트 목적 한 문장"}
 ```
 
-Standard 신규 예:
+Standard:
 
 ```bash
-python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상>" --config "<config.json>" --mode new --profile standard
+python "<SKILL_ROOT>/scripts/bootstrap.py" --target "<TARGET>" --config "<CONFIG>" --mode new --profile standard
 ```
 
-Evidence 신규 예:
+Evidence:
 
 ```bash
-python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상>" --config "<config.json>" --mode new --profile evidence
+python "<SKILL_ROOT>/scripts/bootstrap.py" --target "<TARGET>" --config "<CONFIG>" --mode new --profile evidence
 ```
 
-`--profile`을 생략하면 new/migrate는 standard, upgrade는 기존 manifest profile을 보존한다.
+migrate는 `--mode migrate`를 사용한다.
 
-stdout의 `"ok": true`를 확인한다. `false`면 error를 보고하고 중단한다.
+stdout 마지막 JSON에서 `ok: true`를 확인한다.
 
-스크립트는 다음을 처리한다.
+생성/설치:
 
-- 기본 3계층/운영 폴더 생성
-- profile별 추가 폴더 생성
-- `.llm-wiki.json` manifest 생성/갱신
-- base 스킬 6종 설치
-- Evidence에서만 `canon-review` 설치
-- profile-aware 라우터/문서 렌더링
-- `.session-memory/` 초기화
-- 기본 templates + Evidence Claim/Conflict/Experiment/Canon 템플릿 배치
+- `raw/`, `wiki/`, `Output/`
+- `.agents/skills/`, `.claude/skills/`
+- `.session-memory/`
+- `templates/`
+- `.llm-wiki.json`
+- base 스킬 6종: ingest/query/lint/session-memory/brief-tuner/wiki-audit
+- Evidence면 canon-review와 claims/canon/conflicts/experiments/questions/.wiki-cache
 
-## 5. 도메인 맞춤 문서 마무리
+# 5. upgrade — GitHub 최신 커밋이 정본
 
-스크립트는 구조만 만든다. 서사는 실제 인터뷰 근거로 채운다.
+사용자가 기존 Wiki를 "업그레이드", "최신화", "스킬 업데이트"해 달라고 하면 **반드시 이 절차**를 사용한다.
 
-- `wiki/overview.md` — `BOOTSTRAP:FILL`을 찾아 핵심 축 2~5개를 채운다.
-- `wiki/questions.md` — 초기 정보 공백 질문 2~5개를 채운다.
-- `wiki/taxonomy.json` — 실제로 들은 범위에서 초기 카테고리 3~7개를 만든다.
-- 루트 `CLAUDE.md`의 볼트 소개가 실제 목적과 어긋나면 다듬는다.
+## 기본 경로: GitHub latest
 
-Evidence profile이면 추가로 확인한다.
+```bash
+python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>"
+```
 
-- `wiki/evidence-model.md`가 존재한다.
-- `instructions/evidence-operations.md`가 존재한다.
-- `wiki/canon/overview.md`는 아직 검토 지식이 없으면 비어 있는 상태를 유지한다. 빈 Canon을 억지로 채우지 않는다.
-- `.wiki-cache/`는 정본이 아니라 재생성 가능한 영역으로 취급한다.
+profile 전환을 함께 요청한 경우:
 
-## 6. Evidence profile 운영 계약
+```bash
+python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>" --profile evidence
+```
 
-Evidence profile의 실제 ingest/query/lint 규칙은 `instructions/wiki-operations.md`가 `instructions/evidence-operations.md`와 `wiki/evidence-model.md`를 필독하도록 라우팅한다. 기존 ingest/query/lint 스킬 정본을 복제해 별도 fork를 만들지 않는다.
+`upgrade.py`의 계약:
 
-### Ingest
+1. `gupilleveldesigner/llm-wiki-bootstrap` 저장소 메타데이터에서 **현재 default branch**를 읽는다.
+2. 그 default branch의 최신 commit SHA를 조회한다.
+3. branch 이름이 아니라 **검증된 정확한 40자 SHA**의 ZIP을 GitHub codeload에서 받는다.
+4. archive path traversal을 차단하고 필수 파일/skills bundle 존재를 검증한다.
+5. 여기까지 전부 성공하기 전에는 대상 Wiki를 건드리지 않는다.
+6. 다운로드한 그 커밋의 `scripts/bootstrap.py --mode upgrade`를 실행한다.
+7. 기존 스킬은 최신 bootstrap logic에 의해 `.wiki-upgrade-bak/<timestamp>/`로 백업된 뒤 교체된다.
+8. 성공 결과에 `bootstrap_repository`, `bootstrap_branch`, `bootstrap_commit`을 기록한다.
+9. 대상 `.llm-wiki.json`에도 `last_upgrade.source=github`와 정확한 commit SHA를 남긴다.
 
-`Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question`까지 만들 수 있다. **Canon 자동 승격은 금지한다.**
+즉 `upgrade`의 의미는:
 
-### Query
+> **“현재 로컬 bundle로 덮어쓰기”가 아니라 “GitHub 공식 저장소 기본 브랜치의 현재 최신 commit을 고정해 그 버전의 upgrade logic과 skills bundle을 적용한다.”**
+
+## GitHub 실패 시
+
+네트워크, GitHub API, ZIP, checkout 검증 중 하나라도 실패하면:
+
+- 대상 Wiki를 수정하지 않는다.
+- 실패 이유를 그대로 보고한다.
+- 로컬 bundle로 자동 fallback하지 않는다.
+
+## 명시적 offline/local 경로
+
+사용자가 GitHub를 사용하지 않거나 오프라인 local bundle을 명시한 경우에만:
+
+```bash
+python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>" --source local
+```
+
+이 모드는 "GitHub 최신"이 아니다. 보고할 때 반드시 `upgrade_source: local`임을 구분한다.
+
+## bootstrap.py --mode upgrade 직접 호출 금지
+
+사용자 의도의 "최신 업그레이드"에 `bootstrap.py --mode upgrade`를 직접 사용하지 않는다. 그것은 다운로드된 최신 checkout 내부에서 실제 적용을 수행하는 local apply primitive다.
+
+# 6. migrate 규칙
+
+migrate는 기존 일반 폴더를 Wiki로 만든다.
+
+- 기존 파일 삭제/수정 금지
+- 루트 문서 충돌은 `.wiki-proposed`
+- 기존 파일을 raw로 옮길 때 파일별 원래 경로와 목적지를 표로 제시
+- 사용자 승인 후 이동
+- 이동 뒤 `/ingest` batch 처리
+
+# 7. Evidence 운영 계약
+
+Evidence profile이면 `wiki/evidence-model.md`와 `instructions/evidence-operations.md`를 필독한다.
+
+## Ingest
+
+```text
+Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question
+```
+
+Canon 자동 수정 금지.
+
+## Claim 상태
+
+`OBSERVED`, `INFERRED`, `HYPOTHESIS`, `SUPPORTED`, `CONFIRMED`, `REJECTED`, `DISPUTED`, `DEPRECATED`, `UNKNOWN`
+
+## Source lineage
+
+같은 정보 계보에서 나온 여러 LLM 답변을 독립 evidence로 중복 계산하지 않는다. `parent_sources` 또는 동등 provenance를 기록한다.
+
+## Query mode
 
 - `answer`
 - `research`
@@ -155,32 +216,27 @@ Evidence profile의 실제 ingest/query/lint 규칙은 `instructions/wiki-operat
 - `trace`
 - `compare`
 
-를 구분한다. 현재 결론을 답할 때도 epistemic state를 숨기지 않는다.
+## Lint
 
-### Lint
+일반 문서 위생 외에 source 없는 Claim, broken provenance, lineage cycle, 근거 없는 CONFIRMED, REJECTED Claim을 현재 Canon이 사용하는 문제, unresolved conflict, orphan experiment 등을 점검한다.
 
-일반 문서 위생 외에 source 없는 Claim, 끊긴 provenance, lineage cycle, 근거 없는 CONFIRMED, REJECTED Claim의 현재 Canon 사용, unresolved conflict 누락, orphan experiment 등을 검사한다. 의미 판단이 필요한 상태 변경은 자동 수정하지 않는다.
+## Canon review
 
-### Canon review
+`canon-review`는 기본 읽기 전용 recommendation이다. 명시적 승격/상태 변경 요청 없이는 Canon을 수정하지 않는다.
 
-`canon-review`는 기본 읽기 전용 추천이다. source quality, source independence/lineage, contradictory evidence, experiment, direct observation, 기존 Canon 충돌을 확인한다. 사용자가 명시적으로 승격/채택을 요청한 경우에만 Canon 파일을 수정한다.
+# 8. Graphify
 
-## 7. Graphify 연결 (선택)
+Graphify는 선택적 탐색/시각화 보조다. truth database가 아니다.
 
-`graphify --version`으로 CLI 존재를 확인한다.
+- Codex: `$graphify <WIKI_ROOT>` / `$graphify <WIKI_ROOT> --update`
+- Claude: `/graphify <WIKI_ROOT>` / `/graphify <WIKI_ROOT> --update`
+- Python subprocess에서 bare `graphify <path>`를 직접 호출하지 않는다.
+- 실행 뒤 `ingest_runtime.py record-graphify-run --host codex|claude`
+- batch 완료는 필요 시 `verify --complete-batch --require-graph`
 
-- **Codex**: `python -m pip install graphifyy && graphify install --platform codex` 후 `$graphify <대상 폴더>`를 사용한다. Python에서 `graphify <대상 폴더>`를 직접 실행하지 않는다. 병렬 처리를 쓰려면 `~/.codex/config.toml`의 `[features] multi_agent = true`를 확인한다.
-- 항상 그래프를 탐색에 사용하려면 선택적으로 `graphify codex install`을 실행한다. 이는 그래프 생성 자체가 아니라 탐색 hook/라우터 설치다.
-- **Claude Code**: `python -m pip install graphifyy && graphify install` 후 `/graphify <대상 폴더>`를 사용한다.
-- **갱신**: `$graphify <대상 폴더> --update` 또는 `/graphify <대상 폴더> --update`를 사용한다. `graphify update`를 Python subprocess로 직접 호출하지 않는다.
-- Graphify 실행 후 `ingest_runtime.py record-graphify-run --host codex|claude`를 기록하고 `verify --complete-batch --require-graph`를 실행한다.
-- Graphify가 없으면 기존 ingest 계약대로 batch completion을 거짓으로 선언하지 않는다.
+# 9. 스모크 체크
 
-Evidence profile에서도 Graphify는 **탐색/시각화 보조 수단**이지 truth database가 아니다. 정본은 Markdown/frontmatter와 Raw provenance다.
-
-## 8. 스모크 체크
-
-대상 폴더 기준:
+new/migrate/upgrade 후 대상 기준으로:
 
 ```bash
 python ".claude/skills/ingest/scripts/ingest_runtime.py" status
@@ -189,82 +245,26 @@ python ".session-memory/scripts/session_memory.py" status
 
 확인:
 
-- ingest status의 `root`가 대상 폴더인가?
-- session-memory status가 정상인가?
-- `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json`이 존재하는가?
-- 렌더링 대상에 `{{` 플레이스홀더가 남지 않았는가?
-- Evidence면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `.agents/skills/canon-review/SKILL.md`가 존재하는가?
-- 배치 ingest 후 `verify --complete-batch --require-graph`를 통과했는가?
+- 올바른 root
+- `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json`
+- 렌더링 placeholder 없음
+- Evidence면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `canon-review`
+- upgrade면 결과의 `upgrade_source`, `bootstrap_commit`, `backup_dir`
+- GitHub upgrade 성공이면 `.llm-wiki.json.last_upgrade.commit`과 결과 commit이 일치
 
-실패한 항목은 숨기지 않는다.
+실패를 숨기지 않는다.
 
-## 9. 마무리 보고
+# 10. 마무리 보고
 
-사용자에게 다음을 보고한다.
+보고 항목:
 
-1. lifecycle mode와 vault profile
-2. 생성 구조 요약
-3. 설치 스킬 — standard 6종, evidence 7종
-4. `.llm-wiki.json` 위치
-5. 첫 자료를 `raw/`에 넣고 `/ingest`하는 다음 단계
-6. `SAVE` 세션 보존 안내
-7. Graphify 연결 여부/완료 게이트 상태
-8. Evidence이면 `canon-review`가 자동 승격이 아닌 검토 gate라는 점
+1. mode/profile
+2. upgrade면 source가 `github`인지 `local`인지
+3. GitHub upgrade면 repository/default branch/exact commit SHA
+4. backup 위치
+5. 설치/갱신 스킬 목록
+6. `.wiki-proposed` / `profile_activation_pending`
+7. smoke/verification 결과
+8. 다음 단계 (`raw/` → ingest, `SAVE`, canon-review 등)
 
-인제스트 완료 보고에는 기존 계약대로 `입력 원문 / 처리 완료 / 검증 완료 / 제외 / 실패·미처리 / 그래프 노드 / 그래프 링크` 수치를 포함한다. 실패·미처리가 0이 아니면 `미완료`라고 보고한다.
-
-## migrate mode — 기존 프로젝트 폴더를 위키로 전환
-
-자료가 쌓여 있는 일반 폴더(위키 마커 없음)를 위키로 만든다. **기존 파일은 삭제·수정하지 않는다.**
-
-1. 인터뷰와 profile 판정을 수행한다.
-2. 스캐폴드:
-
-   ```bash
-   python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상>" --config "<config.json>" --mode migrate --profile <standard|evidence>
-   ```
-
-3. 기존 루트 문서와 충돌하는 경우 `.wiki-proposed`를 확인한다. 기존 내용을 보존하면서 필요한 라우터 섹션을 병합하고, 충돌하는 부분은 사용자에게 보여준다.
-4. 기존 파일들을 `raw/` 어디로 옮길지 파일별 목적지 표를 만든 뒤 **사용자 승인 후** 이동한다. 원래 경로를 복구 지도에 남긴다.
-5. 이동 후 `/ingest` 배치 모드를 사용한다.
-6. 도메인 문서, Graphify, 스모크 체크, 마무리 보고를 수행한다.
-
-## upgrade mode — 기존 Wiki 갱신 / profile 승격
-
-기존 Wiki의 지식·Raw를 보존하면서 스킬/런타임/profile 자산을 갱신한다.
-
-### 같은 profile 유지
-
-```bash
-python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상>" --config "<config.json>" --mode upgrade
-```
-
-manifest가 있으면 profile을 보존한다.
-
-### Standard → Evidence 승격
-
-```bash
-python "<이 스킬 디렉터리>/scripts/bootstrap.py" --target "<대상>" --config "<config.json>" --mode upgrade --profile evidence
-```
-
-이때:
-
-- `raw/`, 기존 `wiki/` 지식, `Output/`은 보존한다.
-- 기존 스킬은 `.wiki-upgrade-bak/<timestamp>/`에 이동 백업한다.
-- Evidence 폴더/템플릿/`canon-review`/manifest를 추가한다.
-- 기존 루트 CLAUDE.md/AGENTS.md/wiki/CLAUDE.md는 직접 덮지 않고 Evidence router가 필요한 경우 `.wiki-proposed`를 만든다.
-- `profile_activation_pending: true`이면 해당 router proposal을 검토/병합하기 전까지 Evidence profile 전환 완료라고 과장하지 않는다.
-- 기존 `instructions/wiki-operations.md`가 새 번들과 다르면 `.wiki-proposed`를 만든다. 내용 차이를 보여주고 안전하게 병합한다.
-
-Evidence → Standard 자동 downgrade는 거부한다. Evidence 기록을 제거하거나 의미를 축소하는 작업은 별도 마이그레이션 설계가 필요하다.
-
-## 주의사항
-
-- `raw/`는 불변이다.
-- 외부 LLM 답변은 Evidence profile에서 Authority가 아니라 Source다.
-- 같은 lineage의 반복 LLM 답변을 독립 evidence로 세지 않는다.
-- 반증된 Claim도 삭제하지 않는다.
-- Canon 자동 승격은 하지 않는다.
-- `.wiki-cache/`는 정본이 아니다.
-- migrate/upgrade가 있으므로 기존 폴더 요청을 임시 수동 복사 방식으로 우회하지 않는다.
-- 인터뷰는 최대 한 번만 되묻고, 그래도 모호하면 안전한 기본값으로 진행하되 가정을 보고한다.
+GitHub 최신을 기대한 upgrade에 `bootstrap_commit`을 보고하지 못했다면 완료라고 말하지 않는다.

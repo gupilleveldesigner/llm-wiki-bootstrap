@@ -2,16 +2,16 @@
 
 [한국어](README.ko.md) · [English](README.en.md)
 
-Claude Code / Codex에서 폴더 하나를 **AI가 운영하는 개인 지식 볼트(LLM Wiki)** 로 구축·전환·업그레이드하는 스킬입니다.
+Claude Code / Codex에서 폴더 하나를 **AI가 운영하는 개인 지식 볼트(LLM Wiki)** 로 신규 구축하고, 기존 자료 폴더를 비파괴 전환하고, 기존 Wiki의 운영 스킬을 **GitHub 공식 저장소 최신 버전**으로 업그레이드하는 스킬입니다.
 
-기본 `standard` profile은 `raw → wiki → Output`의 가벼운 개인 지식관리 흐름을 제공합니다. `evidence` profile은 여기에 **Source provenance, atomic Claim, Conflict, Experiment, Open Question, reviewed Canon**을 추가해 역공학·기술 조사·다중 LLM 연구처럼 “무엇을 알고 무엇을 추측하는지”를 분리해야 하는 작업을 지원합니다.
+기본 `standard` profile은 `raw → wiki → Output`의 가벼운 개인 지식관리 흐름을 제공합니다. `evidence` profile은 여기에 **Source provenance, atomic Claim, Conflict, Experiment, Open Question, reviewed Canon**을 추가해 역공학·기술 조사·다중 LLM 연구처럼 “무엇을 확인했고 무엇을 추측했는지”를 분리해야 하는 작업을 지원합니다.
 
 > Evidence profile의 핵심 원칙: **“LLM이 말했다”와 “우리가 확인했다”를 같은 것으로 취급하지 않는다.**
 
 ## 핵심 기능
 
 - `raw/` 불변 원문 → `wiki/` AI 유지 지식 → `Output/` 산출물의 3계층 구조
-- lifecycle `mode`와 지식관리 `profile`을 분리
+- lifecycle `mode`와 지식관리 `profile` 분리
 - `new`, `migrate`, `upgrade` 비파괴 lifecycle
 - `standard`, `evidence` vault profile
 - 기본 운영 스킬 6종: `ingest`, `query`, `lint`, `session-memory`, `brief-tuner`, `wiki-audit`
@@ -23,8 +23,9 @@ Claude Code / Codex에서 폴더 하나를 **AI가 운영하는 개인 지식 �
 - 선택적 Obsidian Web Clipper 템플릿
 - `SAVE` 기반 원자적 세션 인수인계
 - 기존 파일·Wiki를 덮어쓰지 않는 `.wiki-proposed` 제안 방식
-- `.llm-wiki.json` manifest를 통한 profile/schema 기록
-- Evidence에서 source lineage, epistemic state, trace/verify/challenge 질의
+- `.llm-wiki.json` manifest를 통한 profile/schema/upgrade provenance 기록
+- Evidence source lineage, epistemic state, trace/verify/challenge 질의
+- **GitHub latest upgrade** — 공식 저장소의 현재 default branch 최신 commit SHA를 고정해 적용
 
 ## 핵심 모델: lifecycle mode와 vault profile은 다른 축이다
 
@@ -34,20 +35,20 @@ Claude Code / Codex에서 폴더 하나를 **AI가 운영하는 개인 지식 �
 
 | Mode | 대상 | 동작 |
 |---|---|---|
-| `new` | 비어 있거나 없는 폴더 | 새 Wiki를 구축 |
-| `migrate` | 자료는 있지만 Wiki marker가 없는 일반 폴더 | 기존 파일을 보존하며 Wiki로 전환 |
-| `upgrade` | `raw/` + `wiki/`가 있는 기존 Wiki | 지식/Raw를 보존하고 운영 자산을 백업 후 갱신 |
+| `new` | 비어 있거나 없는 폴더 | 새 Wiki 구축 |
+| `migrate` | 자료가 쌓였지만 Wiki marker가 없는 일반 폴더 | 기존 파일을 보존하며 Wiki 구조 추가 |
+| `upgrade` | `raw/` + `wiki/`가 있는 기존 Wiki | 기존 지식/Raw를 보존하고 운영 스킬과 관리 자산을 최신화 |
 
 ### Vault profile
 
-Wiki가 **지식을 어떤 방식으로 관리할지** 결정합니다.
+**지식을 어떤 방식으로 관리할지** 결정합니다.
 
 | Profile | 적합한 용도 | 핵심 흐름 |
 |---|---|---|
-| `standard` | 공부, 개인 Wiki, 기사/영상/책 정리, 프로젝트 메모, 세컨드브레인 | `raw → wiki → Output` |
-| `evidence` | 역공학, 내부 구현 추정, 기술 조사, 다중 LLM 분석, 가설/실험/반증 관리 | `Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon` |
+| `standard` | 공부, 개인 Wiki, 아티클/영상/책 정리, 프로젝트 메모, 세컨드브레인 | `raw → wiki → Output` |
+| `evidence` | 역공학, 구현 추론, 기술 조사, 다중 LLM 분석, 가설/실험/반증 추적 | `Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon` |
 
-두 축은 직교하므로 다음이 모두 가능합니다.
+두 축은 직교하므로 다음 조합이 가능합니다.
 
 ```text
 new + standard
@@ -58,23 +59,89 @@ upgrade + standard
 upgrade + evidence
 ```
 
-단, `upgrade`로 **Evidence → Standard 자동 downgrade는 허용하지 않습니다.** Evidence 기록을 제거하거나 의미를 축소하는 작업은 별도 마이그레이션으로 설계해야 합니다.
+단, `upgrade`는 Evidence → Standard를 자동 downgrade하지 않습니다. Evidence 기록을 제거하거나 의미를 축소하는 작업은 별도 migration 설계가 필요합니다.
 
-## Profile 자동 판정
+## Upgrade의 정확한 의미: GitHub 기준 최신
 
-사용자가 profile을 명시하면 그대로 사용합니다. 명시하지 않으면 일반 지식관리에는 `standard`를 기본으로 사용합니다.
+이 프로젝트에서 사용자 의도의 `upgrade`, `최신화`, `스킬 업데이트`는 기본적으로 다음 의미입니다.
 
-다음 신호가 명확하면 `evidence`가 적합합니다.
+> **`gupilleveldesigner/llm-wiki-bootstrap` GitHub 저장소의 현재 default branch 최신 commit을 확인하고, 그 정확한 commit의 upgrade logic과 bundled skills를 대상 Wiki에 적용한다.**
 
-- 역공학 또는 내부 구현을 추정하는 프로젝트
-- ChatGPT/Qwen/Claude/Codex 등 여러 LLM의 분석을 누적
-- 직접 관찰과 추론/가설을 구분해야 함
-- provenance/source lineage가 중요함
-- 상충 주장과 반증 기록을 보존해야 함
-- 가설 → 통제 실험 → 결론 루프가 핵심임
-- 중요한 결론을 원문까지 역추적해야 함
+즉 단순히 현재 로컬에 설치돼 있는 오래된 bundle을 다시 복사하는 작업이 아닙니다.
 
-기존 Wiki를 `upgrade`할 때 `--profile`을 생략하면 `.llm-wiki.json`의 기존 profile을 보존합니다. manifest가 없는 legacy Wiki는 호환성을 위해 `standard`로 취급합니다.
+### GitHub latest upgrade 흐름
+
+```text
+upgrade 요청
+   ↓
+GitHub 저장소 metadata 조회
+   ↓
+현재 default branch 확인
+   ↓
+그 branch의 최신 40자 commit SHA 확인
+   ↓
+정확한 SHA의 ZIP 다운로드
+   ↓
+ZIP 안전성 + 필수 파일/skills bundle 검증
+   ↓
+여기까지 성공해야 대상 Wiki 변경 시작
+   ↓
+다운로드한 최신 bootstrap.py --mode upgrade 실행
+   ↓
+기존 skills 백업
+   ↓
+최신 bundled skills/runtime/profile assets 적용
+   ↓
+검증
+   ↓
+.llm-wiki.json에 exact commit provenance 기록
+```
+
+### 왜 branch ZIP이 아니라 exact SHA를 고정하나
+
+default branch를 먼저 확인하되 실제 적용 파일은 **검증한 commit SHA**로 다운로드합니다. 조회 시점과 다운로드 시점 사이에 branch HEAD가 바뀌더라도 “어떤 버전을 적용했는지”가 모호해지지 않도록 하기 위해서입니다.
+
+성공 결과에는 다음이 포함됩니다.
+
+```text
+upgrade_source: github
+bootstrap_repository: gupilleveldesigner/llm-wiki-bootstrap
+bootstrap_branch: <현재 default branch>
+bootstrap_commit: <정확한 40자 SHA>
+```
+
+그리고 대상 `.llm-wiki.json`에는 다음 provenance가 남습니다.
+
+```json
+{
+  "last_upgrade": {
+    "source": "github",
+    "repository": "gupilleveldesigner/llm-wiki-bootstrap",
+    "branch": "master",
+    "commit": "<40-char SHA>",
+    "at": "<timestamp>"
+  }
+}
+```
+
+### GitHub 접근 실패 시
+
+네트워크, GitHub API, ZIP 다운로드, archive 검증 단계에서 실패하면 **대상 Wiki를 수정하지 않습니다.**
+
+그리고 오래된 로컬 bundle로 조용히 fallback하지 않습니다. 사용자가 “GitHub 최신”을 요청했다면 GitHub 최신을 확인하지 못한 상태를 성공으로 보고하면 안 됩니다.
+
+### 명시적 local/offline upgrade
+
+오프라인 환경이거나 사용자가 명시적으로 현재 설치 bundle을 쓰라고 한 경우에만:
+
+```bash
+python scripts/upgrade.py \
+  --target ./ExistingWiki \
+  --config ./config.json \
+  --source local
+```
+
+을 사용할 수 있습니다. 이 결과는 `upgrade_source: local`이며 **GitHub 최신이라고 부르지 않습니다.**
 
 ## 설치
 
@@ -90,46 +157,46 @@ git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claud
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.codex/skills/llm-wiki-bootstrap"
 ```
 
-Codex용 `agents/openai.yaml`이 포함되어 있습니다.
+저장소에는 Codex용 `agents/openai.yaml`이 포함됩니다.
 
 ### 요구사항
 
 - Claude Code 또는 Codex
 - Python 3.10+
+- 온라인 upgrade에는 GitHub HTTPS 접근 가능 환경
 - Graphify는 선택 사항
 
-Python 실행기는 `python`, `py -3`, `python3` 순으로 사용할 수 있으며 Windows에서는 Microsoft Store stub이 아닌 실제 Python 설치가 필요합니다.
+Python 실행기는 `python`, `py -3`, `python3`을 사용할 수 있습니다. Windows의 Microsoft Store stub은 실제 Python으로 취급하지 않습니다.
 
-## 사용
+## 사용법
 
-Claude Code에서는:
+Claude Code:
 
 ```text
 /llm-wiki-bootstrap
 ```
 
-Codex에서는 설치된 스킬을 호출하거나 자연어로 요청할 수 있습니다.
+Codex:
 
 ```text
 $llm-wiki-bootstrap
 ```
 
-자연어 예:
+또는 자연어로 요청할 수 있습니다.
 
 ```text
-요리 공부용 LLM 위키를 만들어줘.
-이 자료 폴더를 기존 파일을 보존하면서 Wiki로 전환해줘.
-역공학 자료를 관찰/가설/실험/Canon으로 분리하는 Evidence Wiki를 만들어줘.
-기존 Standard Wiki를 Evidence profile로 업그레이드해줘.
+요리 공부용 LLM Wiki 만들어줘.
+이 기존 폴더를 파일 손실 없이 Wiki로 바꿔줘.
+관찰/가설/실험/Canon을 분리하는 Evidence Wiki를 만들어줘.
+이 Wiki의 운영 스킬을 GitHub 최신 버전으로 업그레이드해줘.
+이 Standard Wiki를 Evidence profile로 승격하면서 최신 버전으로 업그레이드해줘.
 ```
 
-Bootstrap은 이미 제공된 정보를 다시 묻지 않고, 부족한 경우 한 번의 짧은 인터뷰에서 다음을 수집합니다.
+이미 요청에 들어 있는 정보는 다시 묻지 않습니다. 필요할 때만 한 번의 짧은 인터뷰로 다음을 확인합니다.
 
 1. Wiki 주제와 목적
 2. 주로 모을 자료 유형
 3. 프로젝트 이름
-
-이 답으로 `project_name`, `domain_summary`, 초기 `overview`, `questions`, taxonomy를 구성합니다.
 
 ## CLI
 
@@ -138,11 +205,11 @@ Bootstrap은 이미 제공된 정보를 다시 묻지 않고, 부족한 경우 �
 ```json
 {
   "project_name": "My Wiki",
-  "domain_summary": "프로젝트의 한 문장 목적"
+  "domain_summary": "프로젝트 목적 한 문장"
 }
 ```
 
-Standard 신규:
+### Standard 신규 생성
 
 ```bash
 python scripts/bootstrap.py \
@@ -152,7 +219,7 @@ python scripts/bootstrap.py \
   --profile standard
 ```
 
-Evidence 신규:
+### Evidence 신규 생성
 
 ```bash
 python scripts/bootstrap.py \
@@ -162,7 +229,7 @@ python scripts/bootstrap.py \
   --profile evidence
 ```
 
-기존 폴더 Evidence 전환:
+### 기존 일반 폴더 → Evidence migrate
 
 ```bash
 python scripts/bootstrap.py \
@@ -172,21 +239,30 @@ python scripts/bootstrap.py \
   --profile evidence
 ```
 
-기존 Standard Wiki → Evidence 승격:
+### 기존 Wiki → GitHub 최신 upgrade
 
 ```bash
-python scripts/bootstrap.py \
+python scripts/upgrade.py \
+  --target ./ExistingWiki \
+  --config ./config.json
+```
+
+### Standard → Evidence 승격 + GitHub 최신 upgrade
+
+```bash
+python scripts/upgrade.py \
   --target ./ExistingWiki \
   --config ./config.json \
-  --mode upgrade \
   --profile evidence
 ```
 
-`new`/`migrate`에서 `--profile`을 생략하면 `standard`입니다. `upgrade`에서는 기존 manifest profile을 우선 보존합니다.
+### 내부 local apply primitive
+
+`scripts/bootstrap.py --mode upgrade`는 **최신 GitHub 버전을 찾는 진입점이 아닙니다.** `upgrade.py`가 다운로드한 최신 checkout 내부에서 실제 적용을 수행하는 low-level local apply primitive로 취급합니다.
+
+사용자 의도의 “최신 upgrade”에는 `scripts/upgrade.py`를 사용하십시오.
 
 ## Standard profile 구조
-
-대표 구조:
 
 ```text
 MyWiki/
@@ -226,20 +302,20 @@ MyWiki/
 └─ .llm-wiki.json
 ```
 
-`raw/`는 원문층, `wiki/`는 AI가 유지하는 정리된 지식층, `Output/`은 외부 결과물입니다.
+`raw/`는 불변 원문, `wiki/`는 AI가 정리·연결하는 지식층, `Output/`은 외부 산출물입니다.
 
 ## Evidence profile 구조
 
-Evidence는 Standard 구조를 버리지 않고 검증 계층을 추가합니다.
+Evidence는 Standard를 대체하지 않고 확장합니다.
 
 ```text
 ResearchWiki/
-├─ raw/                         # 불변 원문
+├─ raw/                         # immutable originals
 ├─ wiki/
-│  ├─ sources/                 # Raw별 1:1 source record
-│  ├─ claims/                  # 원자적 주장
-│  ├─ conflicts/               # 상충 Claim
-│  ├─ experiments/             # 가설 검증
+│  ├─ sources/                 # 1:1 source records
+│  ├─ claims/                  # atomic claims
+│  ├─ conflicts/               # conflicting claims
+│  ├─ experiments/             # hypothesis tests
 │  ├─ questions/
 │  │  ├─ open/
 │  │  ├─ answered/
@@ -262,11 +338,13 @@ ResearchWiki/
    └─ embeddings/
 ```
 
-`.wiki-cache/`는 **재생성 가능한 파생 데이터** 영역이며 정본이 아닙니다.
+`.wiki-cache/`는 **재생성 가능한 파생 데이터**이며 정본이 아닙니다.
+
+## Evidence 데이터 모델
 
 ### Source record
 
-원문마다 `wiki/sources/`에 1:1 source record를 유지합니다. 가능한 경우 다음을 기록합니다.
+Raw 원문마다 `wiki/sources/`에 1:1 source record를 유지합니다. 가능한 경우 다음을 기록합니다.
 
 - `raw_sha256`
 - provider/model
@@ -275,11 +353,9 @@ ResearchWiki/
 - `parent_sources`
 - verification/epistemic 상태
 
-외부 LLM은 Authority가 아니라 Source입니다. 외부 모델의 결과도 Raw로 들어가고, 직접 Canon을 수정하지 않습니다.
+외부 LLM은 Authority가 아니라 Source입니다. 외부 모델의 결과도 Raw로 들어가고 직접 Canon을 수정하지 않습니다.
 
 ### Source lineage와 독립성
-
-다음 세 답변은 자동으로 독립 evidence 3개가 아닙니다.
 
 ```text
 ChatGPT 답변
@@ -289,13 +365,11 @@ Qwen 답변
 Codex 답변
 ```
 
-같은 정보 계보에서 파생된 경우 `parent_sources` 또는 동등한 lineage를 기록하고 evidence independence 계산에서 중복으로 세지 않습니다.
+이 셋이 같은 주장을 했더라도 자동으로 독립 evidence 3개가 아닙니다. 같은 정보 계보에서 파생된 경우 `parent_sources` 또는 동등 provenance를 기록하고 evidence independence에서 중복 계산하지 않습니다.
 
 ### Claim
 
-문서 전체를 하나의 진실로 저장하지 않고 재사용 가치가 있는 **원자적 주장**으로 분리합니다.
-
-허용 Claim 상태:
+문서 전체를 하나의 진실로 저장하지 않고 **원자적 주장**으로 분리합니다.
 
 | 상태 | 의미 |
 |---|---|
@@ -309,7 +383,7 @@ Codex 답변
 | `DEPRECATED` | 역사적 기록으로만 유지 |
 | `UNKNOWN` | 현재 자료로 판정 불가 |
 
-숫자 confidence는 보조 신호일 뿐 이 상태보다 우선하지 않습니다.
+숫자 confidence는 보조 신호일 뿐 상태보다 우선하지 않습니다.
 
 Claim-source relation은 최소 다음을 구분합니다.
 
@@ -321,15 +395,15 @@ derived_from
 mentions
 ```
 
-자료가 없으면 그럴듯하게 빈칸을 채우지 않고 `UNKNOWN`으로 남깁니다.
+자료가 없으면 그럴듯하게 채우지 않고 `UNKNOWN`으로 남깁니다.
 
-### Conflict, Experiment, Question
+### Conflict / Experiment / Question
 
-- `wiki/conflicts/` — 상충 Claim을 억지로 통합하지 않고 unresolved conflict로 보존
-- `wiki/experiments/` — hypothesis, setup, control, variant, metrics, result를 기록
-- `wiki/questions/open/` — 아직 답이 없는 연구 질문
+- `wiki/conflicts/` — 상충 Claim을 억지로 통합하지 않고 unresolved 상태로 보존
+- `wiki/experiments/` — hypothesis, setup, control, variant, metrics, result 기록
+- `wiki/questions/open/` — 미해결 연구 질문
 - `wiki/questions/answered/` — 답이 정리된 질문
-- `wiki/questions/blocked/` — 현재 근거/도구 부족으로 막힌 질문
+- `wiki/questions/blocked/` — 근거/도구 부족으로 막힌 질문
 
 실패한 실험과 반증된 Claim도 연구 이력으로 보존합니다.
 
@@ -337,7 +411,7 @@ mentions
 
 `wiki/canon/`은 현재 프로젝트가 채택한 **검토된 현재 지식**입니다. 작게 유지합니다.
 
-Claim을 자동으로 Canon으로 승격하지 않습니다. LLM confidence가 높아도 자동 승격하지 않습니다.
+Claim은 자동으로 Canon으로 승격되지 않습니다.
 
 최소 검토 기준:
 
@@ -345,432 +419,217 @@ Claim을 자동으로 Canon으로 승격하지 않습니다. LLM confidence가 �
 2. source independence / lineage
 3. contradictory evidence
 4. experiment evidence
-5. direct observation 여부
-6. 기존 Canon과 충돌 여부
+5. direct observation
+6. 기존 Canon과의 충돌
 
-`canon-review`는 이 기준으로 recommendation을 만들지만 기본적으로 읽기 전용입니다. 사용자가 명시적으로 승격/상태 변경을 요청한 경우에만 Canon을 수정합니다.
+`canon-review`는 recommendation을 만들지만 기본적으로 읽기 전용입니다. 사용자가 명시적으로 승격/상태 변경을 요청한 경우에만 Canon을 수정합니다.
 
 ## 운영 스킬
 
 ### `ingest`
 
-`raw/` 원문을 불변으로 유지하며 `wiki/`에 반영합니다.
+`raw/`를 불변으로 유지하며 지식층에 반영합니다.
 
 기본 완료 계약:
 
-- raw는 수정하지 않음
-- raw 원문마다 `wiki/sources/<원문>.md` 1:1 source summary가 필요
-- 단순 catalog에 raw 경로만 나열한 것은 ingest 완료가 아님
-- source summary는 raw path와 SHA-256 등 실제 content evidence를 가져야 함
-- taxonomy는 `wiki/taxonomy.json`의 통제어휘를 사용
-- batch 완료 전 category audit와 독립 verification gate를 통과
-- Graphify가 필요한 batch에서는 host Graphify 실행과 run manifest 기록 후 `verify --complete-batch --require-graph`
-- 실패하면 실패한 source만 다시 `scan → ingest → finalize → verify`
+- raw 수정 금지
+- raw 원문마다 `wiki/sources/<원문>.md` 1:1 source summary 필요
+- catalog가 raw 경로만 나열한 것은 완료 근거가 아님
+- source summary에 raw path, SHA-256 등 실제 content evidence 필요
+- taxonomy는 `wiki/taxonomy.json` 통제어휘 사용
+- batch 완료 전 category audit와 독립 verification gate 통과
+- Graphify가 필요한 batch에서는 host Graphify 실행 + run manifest 기록 + `verify --complete-batch --require-graph`
+- 실패 시 실패한 source만 `scan → ingest → finalize → verify`
 
-Evidence에서는 추가로:
+Evidence에서는 다음까지 자동화할 수 있습니다.
 
 ```text
-Raw
-→ Source Record
-→ atomic Claim
-→ support / contradiction
-→ Conflict / Experiment / Open Question
-→ Canon candidate/review 필요 상태
+Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question → review-needed
 ```
 
-까지만 자동화할 수 있습니다. **Canon 자동 변경은 금지합니다.**
+**Canon 자동 수정은 금지합니다.**
 
 ### `query`
 
-Standard에서는 컨텍스트를 한꺼번에 펼치지 않고 다음 순서로 읽습니다.
+Standard는 progressive disclosure를 사용합니다.
 
 ```text
-catalog/index
-→ candidate frontmatter
-→ 선택된 본문
-→ 정확한 검증이 필요할 때만 raw
+catalog/index → candidate frontmatter → 선택된 본문 → 정확한 검증이 필요할 때만 Raw
 ```
 
-Wiki에 없는 내용을 모델 기억으로 채우지 않습니다. 모순, stale 상태, 미검증 상태를 숨기지 않습니다.
+Wiki에 없는 내용을 모델 기억으로 채우지 않고, 모순·stale·미검증 상태를 숨기지 않습니다.
 
-Evidence에서는 질의 목적을 다음 모드로 구분합니다.
+Evidence query mode:
 
 | Mode | 동작 |
 |---|---|
 | `answer` | Canon → CONFIRMED/SUPPORTED → OBSERVED 순으로 현재 지식 답변 |
-| `research` | Canon, Claims, Conflicts, Experiments, Questions, Raw까지 폭넓게 조사 |
-| `verify` | 특정 Claim의 지지/반박 evidence와 실제 Raw 검증 |
-| `challenge` | 현재 결론을 반박할 수 있는 disputed/rejected/conflict/실패 실험을 우선 탐색 |
+| `research` | Canon, Claims, Conflicts, Experiments, Questions, Raw까지 조사 |
+| `verify` | 특정 Claim의 지지/반박 evidence와 실제 Raw 확인 |
+| `challenge` | disputed/rejected/conflict/실패 실험을 우선 탐색 |
 | `trace` | `Canon → Claim → Evidence/Experiment → Source → Raw locator` 추적 |
-| `compare` | 복수 Claim의 source quality, independence, direct evidence, experiment, contradiction 비교 |
-
-명시가 없으면 `answer`가 기본입니다. “왜 그렇게 생각하지?”, “근거 추적”, “진짜 맞아?” 같은 질문은 `trace`/`verify`를 우선합니다.
+| `compare` | source quality, independence, direct evidence, experiment, contradiction 비교 |
 
 ### `lint`
 
-일반 Wiki에서는 다음을 점검합니다.
+일반 Wiki에서는 링크, frontmatter, index, orphan, source link, freshness를 점검합니다. 의미 판단이 없는 기계적 수정만 자동 적용합니다.
 
-- 깨진 Wiki 링크
-- frontmatter
-- index 누락
-- 고립 문서
-- 원문 연결
-- freshness/staleness
-
-의미 판단이 필요 없는 기계적 수정만 자동 적용합니다. 사실 판단, 병합, 삭제, 의미 있는 상태 변경은 자동으로 하지 않습니다.
-
-Evidence에서는 epistemic integrity까지 검사합니다.
+Evidence에서는 추가로:
 
 - source 없는 Claim
-- 존재하지 않는 source/claim/experiment/conflict ID
-- Canon → Claim 역추적 실패
-- Claim → Raw locator 역추적 실패
+- 없는 source/claim/experiment/conflict ID
+- Canon → Claim trace 실패
+- Claim → Raw locator trace 실패
 - `parent_sources` cycle/단절
 - 근거 없는 `CONFIRMED`
-- `REJECTED` Claim을 현재 Canon 근거로 사용
-- unresolved conflict를 숨긴 단정
+- `REJECTED` Claim을 현재 Canon이 사용
+- unresolved conflict 은폐
 - orphan experiment/conflict
 - 명백한 duplicate Claim family
-- source record의 `raw_sha256` 불일치
+- `raw_sha256` mismatch
+
+를 점검합니다.
 
 ### `session-memory`
 
-`SAVE` 한 마디로 세션 상태를 락·저널 기반 원자적 트랜잭션으로 보존합니다. 완료하지 않은 작업이나 실행하지 않은 검증을 완료로 기록하지 않습니다. 다음 세션은 루트 `log.md`부터 이어받습니다.
+`SAVE`는 lock/journal 기반 원자적 트랜잭션으로 세션 상태를 저장합니다. 완료하지 않은 작업이나 실행하지 않은 검증을 완료로 기록하지 않습니다.
 
 ### `brief-tuner`
 
-작업 브리프 템플릿을 인터뷰로 사용자의 작업 패턴에 맞춥니다.
+인터뷰를 통해 AI 작업 brief/template를 사용자의 작업 패턴에 맞춥니다.
 
 ### `wiki-audit`
 
-설치 환경, 운영 스킬, Graphify host prerequisite와 계약 정합성을 읽기 전용으로 점검합니다.
+설치된 스킬, runtime, Graphify 환경, Wiki 계약의 정합성을 읽기 전용으로 점검합니다.
 
-### `canon-review` — Evidence 전용
+### `canon-review` — Evidence only
 
-Claim의 source quality, lineage independence, contradiction, experiment, direct observation, 기존 Canon 충돌을 검토해 다음 같은 recommendation을 만듭니다.
-
-```text
-promote
-keep current state
-dispute
-reject
-needs more evidence
-```
-
-기본은 **review only**이며 자동 승격이 아닙니다.
+source quality, source independence/lineage, contradictory evidence, experiment, direct observation, 기존 Canon 충돌을 검토합니다. 기본은 recommendation이며 자동 승격이 아닙니다.
 
 ## Taxonomy
 
 `wiki/taxonomy.json`은 작은 SKOS 형태의 통제어휘를 사용합니다.
 
-핵심 필드:
+- `prefLabel`
+- `altLabel`
+- `broader`
+- `scopeNote`
 
-```text
-prefLabel
-altLabel
-broader
-scopeNote
-```
-
-Graphify community 이름을 taxonomy로 자동 복사하지 않습니다. Graphify는 탐색 보조이고 taxonomy나 truth source가 아닙니다.
+Graphify community 이름은 taxonomy나 truth가 아닙니다.
 
 ## Graphify
 
-Graphify는 선택 사항입니다.
+Graphify는 선택적 탐색/시각화 보조 수단입니다.
 
-### Codex
-
-```bash
-python -m pip install graphifyy
-graphify install --platform codex
-```
-
-그 뒤 현재 Codex 인증을 사용하는 host skill로:
+Codex:
 
 ```text
 $graphify <WIKI_ROOT>
 $graphify <WIKI_ROOT> --update
 ```
 
-병렬 처리를 쓰려면 `~/.codex/config.toml`의 `[features] multi_agent = true`를 확인합니다.
-
-항상 그래프 우선 탐색을 원할 때만 선택적으로:
-
-```bash
-graphify codex install
-```
-
-을 사용합니다. 이것은 그래프 생성이 아니라 hook/router 설치입니다.
-
-### Claude Code
-
-```bash
-python -m pip install graphifyy
-graphify install
-```
-
-그 뒤:
+Claude:
 
 ```text
 /graphify <WIKI_ROOT>
 /graphify <WIKI_ROOT> --update
 ```
 
-Python subprocess에서 bare `graphify <path>` 또는 `graphify update .`를 직접 호출하지 않습니다. host assistant의 인증을 사용하는 Graphify skill을 사용합니다.
+Python subprocess에서 bare `graphify <path>`를 직접 호출하지 않습니다. Host Graphify 실행 뒤 `ingest_runtime.py record-graphify-run --host codex|claude`를 기록하고 필요한 batch verification을 수행합니다.
 
-Graphify 실행 뒤 ingest runtime에 run manifest를 기록하고 독립 verify gate를 통과해야 batch ingest 완료를 보고할 수 있습니다. Graphify가 없거나 build가 실패하면 batch completion을 거짓으로 선언하지 않습니다. 단일 source는 로컬 검증만 했음을 명시할 수 있습니다.
+Evidence에서도 Graphify는 truth database가 아닙니다. 정본은 Markdown/frontmatter와 Raw provenance입니다.
 
-Evidence profile에서도 Graphify는 **탐색/시각화 보조 수단**이고 truth database가 아닙니다.
+## migrate 안전 규칙
+
+- 기존 파일 삭제/수정 금지
+- 기존 루트 문서 충돌 시 `.wiki-proposed`
+- raw 편입 전 파일별 원래 경로/목적지 migration map 제시
+- 사용자 승인 후 이동
+- 이동 후 `/ingest` batch 처리
+- `.git` 등 프로젝트 설정을 raw로 옮기지 않음
+
+## upgrade 안전 규칙
+
+- GitHub latest가 기본
+- 원격 확인/다운로드/검증 완료 전 대상 변경 금지
+- 정확한 SHA를 고정한 뒤 실행
+- 기존 운영 스킬을 `.wiki-upgrade-bak/<timestamp>/`에 백업
+- `raw/`, 기존 지식, `Output/` 보존
+- customized router/operation 문서는 `.wiki-proposed` 사용
+- Standard → Evidence 승격 시 Evidence folders/templates/canon-review 추가
+- router proposal이 필요한 경우 `profile_activation_pending: true`
+- Evidence → Standard 자동 downgrade 거부
+- GitHub latest 기대 작업에서 exact `bootstrap_commit`을 보고하지 못하면 완료 선언 금지
 
 ## Obsidian Web Clipper
 
-`templates/web-clipper/`에 웹 아티클, YouTube, 책, 팟캐스트 등을 `raw/reference/`로 수집하기 위한 템플릿이 포함됩니다.
+`templates/web-clipper/`의 템플릿을 Obsidian Web Clipper에 import하면 웹 자료를 `raw/reference/` 아래로 수집할 수 있습니다. 수집된 Raw 역시 ingest 전에는 지식/진실로 취급하지 않습니다.
 
-Obsidian을 사용한다면 생성된 폴더를 Vault로 열고 `templates/web-clipper/`의 안내와 JSON 템플릿을 Web Clipper 확장에 임포트할 수 있습니다.
+## 데이터 보존과 복구 경계
 
-수집된 Raw는 그대로 보존하고 `/ingest`가 Wiki 지식층으로 반영합니다.
+### 장기 보존 우선
 
-## `migrate` — 기존 일반 폴더를 비파괴 전환
-
-`migrate`는 기존 파일을 삭제하거나 수정하지 않고 Wiki scaffold를 추가합니다.
-
-1. 기존 파일에서 주제/자료 유형을 추론하고 부족한 인터뷰 정보만 확인
-2. 선택한 profile로 scaffold 생성
-3. 기존 루트 문서와 충돌하면 `.wiki-proposed` 생성
-4. 기존 파일을 `raw/` 어디로 옮길지 **파일별 목적지 + 원래 경로** 계획을 작성
-5. **사용자 승인 후에만** 파일 이동
-6. 원래 경로가 복구 지도가 되도록 보존
-7. 이동 후 `/ingest` batch로 반영
-8. Graphify/smoke/완료 gate 확인
-
-Bootstrap 자체는 기존 자료를 임의로 raw로 이동하지 않습니다.
-
-## `upgrade` — 기존 Wiki 갱신
-
-`upgrade`는 기존 `raw/`, `wiki/` 지식, `Output/`을 보존합니다.
-
-기존 설치 스킬과 session-memory runtime은 갱신 전 다음 위치에 백업됩니다.
-
-```text
-.wiki-upgrade-bak/<timestamp>/
-```
-
-같은 profile 유지:
-
-```bash
-python scripts/bootstrap.py \
-  --target ./ExistingWiki \
-  --config ./config.json \
-  --mode upgrade
-```
-
-### Standard → Evidence
-
-```bash
-python scripts/bootstrap.py \
-  --target ./ExistingWiki \
-  --config ./config.json \
-  --mode upgrade \
-  --profile evidence
-```
-
-추가되는 것:
-
-- Evidence 디렉터리
-- Evidence 모델/운영 문서
-- Evidence 템플릿
-- `canon-review`
-- `.llm-wiki.json` profile 갱신
-
-기존 `CLAUDE.md`, `AGENTS.md`, `wiki/CLAUDE.md`에 Evidence router가 없으면 원본을 덮어쓰지 않고 `.wiki-proposed`를 만듭니다.
-
-결과의:
-
-```text
-profile_activation_pending: true
-```
-
-이면 router proposal을 검토·병합하기 전까지 Evidence profile 전환이 완전히 활성화됐다고 간주하지 않습니다.
-
-기존 `instructions/wiki-operations.md`, `.graphifyignore`, `wiki/taxonomy.json` 등과 새 번들이 다를 때도 안전한 경우 proposal을 만들고 자동으로 사용자 수정본을 덮어쓰지 않습니다.
-
-## Manifest: `.llm-wiki.json`
-
-모든 신규/전환 Wiki는 root manifest를 가집니다.
-
-대표 필드:
-
-```json
-{
-  "schema_version": 2,
-  "profile": "evidence",
-  "raw_immutable": true,
-  "created_with": "llm-wiki-bootstrap",
-  "project_name": "Research Wiki",
-  "created_at": "...",
-  "updated_at": "..."
-}
-```
-
-기존 manifest의 알 수 있는 필드는 유지하면서 bootstrap 관리 필드를 갱신합니다.
-
-## Router 문서
-
-- `CLAUDE.md` — Claude용 항상 로드되는 프로젝트 라우터
-- `AGENTS.md` — Codex용 라우터
-- `raw/CLAUDE.md` — Raw 불변 규칙
-- `wiki/CLAUDE.md` — Wiki 운영 규칙
-- `Output/CLAUDE.md` — 결과물 계층 규칙
-- `instructions/wiki-operations.md` — 공통 Wiki 운영 계약
-- Evidence에서는 `wiki/evidence-model.md`, `instructions/evidence-operations.md` 추가
-
-Evidence router overlay는 명확한 marker를 사용해 중복 추가를 피합니다.
-
-## Ingest 완료 조건
-
-“파일이 들어갔다”, “catalog가 생성됐다”, “Graphify graph가 있다”만으로 ingest 완료가 아닙니다.
-
-Batch completion은 최소 다음을 충족해야 합니다.
-
-1. 각 대상 raw source가 처리/제외/실패 중 하나로 판정됨
-2. 처리된 raw마다 content-bearing 1:1 source summary가 존재
-3. taxonomy/category audit 통과
-4. Graphify가 요구되는 batch라면 host graph build/update 완료
-5. Graphify run manifest 기록
-6. `verify --complete-batch --require-graph` 독립 gate 통과
-7. pending/catalog-only/실패가 남으면 `미완료`라고 보고
-
-완료 보고에는 다음 수치를 포함합니다.
-
-```text
-입력 원문
-처리 완료
-검증 완료
-제외
-실패·미처리
-그래프 노드
-그래프 링크
-```
-
-## 복구와 데이터 영속성
-
-핵심 원칙은 **정본과 재생성 가능한 데이터를 분리하는 것**입니다.
-
-### 장기 보존
-
-Standard:
-
-```text
-raw/
-wiki/
-Output/의 필요한 결과물
-```
-
-Evidence에서는 특히:
-
-```text
-raw/
-wiki/sources/
-wiki/claims/
-wiki/canon/
-wiki/experiments/
-```
-
-을 장기 보존합니다.
+- `raw/`
+- `wiki/sources/`
+- `wiki/claims/` (Evidence)
+- `wiki/canon/` (Evidence)
+- `wiki/experiments/` (Evidence)
+- `.session-memory/` 중 필요한 인수인계 기록
 
 ### 재생성 가능
 
-```text
-.wiki-cache/normalized/
-.wiki-cache/index/
-.wiki-cache/embeddings/
-Graphify 산출물
-기타 파생 cache/index
-```
+- `.wiki-cache/normalized/`
+- `.wiki-cache/index/`
+- `.wiki-cache/embeddings/`
+- Graphify output
+- derived indexes/caches
 
-Cache나 graph가 손상돼도 Raw와 검토 기록에서 다시 만들 수 있어야 합니다.
+즉 **Raw/검토 기록은 영구 데이터, cache/index는 disposable data**라는 경계를 유지합니다.
 
-## 안전 규칙
+## Smoke check
 
-- `raw/`는 절대 수정하지 않음
-- 새 정보가 기존 지식과 충돌하면 조용히 덮어쓰지 않음
-- migrate는 사용자 승인 없이 기존 파일을 이동하지 않음
-- upgrade는 기존 지식/Raw를 삭제하지 않음
-- 기존 사용자 문서와 충돌하면 `.wiki-proposed`를 우선
-- Evidence에서 외부 LLM은 Authority가 아니라 Source
-- 동일 lineage의 LLM 답변을 독립 evidence로 과대평가하지 않음
-- 모르는 것은 `UNKNOWN`
-- 반증된 Claim도 삭제하지 않음
-- Canon 자동 승격 금지
-- 의미 판단이 필요한 lint 수정은 자동 적용하지 않음
-- `.wiki-cache/`와 Graphify 결과를 truth source로 취급하지 않음
-- Evidence → Standard 자동 downgrade 금지
-
-## 부트스트랩 후 스모크 체크
-
-생성된 Wiki에서 최소 다음을 확인합니다.
+설치/전환/업그레이드 후:
 
 ```bash
 python ".claude/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
 ```
 
-그리고:
+확인합니다.
 
-- `wiki/index.md`
-- `CLAUDE.md`
-- `raw/CLAUDE.md`
-- `.llm-wiki.json`
-
-이 존재하는지 확인합니다.
-
-Evidence profile이면 추가로:
-
-- `wiki/evidence-model.md`
-- `instructions/evidence-operations.md`
-- `.agents/skills/canon-review/SKILL.md`
-
-를 확인합니다.
-
-렌더링 대상에 `{{...}}` placeholder가 남아 있으면 성공으로 보고하지 않습니다.
+- target root가 맞는가
+- `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json` 존재
+- placeholder 미잔존
+- Evidence면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `canon-review` 존재
+- upgrade면 `upgrade_source`, `bootstrap_commit`, `backup_dir` 확인
+- GitHub upgrade면 결과 SHA와 `.llm-wiki.json.last_upgrade.commit` 일치
+- batch ingest 완료라고 말할 때 completion gate 통과
 
 ## 설계 원칙
 
-1. **Raw immutable** — 요약이 틀려도 원문이 남아야 한다.
-2. **Non-destructive migration** — 기존 데이터를 먼저 보존한다.
-3. **Filesystem as durable truth** — DB/cache/graph는 재생성 가능해야 한다.
-4. **Progressive disclosure** — Query는 필요한 문서만 단계적으로 읽는다.
-5. **Source before assertion** — 주장에는 근거가 있어야 한다.
-6. **Lineage-aware evidence** — 같은 정보 계보를 독립 근거로 세지 않는다.
-7. **No automatic Canon promotion** — confidence와 truth를 동일시하지 않는다.
-8. **Conflict preservation** — 모순을 조용히 삭제하거나 억지 통합하지 않는다.
-9. **Host-authenticated Graphify** — headless provider key 우회보다 현재 Claude/Codex host를 사용한다.
-10. **Self-contained distribution** — 필요한 운영 자산을 저장소가 자체 번들한다.
+- Raw는 불변
+- LLM output은 Evidence profile에서 Source이지 Authority가 아님
+- Claim과 Canon 분리
+- 같은 lineage를 독립 evidence로 과대평가하지 않음
+- conflict/rejected/failure 보존
+- 모르면 `UNKNOWN`
+- Canon 자동 승격 금지
+- migrate/upgrade 비파괴
+- GitHub latest upgrade는 정확한 commit provenance를 남김
+- 원격 실패를 오래된 local fallback으로 숨기지 않음
+- DB/embedding/Graphify는 Raw/Markdown 정본을 대체하지 않음
 
-## 이 프로젝트가 의도적으로 하지 않는 것
+## Non-goals
 
-기본 설치는 다음을 필수 의존성으로 만들지 않습니다.
+기본 설치가 다음을 요구하지는 않습니다.
 
-- 외부 Vector DB
-- Neo4j cluster
-- 별도 MCP 서버
-- microservices
 - Kubernetes
-- 대규모 backend
+- 대규모 Vector DB
+- Neo4j cluster
+- microservices
+- 외부 DB를 source of truth로 사용
 
-Evidence profile의 `.wiki-cache/index`와 `.wiki-cache/embeddings`는 향후 SQLite/FTS/embedding 같은 재생성 가능한 확장층을 위한 위치이며, 현재 정본을 DB로 옮긴다는 의미가 아닙니다.
-
-## 유사 프로젝트와의 차이
-
-`karpathy-llm-wiki`, `claude-obsidian` 같은 프로젝트와 같은 “LLM이 관리하는 Wiki” 계열이지만 다음에 특히 힘을 줍니다.
-
-- 원자적 세션 인수인계 `SAVE`
-- 비파괴 `migrate` / `upgrade`
-- source별 ingest 완료 검증
-- controlled taxonomy
-- host-aware Graphify gate
-- Evidence Research profile의 provenance/lineage/Claim/Conflict/Experiment/Canon 모델
-- Canon review를 자동 truth 승격이 아니라 명시적인 검토 gate로 분리
+파일/Markdown 중심으로 동작하고 향후 index/cache 계층은 재생성 가능하게 유지합니다.
 
 ## License
 
