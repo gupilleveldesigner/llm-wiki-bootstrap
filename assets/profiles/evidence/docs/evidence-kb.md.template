@@ -1,0 +1,126 @@
+# Evidence KB operations
+
+이 문서는 `{{PROJECT_NAME}}`의 `raw/ → wiki/ → Output/` 구조 안에서 Source·Claim·Canon과 SQLite FTS5를 운영하는 정본 절차다.
+
+## 정본과 파생 데이터
+
+- 영구 정본: `raw/`, 검토된 `wiki/sources/`, `wiki/claims/`, `wiki/canon/`, 향후 `wiki/experiments/`.
+- 재생성 가능: `wiki/normalized/`, `.evidence-kb/knowledge.db`, 향후 embedding/cache.
+- `raw/` 내용은 등록 후 수정하지 않는다. 오류 수정본도 새 Source로 등록하고 `parent_sources`로 연결한다.
+- LLM 답변은 Source다. 직접 관찰·소스코드·로그·통제 실험과 같은 Authority로 간주하지 않는다.
+
+## 현재 MVP
+
+실행기는 이 프로젝트의 Python 3.10+와 표준 라이브러리뿐이다.
+
+```powershell
+python tools/kb.py selftest
+python tools/kb.py register "<외부 파일>" --provider qwen --source-type llm_analysis
+python tools/kb.py rebuild
+python tools/kb.py search "animation anchor"
+python tools/kb.py trace CLAIM-ANIM-0001
+python tools/kb.py trace DECISION-<DOMAIN>-<NNNN>
+python tools/kb.py status
+```
+
+`register`는 다음만 자동화한다.
+
+1. 동일 SHA-256 Source 중복 검사.
+2. 원본 바이트를 `raw/<category>/RAW-...__<name>`으로 복사하고 검증.
+3. 텍스트라면 `wiki/normalized/`에 재생성 가능한 Markdown 생성.
+4. `wiki/sources/`에 의미 검토 전 `pending` 문서 생성.
+
+의미 Claim을 기계적으로 만들어 사실처럼 보이게 하지 않는다. 로컬 LLM이 원문 전체를 읽고 Source 요약과 Claim 후보를 작성해야 한다.
+
+## 인제스트와 Evidence 흐름
+
+1. 외부 파일은 `tools/kb.py register`로 캡처한다. 이미 `raw/`에 있는 파일은 내용을 고치지 않는다.
+2. 설치된 `ingest` 스킬을 따라 원문 전체를 읽고 `wiki/sources/`의 `pending` 문서를 완성한다.
+3. 원자적 주장만 `wiki/claims/<domain>/CLAIM-....md`에 분리한다. 모든 Claim은 `evidence`가 1개 이상이어야 한다.
+4. 기존 Claim과 같은 의미면 새 ID를 만들지 말고 기존 Claim에 Source를 추가한다.
+5. 모순은 조용히 합치지 않는다. 양쪽 Claim을 유지하고 `claim_relations`에 `contradicts`를 기록한다.
+6. Canon 후보는 작성할 수 있지만 자동 승격하지 않는다. 채택한 Canon만 `manual_reviewed: true`로 둔다.
+7. `python tools/kb.py rebuild`를 실행한다. 검증 실패 시 기존 DB는 교체되지 않는다.
+8. 설치된 ingest 완료 게이트와 Graphify 검증을 별도로 통과한다.
+
+## Claim 문서 기계 계약
+
+```yaml
+type: claim
+id: CLAIM-ANIM-0001
+status: HYPOTHESIS
+confidence: 0.6
+claim_kind: implementation
+topics:
+  - 자산 생성·변환
+statement: "첫 프레임이 후속 프레임의 anchor로 사용될 가능성이 있다."
+sources:
+  - raw/reference/research/example.txt
+evidence:
+  - "RAW-QWEN-20260827-0001 | supports | lines 12-18 | 원문 발췌"
+claim_relations:
+  - "CLAIM-ANIM-0002 | contradicts"
+```
+
+- 상태: `OBSERVED`, `INFERRED`, `HYPOTHESIS`, `SUPPORTED`, `CONFIRMED`, `REJECTED`, `DISPUTED`, `DEPRECATED`, `UNKNOWN`.
+- Evidence 관계: `supports`, `contradicts`, `context`, `derived_from`.
+- Claim 관계: `supports`, `contradicts`, `supersedes`, `duplicates`, `related`.
+- `confidence`는 0~1 보조값이며 상태보다 우선하지 않는다.
+- 현재 Claim/Decision `locator`는 line-addressable Raw의 `lines N-M` 형식만 허용한다. section/turn/log command/image region 같은 typed locator는 아직 검증하지 않으므로, 지원되기 전에는 해당 근거를 검토 완료로 승격하지 않는다.
+
+## Source 계보
+
+Source 문서에는 다음을 유지한다.
+
+- `id`, `raw_sha256`, `provider`, `model`, `source_type`.
+- `verification_status`, `epistemic_observation`, `epistemic_inference`.
+- `parent_sources`: 이 답변이나 분석이 실제로 읽은 선행 Source ID.
+- `independence_group`: 같은 정보 계보를 독립 증거로 중복 계산하지 않기 위한 그룹.
+- `visibility`, `external_llm_allowed`: 외부 모델 전달 경계.
+- `structurally_verified`와 `semantic_status`는 별도 축이다. 기존 Source의 누락된 semantic 상태는 `partial`이며 KB search/trace가 이를 노출한다.
+- 긴 Source는 `raw_line_count`, `coverage_spans`, `evidence_spans`, `key_decisions`, `next_actions`, `chronology_entries`를 실제 본문·locator와 맞춘다.
+
+## Project Decision 계약
+
+사실 Claim이 아닌 프로젝트 선택은 `wiki/decisions/`에 둔다.
+
+```yaml
+type: decision
+id: DECISION-<DOMAIN>-<NNNN>
+status: PROPOSED
+statement: "프로젝트 선택 또는 권고"
+project: wiki/projects/<project>.md
+sources:
+  - raw/<path>
+source_ids:
+  - RAW-<SOURCE>-<YYYYMMDD>-<NNNN>
+evidence:
+  - "RAW-<SOURCE>-<YYYYMMDD>-<NNNN> | recommends | lines N-M | 원문 발췌"
+next_actions:
+  - "ACTION-<DOMAIN>-<NNNN> | RAW-<SOURCE>-<YYYYMMDD>-<NNNN> | lines N-M | 후속 행동 | 원문 발췌"
+chronology:
+  - "YYYY-MM-DD | proposed | RAW-<SOURCE>-<YYYYMMDD>-<NNNN> | lines N-M | 원문 발췌"
+supersedes: []
+superseded_by: []
+```
+
+Decision 상태는 `PROPOSED`, `ADOPTED`, `SUPERSEDED`, `REJECTED`, `BLOCKED`, `PAUSED`다. 각 `next_actions`와 `chronology` 항목은 Source ID·`lines N-M` locator·원문 excerpt를 포함해야 하며 rebuild가 Raw와 직접 대조한다. `trace`는 `Decision → Project → Source locator → Raw SHA-256`을 검증한다.
+
+## Canon 규칙
+
+- 일반 질의는 Canon → Confirmed/Supported Claim → Observed → Hypothesis/Inference → Raw 순서로 좁힌다.
+- 조사·반증 질의는 충돌·Rejected·새 Raw와 실험까지 확인한다.
+- Canon 문서는 실제 `claim_ids`와 `manual_reviewed: true`가 있어야 `rebuild`를 통과한다.
+- 새 Raw가 Canon보다 최신일 수 있다. 최신이라는 이유만으로 더 정확하다고 판단하지 않는다.
+- `trace`가 `Canon → Claim → Source → Raw`와 현재 SHA-256을 보여주지 못하면 중요한 결론으로 사용하지 않는다.
+
+## 실패와 복구
+
+- `rebuild`는 임시 DB에서 외래 키, ID, 상태, Source 존재, Raw SHA-256을 확인하고 성공할 때만 DB를 원자 교체한다.
+- DB를 잃어도 Markdown 정본에서 `rebuild`한다.
+- Raw 해시가 다르면 원문을 고치지 말고 즉시 중단해 변경 경위를 조사한다.
+- 자동 추출 결과가 애매하면 `UNKNOWN` 또는 `HYPOTHESIS`로 남긴다.
+
+## 아직 구현하지 않은 범위
+
+Embedding, 자동 Claim/Decision 추출, 의미 dedupe, 자동 conflict detection, experiment/conflict 테이블, 이미지 OCR·분석, 외부 LLM 전송, 대시보드는 실제 자료와 필요성이 확인된 뒤 추가한다.

@@ -66,6 +66,7 @@ python "<SKILL_ROOT>/scripts/audit_wiki.py" \
 3. 원문과 Wiki 사이 또는 여러 Wiki 문서 사이의 주장 충돌.
 4. raw가 더 최신이지만 어떤 내용을 다시 반영할지 판단해야 하는 문서.
 5. 값이 확정되지 않는 필수 필드, 오래된 문서, 검증 상태.
+6. Evidence Source의 `semantic_status: pending|partial`, 반복 boilerplate, Source가 반영했다고 한 Claim·Project·Decision의 역 provenance 누락.
 
 판단 필요 항목은 대상 규칙이 지정한 위치에 기록한다. 현재 볼트는 `wiki/questions.md`, ProjectMoon은 `Document/AI/OPEN_QUESTIONS.md`를 사용한다. 해당 위치가 없거나 이번 요청이 진단만이면 파일을 만들지 말고 채팅에만 보고한다.
 
@@ -85,4 +86,5 @@ python "<SKILL_ROOT>/scripts/audit_wiki.py" \
 - 현재 볼트의 필드·폴더·질문·로그 구조를 다른 Wiki에 이식하지 않는다.
 - 모순을 임의로 한쪽으로 정리하거나 고립·중복 문서를 사용자 확인 없이 삭제하지 않는다.
 - 보고서의 “유사함”만으로 링크를 자동 교체하지 않는다.
+- semantic partial을 자동 reviewed로 바꾸거나 deterministic graph edge를 의미 근거로 세지 않는다.
 - 진단 요청만으로 Wiki나 외부 상태를 수정하지 않는다.

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 BASE_DIRECTORIES = (
     "raw/inbox",
@@ -39,12 +39,16 @@ PROFILE_DIRECTORIES = {
     "standard": (),
     "evidence": (
         "wiki/claims",
+        "wiki/decisions",
         "wiki/canon",
         "wiki/conflicts",
         "wiki/experiments",
+        "wiki/normalized",
         "wiki/questions/open",
         "wiki/questions/answered",
         "wiki/questions/blocked",
+        "tools",
+        ".evidence-kb",
         ".wiki-cache/normalized",
         ".wiki-cache/index",
         ".wiki-cache/embeddings",
@@ -75,8 +79,14 @@ PROFILE_DOCS = {
         ("profiles/evidence/docs/evidence-model.md.template", "wiki/evidence-model.md", True),
         ("profiles/evidence/docs/canon-overview.md.template", "wiki/canon/overview.md", True),
         ("profiles/evidence/docs/evidence-operations.md", "instructions/evidence-operations.md", False),
+        ("profiles/evidence/docs/evidence-kb.md.template", "instructions/evidence-kb.md", True),
         ("profiles/evidence/docs/cache.gitignore", ".wiki-cache/.gitignore", False),
     ),
+}
+
+PROFILE_RUNTIME_FILES = {
+    "standard": (),
+    "evidence": (("profiles/evidence/runtime/kb.py", "tools/kb.py"),),
 }
 
 BASE_SKILLS = ("ingest", "query", "lint", "session-memory", "brief-tuner", "wiki-audit")
@@ -100,6 +110,29 @@ PROPOSABLE_DOCS = {
 PROFILE_PROPOSABLE_DOCS = {
     "wiki/evidence-model.md",
     "instructions/evidence-operations.md",
+    "instructions/evidence-kb.md",
+}
+
+EVIDENCE_CONTRACT_FILES = (
+    ("profiles/evidence/docs/evidence-model.md.template", "wiki/evidence-model.md"),
+    ("profiles/evidence/docs/evidence-operations.md", "instructions/evidence-operations.md"),
+    ("profiles/evidence/docs/evidence-kb.md.template", "instructions/evidence-kb.md"),
+    ("profiles/evidence/runtime/kb.py", "tools/kb.py"),
+    ("profiles/evidence/templates/source-record.md", "templates/evidence/source-record.md"),
+    ("profiles/evidence/templates/decision.md", "templates/evidence/decision.md"),
+    ("skills-bundle/agents-skills/ingest/scripts/semantic_contract.py", ".agents/skills/ingest/scripts/semantic_contract.py"),
+    ("skills-bundle/agents-skills/ingest/scripts/stitch_explicit_links.py", ".agents/skills/ingest/scripts/stitch_explicit_links.py"),
+)
+
+EVIDENCE_CONTRACT_MARKERS = {
+    "profiles/evidence/docs/evidence-model.md.template": "wiki/decisions/",
+    "profiles/evidence/docs/evidence-operations.md": "semantic_status: pending|partial|reviewed",
+    "profiles/evidence/docs/evidence-kb.md.template": "Project Decision 계약",
+    "profiles/evidence/runtime/kb.py": "decision_to_project_to_evidence_to_raw",
+    "profiles/evidence/templates/source-record.md": "semantic_status: pending",
+    "profiles/evidence/templates/decision.md": "chronology:",
+    "skills-bundle/agents-skills/ingest/scripts/semantic_contract.py": "long Source semantic review requires",
+    "skills-bundle/agents-skills/ingest/scripts/stitch_explicit_links.py": "semantic_edges_added",
 }
 
 EVIDENCE_ROUTER_MARKER = "<!-- LLM-WIKI:EVIDENCE-PROFILE -->"
@@ -111,15 +144,33 @@ def write_text(path: Path, text: str) -> None:
         file.write(text.replace("\r\n", "\n").replace("\r", "\n"))
 
 
-def seed_ingest_ledger(target: Path) -> None:
+def seed_ingest_ledger(target: Path, *, propose_existing: bool = False) -> list[str]:
     ledger = {
-        "version": 1,
+        "version": 2,
         "updated": datetime.now().astimezone().isoformat(),
         "graphify": "not_checked",
-        "counts": {"pending": 0, "verified": 0, "skipped": 0, "catalog_only": 0},
+        "counts": {
+            "pending": 0,
+            "verified": 0,
+            "skipped": 0,
+            "rejected": 0,
+            "catalog_only": 0,
+            "semantic_pending": 0,
+            "semantic_partial": 0,
+            "semantic_reviewed": 0,
+        },
+        "completion": "partial",
+        "errors": [],
         "sources": [],
     }
-    write_text(target / "wiki" / "ingest-ledger.json", json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
+    destination = target / "wiki" / "ingest-ledger.json"
+    content = json.dumps(ledger, ensure_ascii=False, indent=2) + "\n"
+    if destination.exists() and propose_existing and destination.read_text(encoding="utf-8") != content:
+        proposal = destination.with_name(destination.name + ".wiki-proposed")
+        write_text(proposal, content)
+        return [proposal.relative_to(target).as_posix()]
+    write_text(destination, content)
+    return []
 
 
 def load_config(config_path: Path, keys: tuple[str, ...]) -> dict:
@@ -181,8 +232,9 @@ def skills_for_profile(profile: str) -> tuple[str, ...]:
     return BASE_SKILLS + PROFILE_SKILLS[profile]
 
 
-def install_skills(target: Path, profile: str) -> None:
+def install_skills(target: Path, profile: str, *, propose_existing: bool = False) -> list[str]:
     selected = skills_for_profile(profile)
+    proposals: list[str] = []
     roots = (
         (ASSETS / "skills-bundle/agents-skills", target / ".agents/skills"),
         (ASSETS / "skills-bundle/claude-adapters", target / ".claude/skills"),
@@ -192,23 +244,100 @@ def install_skills(target: Path, profile: str) -> None:
             source = source_root / skill
             if not source.is_dir():
                 raise FileNotFoundError(f"bundled skill is missing: {source}")
-            shutil.copytree(source, destination_root / skill, dirs_exist_ok=True)
-    for root in (target / ".agents/skills", target / ".claude/skills"):
-        for path in root.rglob("SKILL.md.bundled"):
-            destination = path.with_name("SKILL.md")
-            if destination.exists():
-                destination.unlink()
-            path.rename(destination)
+            for source_file in source.rglob("*"):
+                if not source_file.is_file() or "__pycache__" in source_file.parts or source_file.suffix == ".pyc":
+                    continue
+                relative = source_file.relative_to(source)
+                if relative.name == "SKILL.md.bundled":
+                    relative = relative.with_name("SKILL.md")
+                destination = destination_root / skill / relative
+                if destination.exists():
+                    if destination.read_bytes() == source_file.read_bytes():
+                        continue
+                    if propose_existing:
+                        proposal = destination.with_name(destination.name + ".wiki-proposed")
+                        proposal.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source_file, proposal)
+                        proposals.append(proposal.relative_to(target).as_posix())
+                        continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_file, destination)
+    return proposals
+
+
+def validate_profile_bundle(profile: str) -> None:
+    if profile != "evidence":
+        return
+    missing = [source for source, _ in EVIDENCE_CONTRACT_FILES if not (ASSETS / source).is_file()]
+    marker_errors = [
+        f"{source} missing marker {marker!r}"
+        for source, marker in EVIDENCE_CONTRACT_MARKERS.items()
+        if (ASSETS / source).is_file() and marker not in (ASSETS / source).read_text(encoding="utf-8")
+    ]
+    if missing or marker_errors:
+        details = [*(f"missing {path}" for path in missing), *marker_errors]
+        raise RuntimeError("invalid Evidence bundle: " + "; ".join(details))
+
+
+def install_profile_runtime(
+    target: Path,
+    profile: str,
+    *,
+    propose_existing: bool = False,
+) -> tuple[list[str], list[str]]:
+    installed: list[str] = []
+    proposals: list[str] = []
+    for source_name, destination_name in PROFILE_RUNTIME_FILES[profile]:
+        source = ASSETS / source_name
+        if not source.is_file():
+            raise FileNotFoundError(f"profile runtime is missing: {source}")
+        destination = target / destination_name
+        if destination.exists() and destination.read_bytes() != source.read_bytes() and propose_existing:
+            proposal = destination.with_name(destination.name + ".wiki-proposed")
+            write_text(proposal, source.read_text(encoding="utf-8"))
+            proposals.append(proposal.relative_to(target).as_posix())
+            continue
+        write_text(destination, source.read_text(encoding="utf-8"))
+        installed.append(destination_name)
+    return installed, proposals
+
+
+def verify_profile_installation(target: Path, profile: str) -> dict[str, object]:
+    if profile != "evidence":
+        return {"status": "not_applicable", "checked": [], "pending": [], "errors": []}
+    missing = [destination for _, destination in EVIDENCE_CONTRACT_FILES if not (target / destination).is_file()]
+    errors = [f"missing installed Evidence file: {path}" for path in missing]
+    pending: list[str] = []
+    for source_name, destination_name in EVIDENCE_CONTRACT_FILES:
+        marker = EVIDENCE_CONTRACT_MARKERS.get(source_name)
+        destination = target / destination_name
+        if marker and destination.is_file() and marker not in destination.read_text(encoding="utf-8"):
+            proposal = destination.with_name(destination.name + ".wiki-proposed")
+            if proposal.is_file() and marker in proposal.read_text(encoding="utf-8"):
+                pending.append(proposal.relative_to(target).as_posix())
+            else:
+                errors.append(f"installed Evidence file lacks marker {marker!r}: {destination_name}")
+    if not (target / "wiki/decisions").is_dir():
+        errors.append("missing installed Evidence directory: wiki/decisions")
+    return {
+        "status": "failed" if errors else ("pending" if pending else "ok"),
+        "checked": [destination for _, destination in EVIDENCE_CONTRACT_FILES],
+        "pending": pending,
+        "errors": errors,
+    }
 
 
 def profile_replacements(profile: str) -> dict[str, str]:
     if profile == "evidence":
         return {
             "{{VAULT_PROFILE}}": "evidence",
-            "{{PROFILE_SUMMARY}}": "Evidence Research — Raw → Claim → Evidence/Conflict/Experiment → reviewed Canon",
+            "{{PROFILE_SUMMARY}}": "Evidence Research — Raw → Source → Claim 또는 Project Decision → reviewed Canon",
             "{{PROFILE_ROUTER}}": (
+                f"{EVIDENCE_ROUTER_MARKER}\n"
                 "- Evidence profile: `wiki/evidence-model.md`와 `instructions/evidence-operations.md`를 먼저 읽고, "
-                "Canon 승격 검토에는 설치된 `canon-review` 스킬을 사용한다."
+                "Canon 승격 검토에는 설치된 `canon-review` 스킬을 사용한다.\n"
+                "- Evidence KB 등록·Claim·Decision·Canon·검색·추적은 `instructions/evidence-kb.md`를 읽고 "
+                "`tools/kb.py`를 사용한다."
             ),
         }
     return {
@@ -225,22 +354,37 @@ def render_asset(source_name: str, replacements: dict[str, str]) -> str:
     return content
 
 
-def copy_profile_templates(target: Path, profile: str, *, overwrite: bool) -> int:
+def copy_profile_templates(
+    target: Path,
+    profile: str,
+    *,
+    overwrite: bool,
+    propose_existing: bool = False,
+) -> tuple[int, list[str]]:
     source_root = ASSETS / "profiles" / profile / "templates"
     if not source_root.is_dir():
-        return 0
+        return 0, []
     copied = 0
+    proposals: list[str] = []
     destination_root = target / "templates" / profile
     for source in source_root.rglob("*"):
         if not source.is_file():
             continue
         destination = destination_root / source.relative_to(source_root)
-        if destination.exists() and not overwrite:
-            continue
+        if destination.exists():
+            if destination.read_bytes() == source.read_bytes():
+                continue
+            if propose_existing:
+                proposal = destination.with_name(destination.name + ".wiki-proposed")
+                shutil.copy2(source, proposal)
+                proposals.append(proposal.relative_to(target).as_posix())
+                continue
+            if not overwrite:
+                continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         copied += 1
-    return copied
+    return copied, proposals
 
 
 def install_profile_docs(
@@ -320,7 +464,15 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
     if not ((target / "raw").is_dir() and (target / "wiki").is_dir()):
         raise ValueError("target is not an LLM Wiki; use --mode new or migrate")
 
+    previous_manifest = read_manifest(target) or {}
+    previous_schema_version = previous_manifest.get("schema_version", 1)
+    try:
+        previous_schema_version = int(previous_schema_version)
+    except (TypeError, ValueError):
+        previous_schema_version = 1
     resolved_profile, previous_profile = resolve_profile(target, profile, "upgrade")
+    knowledge_migration_pending = resolved_profile == "evidence" and previous_schema_version < SCHEMA_VERSION
+    validate_profile_bundle(resolved_profile)
     project_name = project_name_for_upgrade(target, config_path)
     replacements = {
         "{{PROJECT_NAME}}": project_name,
@@ -337,7 +489,12 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
         if (target / root / skill).is_dir()
     ]
     runtime = target / ".session-memory/scripts/session_memory.py"
-    if backup_sources or runtime.is_file():
+    profile_runtime_sources = [
+        target / destination
+        for _, destination in PROFILE_RUNTIME_FILES[resolved_profile]
+        if (target / destination).is_file()
+    ]
+    if backup_sources or runtime.is_file() or profile_runtime_sources:
         backup_dir = target / ".wiki-upgrade-bak" / datetime.now().strftime("%Y%m%d-%H%M%S")
         for source in backup_sources:
             destination = backup_dir / source.relative_to(target)
@@ -347,11 +504,16 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
             destination = backup_dir / runtime.relative_to(target)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(runtime, destination)
+        for source in profile_runtime_sources:
+            destination = backup_dir / source.relative_to(target)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
 
     for directory in BASE_DIRECTORIES + PROFILE_DIRECTORIES[resolved_profile]:
         (target / directory).mkdir(parents=True, exist_ok=True)
 
     install_skills(target, resolved_profile)
+    profile_runtime, _ = install_profile_runtime(target, resolved_profile)
     for directory in ("pending", "sessions", "transactions", "scripts"):
         (target / ".session-memory" / directory).mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS / "session-memory-runtime/session_memory.py", runtime)
@@ -369,9 +531,16 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
                 copied_templates += 1
-    copied_templates += copy_profile_templates(target, resolved_profile, overwrite=False)
+    copied_profile_templates, profile_template_proposals = copy_profile_templates(
+        target,
+        resolved_profile,
+        overwrite=False,
+        propose_existing=True,
+    )
+    copied_templates += copied_profile_templates
 
     proposals: list[str] = []
+    proposals.extend(profile_template_proposals)
     router_proposals = propose_profile_router_docs(target, resolved_profile)
     proposals.extend(router_proposals)
     source = ASSETS / "docs/instructions/wiki-operations.md"
@@ -419,6 +588,9 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
         taxonomy_status = "proposal"
 
     write_manifest(target, project_name, resolved_profile)
+    profile_verification = verify_profile_installation(target, resolved_profile)
+    if profile_verification["status"] == "failed":
+        raise RuntimeError("Evidence installation verification failed: " + "; ".join(profile_verification["errors"]))
 
     return {
         "ok": True,
@@ -430,7 +602,11 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
         "backup_dir": str(backup_dir.resolve()) if backup_dir else None,
         "proposals": proposals,
         "profile_docs": profile_docs,
-        "profile_activation_pending": bool(router_proposals),
+        "profile_runtime": profile_runtime,
+        "profile_verification": profile_verification,
+        "profile_activation_pending": profile_verification["status"] == "pending" or bool(router_proposals) or knowledge_migration_pending,
+        "knowledge_migration_pending": knowledge_migration_pending,
+        "previous_schema_version": previous_schema_version,
         "refreshed_skills": list(skills_for_profile(resolved_profile)),
         "copied_templates": copied_templates,
         "graphifyignore": graphifyignore_status,
@@ -445,13 +621,15 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
         raise ValueError(f"unsupported bootstrap mode: {mode}")
     if mode == "new" and target.exists() and any(target.iterdir()):
         raise ValueError("target is not empty; use --mode migrate for an existing folder")
-    markers = ("raw", "wiki", ".agents", "CLAUDE.md", MANIFEST_NAME) if mode == "new" else ("raw", "wiki", ".agents", MANIFEST_NAME)
-    if target.exists() and any((target / name).exists() for name in markers):
+    markers = ("raw", "wiki", ".agents", "CLAUDE.md", MANIFEST_NAME)
+    looks_like_wiki = (target / MANIFEST_NAME).is_file() or ((target / "raw").is_dir() and (target / "wiki").is_dir())
+    if target.exists() and (any((target / name).exists() for name in markers) if mode == "new" else looks_like_wiki):
         if mode == "migrate":
             raise ValueError("target looks like an existing LLM Wiki; use --mode upgrade")
         raise ValueError("target already contains an LLM Wiki marker")
 
     resolved_profile, _ = resolve_profile(target, profile, mode)
+    validate_profile_bundle(resolved_profile)
     existing_entries = sorted(path.name for path in target.iterdir()) if target.exists() else []
     target.mkdir(parents=True, exist_ok=True)
     config = load_config(config_path, ("project_name", "domain_summary"))
@@ -459,13 +637,41 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
     for directory in BASE_DIRECTORIES + PROFILE_DIRECTORIES[resolved_profile]:
         (target / directory).mkdir(parents=True, exist_ok=True)
 
-    install_skills(target, resolved_profile)
-    shutil.copytree(ASSETS / "templates", target / "templates", dirs_exist_ok=True)
-    profile_template_count = copy_profile_templates(target, resolved_profile, overwrite=True)
-    shutil.copyfile(
-        ASSETS / "session-memory-runtime/session_memory.py",
-        target / ".session-memory/scripts/session_memory.py",
+    skill_proposals = install_skills(target, resolved_profile, propose_existing=mode == "migrate")
+    profile_runtime, profile_runtime_proposals = install_profile_runtime(
+        target,
+        resolved_profile,
+        propose_existing=mode == "migrate",
     )
+    template_proposals: list[str] = []
+    for source in (ASSETS / "templates").rglob("*"):
+        if not source.is_file():
+            continue
+        destination = target / "templates" / source.relative_to(ASSETS / "templates")
+        if mode == "migrate" and destination.exists() and destination.read_bytes() != source.read_bytes():
+            proposal = destination.with_name(destination.name + ".wiki-proposed")
+            proposal.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, proposal)
+            template_proposals.append(proposal.relative_to(target).as_posix())
+            continue
+        if not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+    profile_template_count, profile_template_proposals = copy_profile_templates(
+        target,
+        resolved_profile,
+        overwrite=mode == "new",
+        propose_existing=mode == "migrate",
+    )
+    session_runtime_source = ASSETS / "session-memory-runtime/session_memory.py"
+    session_runtime_destination = target / ".session-memory/scripts/session_memory.py"
+    session_runtime_proposals: list[str] = []
+    if mode == "migrate" and session_runtime_destination.exists() and session_runtime_destination.read_bytes() != session_runtime_source.read_bytes():
+        proposal = session_runtime_destination.with_name(session_runtime_destination.name + ".wiki-proposed")
+        shutil.copy2(session_runtime_source, proposal)
+        session_runtime_proposals.append(proposal.relative_to(target).as_posix())
+    elif not session_runtime_destination.exists():
+        shutil.copyfile(session_runtime_source, session_runtime_destination)
 
     replacements = {
         "{{PROJECT_NAME}}": config["project_name"],
@@ -474,11 +680,20 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
         **profile_replacements(resolved_profile),
     }
     rendered_docs: list[str] = []
-    proposals: list[str] = []
+    proposals: list[str] = [
+        *skill_proposals,
+        *profile_runtime_proposals,
+        *template_proposals,
+        *profile_template_proposals,
+        *session_runtime_proposals,
+    ]
     for source_name, destination_name, render in BASE_DOCS:
         content = render_asset(source_name, replacements) if render else (ASSETS / "docs" / source_name).read_text(encoding="utf-8")
         destination = target / destination_name
-        if mode == "migrate" and destination_name in PROPOSABLE_DOCS and destination.exists():
+        if mode == "migrate" and destination.exists():
+            if destination.read_text(encoding="utf-8") == content:
+                rendered_docs.append(destination_name)
+                continue
             destination = destination.with_name(destination.name + ".wiki-proposed")
             proposals.append(destination.relative_to(target).as_posix())
         write_text(destination, content)
@@ -493,8 +708,11 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
     rendered_docs.extend(profile_docs)
     proposals.extend(profile_proposals)
 
-    seed_ingest_ledger(target)
+    proposals.extend(seed_ingest_ledger(target, propose_existing=mode == "migrate"))
     write_manifest(target, config["project_name"], resolved_profile)
+    profile_verification = verify_profile_installation(target, resolved_profile)
+    if profile_verification["status"] == "failed":
+        raise RuntimeError("Evidence installation verification failed: " + "; ".join(profile_verification["errors"]))
 
     result = {
         "ok": True,
@@ -505,6 +723,10 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
         "rendered_docs": rendered_docs,
         "copied_templates": sum(path.is_file() for path in (target / "templates").rglob("*")),
         "profile_templates": profile_template_count,
+        "profile_runtime": profile_runtime,
+        "profile_verification": profile_verification,
+        "profile_activation_pending": profile_verification["status"] == "pending",
+        "knowledge_migration_pending": False,
         "manifest": MANIFEST_NAME,
     }
     if mode == "migrate":

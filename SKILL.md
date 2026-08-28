@@ -25,6 +25,7 @@ description: LLM Wiki 볼트를 신규 구축(new), 기존 일반 폴더에서 �
 7. Evidence의 Claim은 자동으로 Canon으로 승격하지 않는다.
 8. `.wiki-proposed`가 생기면 기존 문서를 덮어쓰지 않고 차이를 검토한다.
 9. 실패한 검증을 성공으로 보고하지 않는다.
+10. Evidence 설치는 파일 존재만으로 완료하지 않는다. 설치된 ingest/lint/query 회귀 테스트, `tools/kb.py selftest`, profile verification을 실제 대상에서 통과해야 한다.
 
 ## 전제 조건
 
@@ -122,6 +123,7 @@ stdout 마지막 JSON에서 `ok: true`를 확인한다.
 - `.llm-wiki.json`
 - base 스킬 6종: ingest/query/lint/session-memory/brief-tuner/wiki-audit
 - Evidence면 canon-review와 claims/canon/conflicts/experiments/questions/.wiki-cache
+- Evidence면 decisions, `instructions/evidence-kb.md`, `tools/kb.py`, semantic ingest runtime과 Source/Decision templates도 포함한다.
 
 # 5. upgrade — GitHub 최신 커밋이 정본
 
@@ -145,6 +147,7 @@ python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>"
 2. 그 default branch의 최신 commit SHA를 조회한다.
 3. branch 이름이 아니라 **검증된 정확한 40자 SHA**의 ZIP을 GitHub codeload에서 받는다.
 4. archive path traversal을 차단하고 필수 파일/skills bundle 존재를 검증한다.
+   Evidence 계약의 `semantic_contract.py`, structural stitch, `tools/kb.py`, Decision template이 없는 구버전 checkout도 target 수정 전에 거부한다.
 5. 여기까지 전부 성공하기 전에는 대상 Wiki를 건드리지 않는다.
 6. 다운로드한 그 커밋의 `scripts/bootstrap.py --mode upgrade`를 실행한다.
 7. 기존 스킬은 최신 bootstrap logic에 의해 `.wiki-upgrade-bak/<timestamp>/`로 백업된 뒤 교체된다.
@@ -162,6 +165,7 @@ python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>"
 - 대상 Wiki를 수정하지 않는다.
 - 실패 이유를 그대로 보고한다.
 - 로컬 bundle로 자동 fallback하지 않는다.
+- 공식 HEAD가 현재 Evidence contract보다 오래돼 checkout 검증이 실패하면 upstream publication이 필요하다고 보고한다.
 
 ## 명시적 offline/local 경로
 
@@ -183,6 +187,7 @@ migrate는 기존 일반 폴더를 Wiki로 만든다.
 
 - 기존 파일 삭제/수정 금지
 - 루트 문서 충돌은 `.wiki-proposed`
+- templates, skills, session runtime, Output 문서를 포함해 생성 경로가 기존 파일과 충돌하면 원본을 유지하고 새 버전을 `.wiki-proposed`로만 제안한다.
 - 기존 파일을 raw로 옮길 때 파일별 원래 경로와 목적지를 표로 제시
 - 사용자 승인 후 이동
 - 이동 뒤 `/ingest` batch 처리
@@ -195,9 +200,17 @@ Evidence profile이면 `wiki/evidence-model.md`와 `instructions/evidence-operat
 
 ```text
 Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question
+Raw → Source Record → Project Decision → next action/chronology/supersedes
 ```
 
 Canon 자동 수정 금지.
+
+- `structurally_verified`와 `semantic_status: pending|partial|reviewed`를 분리한다.
+- 긴 Source는 start/middle/EOF coverage와 실제 locator 인용이 필요하다.
+- 대화의 최종 결정·다음 행동·대체 이력은 Claim이 아니라 Decision 계약으로 보존한다.
+- Claim evidence와 Decision evidence·각 next action·chronology는 Source ID, `lines N-M` locator와 excerpt를 가져야 하며 Raw와 직접 대조한다.
+- Markdown뿐 아니라 Python·JavaScript·TypeScript·PowerShell 등 텍스트 코드 원문에도 line/EOF coverage를 적용한다.
+- outgoing Wiki link와 deterministic stitch edge는 semantic completion 증거가 아니다.
 
 ## Claim 상태
 
@@ -243,14 +256,26 @@ python ".claude/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
 ```
 
+Evidence profile이면 설치된 실제 런타임으로 추가 실행한다.
+
+```bash
+python -m unittest discover ".agents/skills/ingest/tests" -p "test_*.py"
+python -m unittest discover ".agents/skills/lint/tests" -p "test_*.py"
+python -m unittest discover ".agents/skills/query/tests" -p "test_*.py"
+python "tools/kb.py" selftest
+```
+
 확인:
 
 - 올바른 root
 - `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json`
 - 렌더링 placeholder 없음
 - Evidence면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `canon-review`
+- Evidence new는 결과의 `profile_verification.status: ok`를 요구한다. migrate/upgrade가 기존 관리 문서를 보존해 `.wiki-proposed`를 만들면 `status: pending`과 `profile_activation_pending: true`가 정상이다. 기존 manifest schema가 낮으면 `knowledge_migration_pending: true`로 표시하며, 제안 검토와 실제 KB rebuild/query가 끝나기 전에는 Evidence 계약 활성화를 완료로 보고하지 않는다.
+- Evidence면 `wiki/decisions/`, `instructions/evidence-kb.md`, `tools/kb.py`, `semantic_contract.py`, Source/Decision template을 확인한다.
 - upgrade면 결과의 `upgrade_source`, `bootstrap_commit`, `backup_dir`
 - GitHub upgrade 성공이면 `.llm-wiki.json.last_upgrade.commit`과 결과 commit이 일치
+- 기존 Raw가 있는 migrate/upgrade는 대표 긴 Source 하나에서 head-only가 partial로 실패하고, 전체 coverage·locator가 있는 reviewed Source와 Decision/Claim trace가 실제 query에서 회수되는지 확인한다.
 
 실패를 숨기지 않는다.
 

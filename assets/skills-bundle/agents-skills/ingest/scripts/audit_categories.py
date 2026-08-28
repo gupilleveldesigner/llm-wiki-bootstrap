@@ -33,7 +33,10 @@ def read_frontmatter(text: str) -> str:
 
 
 def frontmatter_labels(frontmatter: str) -> list[str]:
-    match = re.search(r"(?m)^(topics|tags):\s*(.*)$", frontmatter)
+    # Keep whitespace matching on the key's physical line. ``\s`` also
+    # consumes newlines, which made the first block-list item (``- label``)
+    # look like an inline value including its YAML dash.
+    match = re.search(r"(?m)^(topics|tags):[ \t]*(.*)$", frontmatter)
     if not match:
         return []
     first = match.group(2).strip()

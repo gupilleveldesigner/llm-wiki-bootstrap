@@ -20,6 +20,7 @@ if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
 from find_uningested import (
+    HOST_INSTRUCTION_FILES,
     OPERATIONAL_WIKI_FILES,
     PLAIN_RAW_PATH_RE,
     configure_utf8_stdout,
@@ -28,6 +29,7 @@ from find_uningested import (
     source_summary_quality,
 )
 from audit_categories import audit as audit_categories
+from semantic_contract import review_source_record, semantic_partition
 
 
 TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*", re.MULTILINE)
@@ -163,7 +165,19 @@ def record_graphify_run(root: Path, host: str) -> dict[str, Any]:
 
 def coverage_summary(root: Path) -> dict[str, int]:
     result = scan(root)
-    return {name: len(result.get(name, [])) for name in ("pending", "ingested", "skipped", "rejected", "catalog_only")}
+    return {
+        name: len(result.get(name, []))
+        for name in (
+            "pending",
+            "ingested",
+            "skipped",
+            "rejected",
+            "catalog_only",
+            "semantic_pending",
+            "semantic_partial",
+            "semantic_reviewed",
+        )
+    }
 
 
 def write_ingest_ledger(
@@ -178,14 +192,16 @@ def write_ingest_ledger(
     entries: list[dict[str, object]] = []
     for state in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
         for item in scan_result.get(state, []):
-            entries.append(
-                {
-                    "path": item["path"],
-                    "status": "verified" if state == "ingested" else state,
-                    "reason": item.get("reason"),
-                    "modified": item.get("modified"),
-                }
-            )
+            entry = {
+                "path": item["path"],
+                "status": "verified" if state == "ingested" else state,
+                "reason": item.get("reason"),
+                "modified": item.get("modified"),
+            }
+            for key in ("structurally_verified", "semantic_status", "source_record", "semantic_errors"):
+                if key in item:
+                    entry[key] = item[key]
+            entries.append(entry)
     counts = {state: 0 for state in ("pending", "verified", "skipped", "rejected", "catalog_only")}
     for entry in entries:
         counts[str(entry["status"])] = counts.get(str(entry["status"]), 0) + 1
@@ -197,8 +213,14 @@ def write_ingest_ledger(
         ]
         if related:
             entry["errors"] = related
+    counts.update(
+        {
+            state: len(scan_result.get(state, []))
+            for state in ("semantic_pending", "semantic_partial", "semantic_reviewed")
+        }
+    )
     ledger = {
-        "version": 1,
+        "version": 2,
         "updated": datetime.now(timezone.utc).isoformat(),
         "graphify": graph,
         "counts": counts,
@@ -218,33 +240,6 @@ def raw_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def evidence_quotes_match(raw_path: Path, note_text: str) -> bool:
-    raw_text: str | None = None
-    if raw_path.suffix.casefold() == ".pdf":
-        extractor = shutil.which("pdftotext")
-        if extractor:
-            completed = subprocess.run(
-                [extractor, "-layout", str(raw_path), "-"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            if completed.returncode == 0:
-                raw_text = completed.stdout.decode("utf-8", errors="replace")
-    else:
-        for encoding in ("utf-8-sig", "utf-16", "cp949", "latin-1"):
-            try:
-                raw_text = raw_path.read_text(encoding=encoding)
-                break
-            except (OSError, UnicodeDecodeError):
-                continue
-    if raw_text is None:
-        return False
-    raw_text = " ".join(raw_text.split())
-    quotes = [line.lstrip()[1:].strip() for line in note_text.splitlines() if line.lstrip().startswith(">")]
-    return bool(quotes) and any(" ".join(quote.split()) in raw_text for quote in quotes if quote)
 
 
 def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str]:
@@ -338,8 +333,10 @@ def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str
                     actual_hash = raw_sha256(raw_path)
                     if declared_hash != actual_hash:
                         errors.append(f"{relative}: raw_sha256 does not match the cited raw file")
-                    if not evidence_quotes_match(raw_path, text):
-                        errors.append(f"{relative}: evidence quote does not match the cited raw file")
+                    semantic = review_source_record(root, path, raw_path, text)
+                    if semantic["semantic_status"] != "reviewed":
+                        errors.append(f"{relative}: semantic review is {semantic['semantic_status']}, not reviewed")
+                    errors.extend(f"{relative}: {error}" for error in semantic["errors"])
     return errors
 
 
@@ -399,11 +396,29 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
         return {"status": "validation_failed", "root": str(root), "errors": errors, "exit_code": 2}
 
     scan_result = scan(root)
-    coverage = {name: len(scan_result.get(name, [])) for name in ("pending", "ingested", "skipped", "rejected", "catalog_only")}
-    if complete_batch and (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"]):
+    coverage = {
+        name: len(scan_result.get(name, []))
+        for name in (
+            "pending",
+            "ingested",
+            "skipped",
+            "rejected",
+            "catalog_only",
+            "semantic_pending",
+            "semantic_partial",
+            "semantic_reviewed",
+        )
+    }
+    structural_incomplete = coverage["pending"] or coverage["rejected"] or coverage["catalog_only"]
+    semantic_incomplete = coverage["semantic_pending"] or coverage["semantic_partial"]
+    if complete_batch and (structural_incomplete or semantic_incomplete):
         errors = [
-            "Batch completion requires zero pending, rejected, and catalog-only raw sources.",
-            f"pending={coverage['pending']}, rejected={coverage['rejected']}, catalog_only={coverage['catalog_only']}",
+            "Batch completion requires structural coverage and zero pending/partial semantic reviews.",
+            (
+                f"pending={coverage['pending']}, rejected={coverage['rejected']}, "
+                f"catalog_only={coverage['catalog_only']}, semantic_pending={coverage['semantic_pending']}, "
+                f"semantic_partial={coverage['semantic_partial']}"
+            ),
         ]
         write_ingest_ledger(root, scan_result, graph="not_checked", errors=errors, completion="incomplete")
         return {
@@ -448,9 +463,9 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
         payload["graph_counts"] = graph_counts(root, workspace)
         payload["completion"] = (
             "complete_without_graph"
-            if graph in {"not_installed", "not_configured"} and not (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"])
+            if graph in {"not_installed", "not_configured"} and not (structural_incomplete or semantic_incomplete)
             else "complete"
-            if not (coverage["pending"] or coverage["rejected"] or coverage["catalog_only"])
+            if not (structural_incomplete or semantic_incomplete)
             else "partial"
         )
         if payload.get("exit_code") == 0:
@@ -619,6 +634,8 @@ def independent_graph_input_files(root: Path) -> list[Path]:
                 continue
             if relative.casefold() == "wiki/taxonomy.json":
                 continue
+            if relative.casefold() == "wiki/ingest-ledger.json":
+                continue
             if relative.casefold() == ".graphifyignore":
                 continue
             files.append(path)
@@ -768,14 +785,19 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
     raw_files = independent_raw_files(root)
     exclusions = independent_raw_exclusions(root)
     records = independent_source_records(root)
-    if changed_files and not complete_batch:
+    errors: list[str] = []
+    scoped_verification = bool(changed_files and not complete_batch)
+    if scoped_verification:
         changed = {Path(value).as_posix().casefold() for value in changed_files}
         records = [record for record in records if record["relative"].casefold() in changed]
-    errors: list[str] = []
+        if not records:
+            errors.append("Scoped verification matched no Source records.")
     category_result = audit_categories(root)
     if complete_batch and not category_result["valid"]:
         errors.extend(["Category audit failed.", *category_result["errors"]])
     verified = 0
+    structurally_verified = 0
+    semantic_counts = {"pending": 0, "partial": 0, "reviewed": 0}
     covered: set[str] = set()
     catalog_only: set[str] = set()
     for record in records:
@@ -784,6 +806,7 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         if len(targets) != 1:
             if len(targets) > 1:
                 catalog_only.update(target.casefold() for target in targets)
+            errors.append(f"Source record must cite exactly one Raw target: {record['relative']}")
             continue
         target = targets[0]
         raw_path = (root / target).resolve()
@@ -797,30 +820,69 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         if strict_record:
             if len(re.findall(r"(?m)^##+\s+", record["text"].split("---", 2)[-1])) < 3:
                 errors.append(f"Source summary has too few sections: {record['relative']}")
-            for key in ("key_claims", "concepts", "reflected_docs", "evidence_spans"):
+            for key in ("concepts", "reflected_docs", "evidence_spans"):
                 value = independent_int(front, key)
                 if value is None or value <= 0:
                     errors.append(f"Source summary has invalid {key}: {record['relative']}")
+            key_claims = independent_int(front, "key_claims")
+            if key_claims is None or key_claims < 0:
+                errors.append(f"Source summary has invalid key_claims: {record['relative']}")
+            meaning_count = sum(
+                independent_int(front, key) or 0
+                for key in ("key_claims", "key_decisions", "next_actions")
+            )
+            if meaning_count <= 0:
+                errors.append(f"Source summary has no Claim, Decision, or next action: {record['relative']}")
             declared_hash = independent_field(front, "raw_sha256").casefold()
             if declared_hash != raw_sha256(raw_path):
                 errors.append(f"Source hash mismatch: {record['relative']}")
-            if not evidence_quotes_match(raw_path, record["text"]):
-                errors.append(f"Raw evidence quote mismatch: {record['relative']}")
         for target_doc in record["wiki_targets"]:
             candidates = [root / "wiki" / target_doc, root / "wiki" / f"{target_doc}.md", root / target_doc, root / f"{target_doc}.md"]
             if not any(candidate.is_file() for candidate in candidates):
                 errors.append(f"Reflected Wiki document is missing: {target_doc}")
         if not any(target.casefold().startswith("raw/") for target in targets):
             errors.append(f"Source summary has no raw citation: {record['relative']}")
+        structural_ok = len(errors) == record_error_count
+        if structural_ok:
+            structurally_verified += 1
+        semantic_required = (
+            root.joinpath("wiki", "sources") in record["path"].parents
+            or independent_field(front, "type").casefold() == "source"
+            or bool(independent_field(front, "semantic_status"))
+        )
+        if semantic_required:
+            semantic = review_source_record(root, record["path"], raw_path, record["text"])
+            semantic_status = str(semantic["semantic_status"])
+            semantic_counts[semantic_status] = semantic_counts.get(semantic_status, 0) + 1
+            if semantic_status != "reviewed":
+                errors.append(f"Semantic review is {semantic_status}: {record['relative']}")
+            errors.extend(f"{record['relative']}: {error}" for error in semantic["errors"])
         if len(errors) == record_error_count:
             verified += 1
         covered.add(target.casefold())
 
-    raw_keys = {path.relative_to(root).as_posix().casefold() for path in raw_files}
+    raw_keys = (
+        {
+            target.casefold()
+            for record in records
+            for target in record["raw_targets"]
+            if len(record["raw_targets"]) == 1
+        }
+        if scoped_verification
+        else {path.relative_to(root).as_posix().casefold() for path in raw_files}
+    )
     missing = raw_keys - covered
+    uncovered_attachments = {
+        path.casefold()
+        for path in exclusions["skipped"]
+        if path.casefold() not in covered
+    }
     if complete_batch:
         errors.extend(f"Raw source is rejected or empty: {path}" for path in exclusions["rejected"])
-        errors.extend(f"Raw attachment lacks independent evidence: {path}" for path in exclusions["skipped"])
+        errors.extend(
+            f"Raw attachment lacks independent evidence: {path}"
+            for path in sorted(uncovered_attachments)
+        )
         errors.extend(f"Raw source has no independent source record: {path}" for path in sorted(missing))
         errors.extend(f"Catalog-only raw source: {path}" for path in sorted(catalog_only))
 
@@ -843,12 +905,16 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         errors.extend(independent_graph_check(root, records))
 
     coverage = {
-        "input": len(raw_files),
+        "input": len(records) if scoped_verification else len(raw_files) + len(exclusions["skipped"]),
         "verified": verified,
-        "pending": len(missing),
+        "structurally_verified": structurally_verified,
+        "semantic_reviewed": semantic_counts["reviewed"],
+        "semantic_partial": semantic_counts["partial"],
+        "semantic_pending": semantic_counts["pending"],
+        "pending": len(missing) + (0 if scoped_verification else len(uncovered_attachments)),
         "catalog_only": len(catalog_only),
         "rejected": 0,
-        "skipped": len(exclusions["skipped"]),
+        "skipped": 0 if scoped_verification else len(uncovered_attachments),
     }
     coverage["rejected"] = len(exclusions["rejected"])
     return {
@@ -856,10 +922,48 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         "verified": not errors,
         "coverage": coverage,
         "graph_status": graph,
+        "graph_contract": "structural_only",
         "graph_counts": counts,
         "category_audit": category_result,
         "errors": errors,
         "exit_code": 0 if not errors else 2,
+    }
+
+
+def semantic_plan(
+    root: Path,
+    values: Sequence[str] = (),
+    *,
+    max_lines: int = 400,
+    overlap_lines: int = 20,
+) -> dict[str, Any]:
+    """Plan intra-file ranges so batch workers cannot silently skip a long tail."""
+    raw_root = (root / "raw").resolve()
+    if values:
+        files: list[Path] = []
+        for value in values:
+            candidate = Path(value)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            candidate = candidate.resolve()
+            try:
+                candidate.relative_to(raw_root)
+            except ValueError as error:
+                raise ValueError(f"Semantic-plan source must stay under raw/: {value}") from error
+            if not candidate.is_file():
+                raise ValueError(f"Semantic-plan source does not exist: {value}")
+            files.append(candidate)
+    else:
+        files = independent_raw_files(root)
+    plans = [semantic_partition(path, max_lines=max_lines, overlap_lines=overlap_lines) for path in files]
+    for plan, path in zip(plans, files):
+        plan["path"] = path.relative_to(root).as_posix()
+    return {
+        "root": str(root),
+        "sources": len(plans),
+        "long_sources": sum(plan["unit"] == "lines" and plan["total"] >= 300 for plan in plans),
+        "coverage_complete": all(plan["coverage_complete"] for plan in plans),
+        "plans": plans,
     }
 
 
@@ -891,7 +995,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Portable LLM Wiki ingest support")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("status", "scan", "finalize", "verify", "category-audit", "record-graphify-run", "recover"):
+    for name in (
+        "status",
+        "scan",
+        "semantic-plan",
+        "finalize",
+        "verify",
+        "category-audit",
+        "record-graphify-run",
+        "recover",
+    ):
         child = subparsers.add_parser(name)
         child.add_argument(
             "--root",
@@ -903,6 +1016,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "scan":
             child.add_argument("--json", action="store_true")
+        if name == "semantic-plan":
+            child.add_argument("--source", action="append", default=[])
+            child.add_argument("--max-lines", type=int, default=400)
+            child.add_argument("--overlap-lines", type=int, default=20)
         if name == "finalize":
             child.add_argument("--changed-file", action="append", default=[])
             child.add_argument(
@@ -913,6 +1030,7 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "verify":
             child.add_argument("--require-graph", action="store_true")
             child.add_argument("--complete-batch", action="store_true")
+            child.add_argument("--changed-file", action="append", default=[])
         if name == "record-graphify-run":
             child.add_argument("--host", choices=("codex", "claude"), required=True)
     return parser
@@ -945,18 +1063,45 @@ def main() -> int:
         if args.json:
             print_json(result)
         else:
-            for name in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
+            for name in (
+                "pending",
+                "ingested",
+                "skipped",
+                "rejected",
+                "catalog_only",
+                "semantic_pending",
+                "semantic_partial",
+                "semantic_reviewed",
+            ):
                 print(f"{name}: {len(result[name])}")
                 for item in result[name]:
                     reason = f" - {item['reason']}" if "reason" in item else ""
                     print(f"  - {item['path']} ({item['modified']}){reason}")
+        return 0
+    if args.command == "semantic-plan":
+        try:
+            print_json(
+                semantic_plan(
+                    root,
+                    args.source,
+                    max_lines=args.max_lines,
+                    overlap_lines=args.overlap_lines,
+                )
+            )
+        except ValueError as error:
+            parser.error(str(error))
         return 0
     if args.command == "finalize":
         result = finalize(root, args.changed_file, complete_batch=args.complete_batch)
         print_json(result)
         return int(result["exit_code"])
     if args.command == "verify":
-        result = verify(root, require_graph=args.require_graph, complete_batch=args.complete_batch)
+        result = verify(
+            root,
+            require_graph=args.require_graph,
+            complete_batch=args.complete_batch,
+            changed_files=args.changed_file,
+        )
         print_json(result)
         return int(result["exit_code"])
     if args.command == "category-audit":

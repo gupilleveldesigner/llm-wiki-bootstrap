@@ -14,6 +14,12 @@ Profile: `evidence`
 RAW → SOURCE RECORD → CLAIM → EVIDENCE / CONFLICT / EXPERIMENT → CANON CANDIDATE
 ```
 
+프로젝트 선택은 사실 Claim과 분리해 병렬로 저장한다.
+
+```text
+RAW → SOURCE RECORD → PROJECT DECISION → NEXT ACTION / CHRONOLOGY
+```
+
 답변할 때는 반대로 내려간다.
 
 ```text
@@ -27,11 +33,19 @@ CANON → CLAIM → EVIDENCE → RAW
 - `raw/` — 불변 원문. LLM 답변, 코드, 로그, 프롬프트, 이미지, 실패 결과, 실험 기록을 포함한다.
 - `wiki/sources/` — Raw와 지식층을 잇는 1:1 source record. `raw_sha256`, provenance, source locator, lineage를 보존한다.
 - `wiki/claims/` — 원자적 주장. 문서 전체를 하나의 진실로 취급하지 않는다.
+- `wiki/decisions/` — 프로젝트 선택·권고·대체 이력. `PROPOSED/ADOPTED/SUPERSEDED/REJECTED/BLOCKED/PAUSED`를 사용하며 사실의 epistemic 상태나 Canon을 대신하지 않는다.
 - `wiki/conflicts/` — 서로 양립하기 어려운 Claim 집합과 미해결 검증 질문.
 - `wiki/experiments/` — 가설을 검증하기 위한 setup/control/variant/metrics/result 기록.
 - `wiki/questions/` — `open/`, `answered/`, `blocked/` 연구 질문.
 - `wiki/canon/` — 현재 프로젝트가 채택한 검토된 지식. 작게 유지한다.
 - `.wiki-cache/` — normalized/index/embedding 등 재생성 가능한 파생 데이터. 정본이 아니다.
+
+## Source 완료 상태
+
+- `structurally_verified` — 1:1 Raw 경로, SHA-256, 필수 구조가 맞는지 나타낸다.
+- `semantic_status: pending|partial|reviewed` — 원문 의미가 검토됐는지 나타낸다. 필드가 없는 기존 Source는 `reviewed`로 추정하지 않고 `partial`로 취급한다.
+- 긴 문서는 start/middle/end coverage와 EOF, 실제 인용 locator가 필요하다. 대화는 `key_decisions`, `next_actions`, `chronology`를 별도로 보존한다.
+- Source의 outgoing 링크나 deterministic graph stitch는 의미 반영 증거가 아니다. 반영 문서가 같은 Source ID 또는 Raw provenance를 역으로 기록해야 한다.
 
 ## Claim 상태
 
@@ -87,6 +101,7 @@ Evidence profile의 질의는 다음 모드를 사용한다.
 - `verify` — 특정 Claim의 지지/반박 evidence와 Raw를 검증한다.
 - `challenge` — 현재 결론을 반박할 수 있는 evidence, rejected/disputed claims, 충돌을 우선 탐색한다.
 - `trace` — Canon/Claim에서 source locator와 Raw까지 provenance chain을 보여준다.
+- Decision 질의는 `Decision → Project → Source locator → Raw`를 보여주며 Source가 partial이면 숨기지 않는다.
 - `compare` — 복수 Claim/가설의 evidence 품질과 독립성을 비교한다.
 
 질문에서 모드가 명시되지 않으면 `answer`가 기본이다. 사용자가 “왜 그렇게 생각하지?”, “근거 추적”, “진짜 맞아?”처럼 검증 의도를 보이면 `trace`/`verify`를 우선한다.

@@ -5,5 +5,41 @@
     "prefLabel": "{{PROJECT_NAME}} topic taxonomy",
     "scopeNote": "Controlled vocabulary for Wiki topics; keep Graphify communities separate."
   },
-  "concepts": []
+  "concepts": [
+    {
+      "id": "wiki-operations",
+      "prefLabel": "위키 운영",
+      "altLabel": ["wiki operations"],
+      "scopeNote": "볼트의 색인, 탐색, 개요와 연구 질문을 운영하는 문서.",
+      "broader": []
+    },
+    {
+      "id": "wiki-index",
+      "prefLabel": "인덱스",
+      "altLabel": ["index"],
+      "scopeNote": "Wiki 탐색의 시작점과 문서 목록.",
+      "broader": ["wiki-operations"]
+    },
+    {
+      "id": "wiki-navigation",
+      "prefLabel": "탐색",
+      "altLabel": ["navigation"],
+      "scopeNote": "Wiki 문서와 근거를 찾고 연결하는 활동.",
+      "broader": ["wiki-operations"]
+    },
+    {
+      "id": "wiki-overview",
+      "prefLabel": "개요",
+      "altLabel": ["overview"],
+      "scopeNote": "볼트의 목적, 범위와 현재 지식 상태를 요약하는 문서.",
+      "broader": ["wiki-operations"]
+    },
+    {
+      "id": "wiki-questions",
+      "prefLabel": "질문",
+      "altLabel": ["questions"],
+      "scopeNote": "미확인 정보와 후속 조사 질문을 추적하는 문서.",
+      "broader": ["wiki-operations"]
+    }
+  ]
 }

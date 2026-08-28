@@ -26,6 +26,11 @@ REQUIRED_REMOTE_PATHS = (
     "scripts/bootstrap.py",
     "assets/skills-bundle/agents-skills",
     "assets/skills-bundle/claude-adapters",
+    "assets/skills-bundle/agents-skills/ingest/scripts/semantic_contract.py",
+    "assets/skills-bundle/agents-skills/ingest/scripts/stitch_explicit_links.py",
+    "assets/profiles/evidence/docs/evidence-kb.md.template",
+    "assets/profiles/evidence/runtime/kb.py",
+    "assets/profiles/evidence/templates/decision.md",
 )
 
 

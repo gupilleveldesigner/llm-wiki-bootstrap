@@ -28,6 +28,7 @@ LLM Wiki의 컨텍스트는 저장 공간이 아니라 과업별 예산이다. �
 - 모르면 모른다고 한다. Wiki에 없는 내용을 외부 지식이나 모델의 기억으로 채우지 않는다.
 - 답변에는 실제로 읽은 Wiki 문서 경로를 남기고, raw를 열었다면 원문 경로도 구분해 남긴다.
 - 문서 사이의 모순, 오래된 정보, 검증되지 않은 상태는 숨기지 않는다.
+- Source의 `semantic_status`가 없으면 effective `partial`로, `pending/partial`이면 그대로 표시한다. 구조상 존재하거나 Graphify edge가 있다는 이유로 reviewed처럼 답하지 않는다.
 
 ## frontmatter-only 계약
 
@@ -57,6 +58,7 @@ LLM Wiki의 컨텍스트는 저장 공간이 아니라 과업별 예산이다. �
 1. 런타임 `status`가 알려 준 대상별 규칙 파일을 읽는다.
 2. 대상의 `wiki/index.md` 또는 규칙이 지정한 catalog를 읽고 질문에 가까운 문서 경로를 고른다. catalog가 없으면 파일명·제목을 대상으로 좁은 검색을 한 번 실행한다.
 3. 후보 문서들의 frontmatter만 묶어서 읽는다. 관련 주제인지, 폐기·검토 상태인지, 근거가 있는지, 재검토 시점을 지났는지를 비교해 실제로 열 본문을 줄인다.
+   프로젝트 선택 질문이면 `wiki/decisions/` 후보도 확인하고 `Decision → Project → Source locator → Raw`를 추적한다. Decision 상태(`PROPOSED/ADOPTED/SUPERSEDED/...`)를 Claim 상태와 섞지 않는다.
 4. 선택된 문서의 본문만 읽는다. 답이 부족하면 그 문서의 관련 문서 링크를 따라 1~2단계 반복하되, 새 후보도 먼저 frontmatter만 읽는다.
 5. 정확한 인용·수치·날짜·충돌 확인이 필요할 때만 선택된 문서의 출처 필드나 본문 링크가 가리키는 `raw/` 원문을 연다. 정리된 Wiki만으로 충분하면 raw까지 내려가지 않는다.
 6. catalog와 좁은 제목 검색으로도 관련 문서를 찾지 못했을 때만 `wiki/` 전체 키워드 검색을 한 번 실행한다. 그래도 없으면 “아직 Wiki에 없다”고 답하고, 관련 raw가 있으면 ingest 후보로 제안한다.

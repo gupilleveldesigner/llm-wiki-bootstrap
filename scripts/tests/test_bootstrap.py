@@ -43,10 +43,13 @@ class BootstrapSafetyTests(unittest.TestCase):
             self.assertEqual(result["profile"], "evidence")
             for relative in (
                 "wiki/claims",
+                "wiki/decisions",
                 "wiki/canon",
                 "wiki/conflicts",
                 "wiki/experiments",
+                "wiki/normalized",
                 "wiki/questions/open",
+                ".evidence-kb",
                 ".wiki-cache/normalized",
                 ".wiki-cache/index",
                 ".wiki-cache/embeddings",
@@ -54,14 +57,55 @@ class BootstrapSafetyTests(unittest.TestCase):
                 self.assertTrue((target / relative).is_dir(), relative)
 
             manifest = json.loads((target / ".llm-wiki.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], 2)
+            self.assertEqual(manifest["schema_version"], 3)
             self.assertEqual(manifest["profile"], "evidence")
             self.assertTrue(manifest["raw_immutable"])
             self.assertTrue((target / "wiki/evidence-model.md").is_file())
             self.assertTrue((target / "instructions/evidence-operations.md").is_file())
+            self.assertTrue((target / "instructions/evidence-kb.md").is_file())
+            self.assertTrue((target / "tools/kb.py").is_file())
+            self.assertTrue((target / ".agents/skills/ingest/scripts/semantic_contract.py").is_file())
+            self.assertTrue((target / ".agents/skills/ingest/scripts/stitch_explicit_links.py").is_file())
             self.assertTrue((target / ".agents/skills/canon-review/SKILL.md").is_file())
             self.assertTrue((target / ".claude/skills/canon-review/SKILL.md").is_file())
             self.assertTrue((target / "templates/evidence/claim.md").is_file())
+            self.assertTrue((target / "templates/evidence/decision.md").is_file())
+            self.assertIn("semantic_status: pending", (target / "templates/evidence/source-record.md").read_text(encoding="utf-8"))
+            self.assertIn("LLM-WIKI:EVIDENCE-PROFILE", (target / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertEqual(result["profile_verification"]["status"], "ok")
+            self.assertEqual(result["profile_runtime"], ["tools/kb.py"])
+
+    def test_migrate_preserves_existing_files_and_installs_evidence_contract(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-migrate-evidence-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            target.mkdir()
+            existing = target / "notes.md"
+            existing.write_text("user-owned note\n", encoding="utf-8")
+            conflicts = {
+                "templates/원본 요약 템플릿.md": "user template\n",
+                "templates/evidence/source-record.md": "user evidence template\n",
+                ".session-memory/scripts/session_memory.py": "# user session runtime\n",
+                "Output/CLAUDE.md": "# user output rules\n",
+                "tools/kb.py": "# user kb runtime\n",
+                ".agents/skills/ingest/SKILL.md": "---\nname: ingest\ndescription: user skill\n---\n",
+            }
+            for relative, content in conflicts.items():
+                path = target / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            config = write_config(root)
+
+            result = bootstrap(target, config, "migrate", "evidence")
+
+            self.assertEqual(existing.read_text(encoding="utf-8"), "user-owned note\n")
+            for relative, content in conflicts.items():
+                self.assertEqual((target / relative).read_text(encoding="utf-8"), content, relative)
+                self.assertTrue((target / relative).with_name(Path(relative).name + ".wiki-proposed").is_file(), relative)
+            self.assertEqual(result["profile_verification"]["status"], "pending")
+            self.assertTrue(result["profile_activation_pending"])
+            self.assertTrue((target / "wiki/decisions").is_dir())
+            self.assertTrue((target / "tools/kb.py").is_file())
 
     def test_standard_profile_does_not_install_canon_review(self) -> None:
         with tempfile.TemporaryDirectory(prefix="bootstrap-standard-") as temporary:
@@ -105,7 +149,52 @@ class BootstrapSafetyTests(unittest.TestCase):
             result = upgrade(target, config)
             self.assertEqual(result["profile"], "evidence")
             self.assertFalse(result["profile_changed"])
+            self.assertFalse(result["profile_activation_pending"])
             self.assertTrue((target / ".agents/skills/canon-review/SKILL.md").is_file())
+
+    def test_upgrade_backs_up_and_refreshes_managed_evidence_runtime(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-runtime-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root)
+            bootstrap(target, config, "new", "evidence")
+            runtime = target / "tools/kb.py"
+            runtime.write_text("# user-modified managed runtime\n", encoding="utf-8")
+
+            result = upgrade(target, config)
+
+            self.assertIn("decision_to_project_to_evidence_to_raw", runtime.read_text(encoding="utf-8"))
+            backup = Path(result["backup_dir"]) / "tools/kb.py"
+            self.assertEqual(backup.read_text(encoding="utf-8"), "# user-modified managed runtime\n")
+
+    def test_upgrade_preserves_legacy_evidence_docs_and_marks_activation_pending(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-legacy-evidence-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root)
+            bootstrap(target, config, "new", "evidence")
+            legacy = {
+                "wiki/evidence-model.md": "# legacy evidence model\n",
+                "instructions/evidence-operations.md": "# legacy evidence operations\n",
+                "templates/evidence/source-record.md": "# legacy source template\n",
+            }
+            for relative, content in legacy.items():
+                (target / relative).write_text(content, encoding="utf-8")
+            manifest_path = target / ".llm-wiki.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["schema_version"] = 2
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = upgrade(target, config)
+
+            self.assertEqual(result["profile_verification"]["status"], "pending")
+            self.assertTrue(result["profile_activation_pending"])
+            self.assertTrue(result["knowledge_migration_pending"])
+            self.assertEqual(result["previous_schema_version"], 2)
+            for relative, content in legacy.items():
+                path = target / relative
+                self.assertEqual(path.read_text(encoding="utf-8"), content)
+                self.assertTrue(path.with_name(path.name + ".wiki-proposed").is_file())
 
     def test_upgrade_preserves_user_managed_canon_overview(self) -> None:
         with tempfile.TemporaryDirectory(prefix="bootstrap-canon-preserve-") as temporary:

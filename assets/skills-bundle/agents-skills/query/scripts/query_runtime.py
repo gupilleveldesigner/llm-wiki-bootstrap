@@ -113,6 +113,37 @@ def extract_frontmatter(path: Path) -> str | None:
     raise QueryRuntimeError(f"Unterminated YAML frontmatter: {path}")
 
 
+def frontmatter_field(frontmatter: str | None, key: str) -> str:
+    if frontmatter is None:
+        return ""
+    prefix = f"{key}:"
+    for line in frontmatter.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip().strip("\"'")
+    return ""
+
+
+def semantic_metadata(frontmatter: str | None) -> dict[str, Any]:
+    document_type = (
+        frontmatter_field(frontmatter, "type")
+        or frontmatter_field(frontmatter, "kind")
+    ).casefold()
+    if document_type != "source":
+        return {}
+    declared = frontmatter_field(frontmatter, "semantic_status").casefold()
+    if declared in {"pending", "partial", "reviewed"}:
+        effective = declared
+    else:
+        status = frontmatter_field(frontmatter, "status").casefold()
+        effective = "pending" if status in {"pending", "unverified"} else "partial"
+    result: dict[str, Any] = {"semantic_status": effective}
+    if effective != "reviewed":
+        result["semantic_warning"] = (
+            f"Source semantic_status is {effective}; structural presence is not semantic completion."
+        )
+    return result
+
+
 def frontmatter_payload(root: Path, values: list[str]) -> tuple[list[dict[str, Any]], bool]:
     items: list[dict[str, Any]] = []
     failed = False
@@ -126,6 +157,7 @@ def frontmatter_payload(root: Path, values: list[str]) -> tuple[list[dict[str, A
                     "path": path.relative_to(root).as_posix(),
                     "has_frontmatter": frontmatter is not None,
                     "frontmatter": frontmatter,
+                    **semantic_metadata(frontmatter),
                 }
             )
         except QueryRuntimeError as exc:
@@ -151,6 +183,10 @@ def render_frontmatter(items: list[dict[str, Any]]) -> str:
         elif not item["has_frontmatter"]:
             sections.append("NO_FRONTMATTER")
         else:
+            if "semantic_status" in item:
+                sections.append(f"SEMANTIC_STATUS: {item['semantic_status']}")
+            if "semantic_warning" in item:
+                sections.append(f"WARNING: {item['semantic_warning']}")
             sections.append(str(item["frontmatter"]))
     return "\n".join(sections)
 

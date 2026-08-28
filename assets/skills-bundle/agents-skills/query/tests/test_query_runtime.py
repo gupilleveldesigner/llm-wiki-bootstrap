@@ -85,6 +85,26 @@ class QueryRuntimeTests(unittest.TestCase):
         self.assertTrue(failed)
         self.assertIn("inside wiki/", items[0]["error"])
 
+    def test_source_without_semantic_review_is_exposed_as_partial(self) -> None:
+        temporary, root = self.make_wiki()
+        self.addCleanup(temporary.cleanup)
+        sources = root / "wiki" / "sources"
+        sources.mkdir()
+        source = sources / "legacy.md"
+        source.write_text(
+            "---\ntype: source\nstatus: active\nsources: [raw/legacy.md]\n---\n"
+            "# BODY_MUST_NOT_LEAK\n",
+            encoding="utf-8",
+        )
+
+        items, failed = RUNTIME.frontmatter_payload(root, ["sources/legacy"])
+        self.assertFalse(failed)
+        self.assertEqual(items[0]["semantic_status"], "partial")
+        self.assertIn("not semantic completion", items[0]["semantic_warning"])
+        rendered = RUNTIME.render_frontmatter(items)
+        self.assertIn("SEMANTIC_STATUS: partial", rendered)
+        self.assertNotIn("BODY_MUST_NOT_LEAK", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,19 @@ def make_archive(files: dict[str, str], root: str = "llm-wiki-bootstrap-deadbeef
     return stream.getvalue()
 
 
+def valid_contract_files(bootstrap_script: str) -> dict[str, str]:
+    return {
+        "SKILL.md": "skill",
+        "scripts/bootstrap.py": bootstrap_script,
+        "assets/skills-bundle/agents-skills/ingest/scripts/semantic_contract.py": "# semantic contract",
+        "assets/skills-bundle/agents-skills/ingest/scripts/stitch_explicit_links.py": "# structural stitch",
+        "assets/skills-bundle/claude-adapters/.keep": "",
+        "assets/profiles/evidence/docs/evidence-kb.md.template": "# Evidence KB",
+        "assets/profiles/evidence/runtime/kb.py": "# KB runtime",
+        "assets/profiles/evidence/templates/decision.md": "# Decision template",
+    }
+
+
 class LatestGitHubUpgradeTests(unittest.TestCase):
     def test_resolve_latest_commit_uses_default_branch(self) -> None:
         with mock.patch.object(
@@ -61,13 +74,27 @@ class LatestGitHubUpgradeTests(unittest.TestCase):
                     run_local.assert_not_called()
             self.assertFalse(target.exists())
 
+    def test_legacy_remote_bundle_is_rejected_before_target_mutation(self) -> None:
+        legacy = make_archive(
+            {
+                "SKILL.md": "skill",
+                "scripts/bootstrap.py": "print('legacy')",
+                "assets/skills-bundle/agents-skills/.keep": "",
+                "assets/skills-bundle/claude-adapters/.keep": "",
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "vault"
+            config = Path(temporary) / "config.json"
+            config.write_text("{}", encoding="utf-8")
+            with mock.patch.object(upgrade, "resolve_latest_commit", return_value=("master", "d" * 40)):
+                with mock.patch.object(upgrade, "download_commit_archive", return_value=legacy):
+                    with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                        upgrade.upgrade_from_github(target, config, "evidence")
+            self.assertFalse(target.exists())
+
     def test_success_records_exact_github_commit(self) -> None:
-        required = {
-            "SKILL.md": "skill",
-            "scripts/bootstrap.py": "print('stub')",
-            "assets/skills-bundle/agents-skills/.keep": "",
-            "assets/skills-bundle/claude-adapters/.keep": "",
-        }
+        required = valid_contract_files("print('stub')")
         archive = make_archive(required)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -95,12 +122,7 @@ p=argparse.ArgumentParser(); p.add_argument('--target'); p.add_argument('--confi
 t=Path(a.target); t.mkdir(parents=True, exist_ok=True); (t/'.llm-wiki.json').write_text(json.dumps({'profile': a.profile or 'standard'}), encoding='utf-8')
 print(json.dumps({'ok': True, 'mode': a.mode, 'profile': a.profile or 'standard', 'backup_dir': 'fake-backup'}))
 """
-        archive = make_archive({
-            "SKILL.md": "skill",
-            "scripts/bootstrap.py": bootstrap_script,
-            "assets/skills-bundle/agents-skills/.keep": "",
-            "assets/skills-bundle/claude-adapters/.keep": "",
-        })
+        archive = make_archive(valid_contract_files(bootstrap_script))
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             target = root / "vault"

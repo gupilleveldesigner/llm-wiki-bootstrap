@@ -3,6 +3,10 @@
 .agents/
 .claude/
 .session-memory/
+.evidence-kb/
+.wiki-cache/
+.obsidian/
+tools/
 Output/
 templates/
 instructions/

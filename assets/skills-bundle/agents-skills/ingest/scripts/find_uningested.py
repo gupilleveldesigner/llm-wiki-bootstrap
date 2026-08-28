@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -12,15 +13,20 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
 
+from semantic_contract import review_source_record
+
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 PLAIN_RAW_PATH_RE = re.compile(
-    r"(raw/[^\r\n\[\]\"']+?\.(?:md|markdown|txt|pdf|csv|json|ya?ml|png|jpe?g|gif|webp|svg|avif))",
+    r"(raw/[^\r\n\[\]\"']+?\.(?:md|markdown|txt|pdf|csv|json|ya?ml|png|jpe?g|gif|webp|svg|avif|py|ps1|js|jsx|ts|tsx|html|xml|toml|ini|sh|sql|css))",
     re.IGNORECASE,
 )
 EMBED_RE = re.compile(r"!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
-TEXT_SUFFIXES = {".md", ".txt", ".markdown", ".csv", ".json", ".yaml", ".yml"}
+TEXT_SUFFIXES = {
+    ".md", ".txt", ".markdown", ".csv", ".json", ".yaml", ".yml", ".log",
+    ".py", ".ps1", ".js", ".jsx", ".ts", ".tsx", ".html", ".xml", ".toml", ".ini", ".sh", ".sql", ".css",
+}
 ATTACHMENT_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".avif"}
 HOST_INSTRUCTION_FILES = {"agents.md", "claude.md", "gemini.md"}
 OPERATIONAL_WIKI_FILES = {
@@ -105,8 +111,16 @@ def frontmatter_value(text: str, key: str) -> str:
     return match.group(1).strip().strip("\"'") if match else ""
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def source_summary_quality(text: str) -> bool:
-    """Reject placeholder source pages before they can prove ingestion."""
+    """Check only structural Source evidence; semantic review is a separate gate."""
     body = text.split("---", 2)[-1] if text.startswith("---") else text
     if len(re.findall(r"(?m)^##+\s+", body)) < 3:
         return False
@@ -120,8 +134,17 @@ def source_summary_quality(text: str) -> bool:
                 count = int(value)
             except ValueError:
                 return False
-            if count < 0 or (key not in {"entities", "relations"} and count == 0):
+            if count < 0 or (key in {"reflected_docs", "evidence_spans"} and count == 0):
                 return False
+    try:
+        meaning_count = sum(
+            int(frontmatter_value(text, key) or 0)
+            for key in ("key_claims", "key_decisions", "next_actions")
+        )
+    except ValueError:
+        return False
+    if meaning_count <= 0:
+        return False
     return (
         "## 근거" in body
         and any(line.lstrip().startswith(">") for line in body.splitlines())
@@ -223,6 +246,7 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
     source_pages = list(sources_root.rglob("*.md"))
     source_pages_exist = bool(source_pages)
     referenced: set[str] = set()
+    source_reviews: dict[str, dict[str, object]] = {}
     catalog_referenced: set[str] = set()
     for page in wiki_root.rglob("*.md"):
         if "graphify-out" in {part.casefold() for part in page.relative_to(wiki_root).parts}:
@@ -232,6 +256,23 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
         target_keys = {key for target in targets for key in keys(target)}
         if is_source_summary(page, text, wiki_root, source_pages_exist):
             referenced.update(target_keys)
+            target = next(iter(targets))
+            raw_path = root / target
+            if not raw_path.is_file() and not raw_path.suffix:
+                raw_path = raw_path.with_suffix(".md")
+            if raw_path.is_file():
+                review = review_source_record(root, page, raw_path, text)
+                declared_hash = frontmatter_value(text, "raw_sha256").casefold()
+                actual_hash = file_sha256(raw_path)
+                structural_errors = [] if declared_hash == actual_hash else ["Source raw_sha256 does not match the current Raw bytes"]
+                for target_key in target_keys:
+                    source_reviews[target_key] = {
+                        "source_record": page.relative_to(root).as_posix(),
+                        "structurally_verified": not structural_errors,
+                        "structural_errors": structural_errors,
+                        "semantic_status": review["semantic_status"] if not structural_errors else "partial",
+                        "semantic_errors": review["errors"],
+                    }
         else:
             catalog_referenced.update(target_keys)
 
@@ -248,6 +289,9 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
         "skipped": [],
         "rejected": [],
         "catalog_only": [],
+        "semantic_pending": [],
+        "semantic_partial": [],
+        "semantic_reviewed": [],
     }
     for path in raw_files:
         rel = path.relative_to(root).as_posix()
@@ -265,7 +309,18 @@ def scan(root: Path) -> dict[str, list[dict[str, object]]]:
             result["rejected"].append(item)
         elif path_keys & referenced:
             item["reason"] = "represented by a one-to-one source summary"
+            review = next((source_reviews[key] for key in path_keys if key in source_reviews), None)
+            semantic_status = str((review or {}).get("semantic_status", "partial"))
+            item["structurally_verified"] = bool((review or {}).get("structurally_verified", False))
+            item["semantic_status"] = semantic_status
+            if review:
+                item["source_record"] = review["source_record"]
+                if review["structural_errors"]:
+                    item["structural_errors"] = review["structural_errors"]
+                if review["semantic_errors"]:
+                    item["semantic_errors"] = review["semantic_errors"]
             result["ingested"].append(item)
+            result[f"semantic_{semantic_status}"].append(dict(item))
         elif path_keys & embedded:
             item["reason"] = "embedded attachment in an ingested raw note"
             result["skipped"].append(item)
@@ -301,7 +356,16 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    for name in ("pending", "ingested", "skipped", "rejected", "catalog_only"):
+    for name in (
+        "pending",
+        "ingested",
+        "skipped",
+        "rejected",
+        "catalog_only",
+        "semantic_pending",
+        "semantic_partial",
+        "semantic_reviewed",
+    ):
         print(f"{name}: {len(result[name])}")
         for item in result[name]:
             reason = f" - {item['reason']}" if "reason" in item else ""
