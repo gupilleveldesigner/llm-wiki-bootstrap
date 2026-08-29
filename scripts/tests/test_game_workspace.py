@@ -138,7 +138,10 @@ class WorkspaceTransactionTests(unittest.TestCase):
             write(paths.vault_root / ".llm-wiki.json", "{}\n")
             outside = parent / "outside"
             outside.mkdir()
-            (paths.vault_root / "tools").symlink_to(outside, target_is_directory=True)
+            try:
+                (paths.vault_root / "tools").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"symlink creation is unavailable: {error}")
 
             stage = workspace.make_staging_directory(paths)
             links = workspace.seed_staging_from_existing(paths.vault_root, stage)
@@ -161,7 +164,10 @@ class WorkspaceTransactionTests(unittest.TestCase):
             real_vault = parent / "real-vault"
             real_vault.mkdir()
             sidecar = parent / "Game.wiki"
-            sidecar.symlink_to(real_vault, target_is_directory=True)
+            try:
+                sidecar.symlink_to(real_vault, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"symlink creation is unavailable: {error}")
             with self.assertRaisesRegex(workspace.WorkspaceError, "symlink"):
                 workspace.resolve_workspace_paths(project, layout="sidecar")
 

@@ -216,7 +216,8 @@ def prepare_local_game_project(
     try:
         seed_staging_from_existing(workspace.vault_root, stage)
         if base_mode == "upgrade":
-            base_result = wiki_bootstrap.upgrade(stage, config_path, profile)
+            # Game mode already applies its own verified staging transaction.
+            base_result = wiki_bootstrap.upgrade(stage, config_path, profile, transactional=False)
             backup_dir = ensure_backup_dir(stage, base_result)
             base_result["game_managed_backup"] = backup_game_managed_assets(stage, backup_dir)
         else:

@@ -5,8 +5,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
+import bootstrap as bootstrap_module  # noqa: E402
 from bootstrap import bootstrap, upgrade  # noqa: E402
 
 
@@ -17,6 +19,39 @@ def write_config(root: Path, name: str = "Test Wiki") -> Path:
 
 
 class BootstrapSafetyTests(unittest.TestCase):
+    def test_migrate_rejects_symlink_before_writing_outside_target(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-symlink-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            outside = root / "outside"
+            target.mkdir()
+            outside.mkdir()
+            (target / "note.md").write_text("keep\n", encoding="utf-8")
+            try:
+                (target / "templates").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"symlink creation is unavailable: {error}")
+            config = write_config(root)
+
+            with self.assertRaisesRegex(ValueError, "contains symlinks"):
+                bootstrap(target, config, "migrate", "standard")
+
+            self.assertEqual(list(outside.iterdir()), [])
+            self.assertEqual((target / "note.md").read_text(encoding="utf-8"), "keep\n")
+
+    def test_json_and_yaml_templates_escape_project_name(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-template-escape-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root, 'Bad "Wiki"')
+
+            bootstrap(target, config, "new", "standard")
+
+            taxonomy = json.loads((target / "wiki/taxonomy.json").read_text(encoding="utf-8"))
+            session = json.loads((target / ".session-memory/config.json").read_text(encoding="utf-8"))
+            self.assertEqual(taxonomy["scheme"]["prefLabel"], 'Bad "Wiki" topic taxonomy')
+            self.assertEqual(session["project_name"], 'Bad "Wiki"')
+
     def test_new_rejects_nonempty_folder(self) -> None:
         with tempfile.TemporaryDirectory(prefix="bootstrap-nonempty-") as temporary:
             target = Path(temporary) / "vault"
@@ -166,6 +201,61 @@ class BootstrapSafetyTests(unittest.TestCase):
             self.assertIn("decision_to_project_to_evidence_to_raw", runtime.read_text(encoding="utf-8"))
             backup = Path(result["backup_dir"]) / "tools/kb.py"
             self.assertEqual(backup.read_text(encoding="utf-8"), "# user-modified managed runtime\n")
+
+    def test_upgrade_failure_keeps_original_wiki_operational(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-rollback-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root)
+            bootstrap(target, config, "new", "standard")
+            original_skill = (target / ".agents/skills/ingest/SKILL.md").read_bytes()
+
+            with mock.patch.object(bootstrap_module, "install_skills", side_effect=RuntimeError("injected failure")):
+                with self.assertRaisesRegex(RuntimeError, "injected failure"):
+                    upgrade(target, config)
+
+            self.assertEqual((target / ".agents/skills/ingest/SKILL.md").read_bytes(), original_skill)
+            self.assertTrue((target / ".llm-wiki.json").is_file())
+            self.assertFalse((root / ".llm-wiki-transactions").exists())
+
+    def test_upgrade_post_apply_failure_restores_original_wiki(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-post-apply-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root)
+            bootstrap(target, config, "new", "standard")
+            sentinel = target / "wiki/projects/user-owned.md"
+            sentinel.write_text("original\n", encoding="utf-8")
+            original_manifest = (target / ".llm-wiki.json").read_bytes()
+            real_verify = bootstrap_module.verify_profile_installation
+
+            def fail_only_final(path: Path, profile: str) -> dict:
+                if path == target.absolute():
+                    return {"status": "failed", "errors": ["injected post-apply failure"]}
+                return real_verify(path, profile)
+
+            with mock.patch.object(bootstrap_module, "verify_profile_installation", side_effect=fail_only_final):
+                with self.assertRaisesRegex(RuntimeError, "original Wiki was restored"):
+                    upgrade(target, config)
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "original\n")
+            self.assertEqual((target / ".llm-wiki.json").read_bytes(), original_manifest)
+            self.assertTrue(any((root / ".llm-wiki-transactions").glob("*/failed")))
+
+    def test_upgrade_uses_unique_backup_directories(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-backup-unique-") as temporary:
+            root = Path(temporary)
+            target = root / "vault"
+            config = write_config(root)
+            bootstrap(target, config, "new", "standard")
+
+            first = upgrade(target, config)
+            second = upgrade(target, config)
+
+            self.assertNotEqual(first["backup_dir"], second["backup_dir"])
+            self.assertTrue(Path(first["backup_dir"]).is_dir())
+            self.assertTrue(Path(second["backup_dir"]).is_dir())
+            self.assertFalse((Path(second["backup_dir"]) / ".agents/skills/ingest/ingest").exists())
 
     def test_upgrade_preserves_legacy_evidence_docs_and_marks_activation_pending(self) -> None:
         with tempfile.TemporaryDirectory(prefix="bootstrap-upgrade-legacy-evidence-") as temporary:

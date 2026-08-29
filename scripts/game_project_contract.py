@@ -10,6 +10,7 @@ from game_workspace import (
     MANAGED_MANIFEST_SCHEMA_VERSION,
     WorkspacePaths,
 )
+from template_render import render_template
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
@@ -128,6 +129,7 @@ REQUIRED_GAME_REMOTE_PATHS = (
     "scripts/game_project_contract.py",
     "scripts/game_project_install.py",
     "scripts/game_workspace.py",
+    "scripts/template_render.py",
     "assets/project-modes/game/docs/game-model.md.template",
     "assets/project-modes/game/docs/game-operations.md.template",
     "assets/project-modes/game/docs/game-engine-layouts.md.template",
@@ -276,10 +278,7 @@ def replacements(target: Path, config: dict[str, Any], metadata: dict[str, Any])
 
 
 def render_file(source: Path, values: dict[str, str]) -> str:
-    content = source.read_text(encoding="utf-8")
-    for placeholder, value in values.items():
-        content = content.replace(placeholder, value)
-    return content
+    return render_template(source, values)
 
 
 def validate_game_bundle(root: Path = REPOSITORY_ROOT) -> None:

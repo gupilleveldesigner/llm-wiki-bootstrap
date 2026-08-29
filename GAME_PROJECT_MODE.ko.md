@@ -8,7 +8,7 @@ Design Intent → Implementation State → Validation Evidence → Project Decis
 기획 정본 ↔ live 코드·씬·데이터·에셋 정본
 ```
 
-Game mode v3의 기본 원칙은 명확하다.
+Game mode v5의 기본 원칙은 명확하다.
 
 > **엔진 프로젝트의 기존 구조는 유지하고, Wiki는 기본적으로 별도 sidecar vault에 설치한다.**
 
@@ -543,7 +543,7 @@ Game mode는 다음을 자동으로 보장하지 않는다.
 - 외부 이슈 트래커 대체
 - live source의 자동 재배치
 
-Game mode v3의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.
+Game mode v5의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.
 
 ## Game-aware ingest v5
 

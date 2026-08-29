@@ -157,6 +157,14 @@ git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claud
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.codex/skills/llm-wiki-bootstrap"
 ```
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$env:USERPROFILE\.codex\skills\llm-wiki-bootstrap"
+```
+
+Claude Code는 같은 방식으로 `.codex` 대신 `.claude`를 사용합니다.
+
 저장소에는 Codex용 `agents/openai.yaml`이 포함됩니다.
 
 ### 요구사항
@@ -208,6 +216,8 @@ $llm-wiki-bootstrap
   "domain_summary": "프로젝트 목적 한 문장"
 }
 ```
+
+동일한 예제는 [`config.example.json`](config.example.json)에 있으며, Game mode용 전체 예제는 [`config.game.example.json`](config.game.example.json)에 있습니다. Windows에서는 아래 명령의 `python`을 `py -3`으로 바꿔 실행할 수 있습니다.
 
 ### Standard 신규 생성
 
@@ -541,6 +551,7 @@ Evidence에서도 Graphify는 truth database가 아닙니다. 정본은 Markdown
 
 ## migrate 안전 규칙
 
+- 대상 또는 그 하위에 symlink가 있으면 vault 밖 쓰기를 막기 위해 적용 전 중단
 - 기존 파일 삭제/수정 금지
 - 기존 루트 문서 충돌 시 `.wiki-proposed`
 - raw 편입 전 파일별 원래 경로/목적지 migration map 제시
@@ -552,8 +563,11 @@ Evidence에서도 Graphify는 truth database가 아닙니다. 정본은 Markdown
 
 - GitHub latest가 기본
 - 원격 확인/다운로드/검증 완료 전 대상 변경 금지
+- sibling transaction staging에서 전체 upgrade와 검증을 마친 뒤 같은 파일시스템 rename으로 적용
+- 적용 또는 사후 검증 실패 시 원래 Wiki 복원
+- staging 동안 같은 파일시스템에 vault 복제본을 만들 수 있는 임시 여유 공간 필요
 - 정확한 SHA를 고정한 뒤 실행
-- 기존 운영 스킬을 `.wiki-upgrade-bak/<timestamp>/`에 백업
+- 기존 운영 스킬을 충돌 없는 `.wiki-upgrade-bak/<timestamp>-<unique-id>/`에 백업
 - `raw/`, 기존 지식, `Output/` 보존
 - customized router/operation 문서는 `.wiki-proposed` 사용
 - Standard → Evidence 승격 시 Evidence folders/templates/canon-review 추가

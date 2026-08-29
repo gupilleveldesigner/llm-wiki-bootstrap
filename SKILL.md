@@ -41,6 +41,9 @@ upgrade + evidence + game
 13. Game의 design, implementation, validation, decision, production 상태를 하나로 합치지 않는다.
 14. 실행하지 않은 검증을 성공으로 보고하지 않는다.
 15. staging 또는 post-apply 검증이 실패하면 완료라고 말하지 않는다.
+16. Knowledge mode도 target 내부 symlink를 따라 쓰지 않는다. symlink가 있으면 적용 전 중단하고 경로를 보고한다.
+17. Knowledge mode upgrade는 sibling transaction staging에서 검증한 뒤 적용하며 실패 시 원래 Wiki를 복원한다.
+18. Knowledge mode upgrade 전 staging 복제본을 위한 같은 파일시스템 여유 공간을 확인한다.
 
 ## 전제 조건
 
@@ -198,6 +201,8 @@ python "<SKILL_ROOT>/scripts/bootstrap.py" \
 ```
 
 기존 일반 폴더는 `--mode migrate`를 사용한다.
+
+`new`와 `migrate` 모두 적용 전에 target 및 하위 symlink를 검사한다. 하나라도 발견되면 vault 밖 쓰기 가능성을 막기 위해 중단하고 사용자가 실제 파일/폴더로 정리하도록 안내한다.
 
 # 6. Game mode layout safety
 

@@ -157,6 +157,14 @@ git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claud
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.codex/skills/llm-wiki-bootstrap"
 ```
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$env:USERPROFILE\.codex\skills\llm-wiki-bootstrap"
+```
+
+For Claude Code, use `.claude` instead of `.codex` in the same command.
+
 The repository includes `agents/openai.yaml` for Codex.
 
 ### Requirements
@@ -208,6 +216,8 @@ Base config:
   "domain_summary": "One-sentence project purpose"
 }
 ```
+
+The same base example is available as [`config.example.json`](config.example.json); [`config.game.example.json`](config.game.example.json) contains the fuller Game mode example. On Windows, `py -3` may replace `python` in the commands below.
 
 ### Create Standard
 
@@ -539,6 +549,7 @@ Even in Evidence, Graphify is not the truth database. Markdown/frontmatter and R
 
 ## Migrate safety
 
+- refuse apply when the target or any descendant is a symlink, preventing writes outside the Wiki root
 - never delete or rewrite existing files
 - root document conflicts become `.wiki-proposed`
 - produce a per-file old-path → Raw destination migration map
@@ -550,8 +561,11 @@ Even in Evidence, Graphify is not the truth database. Markdown/frontmatter and R
 
 - GitHub latest is the default
 - no target mutation until remote resolution/download/archive validation succeeds
+- complete and verify the upgrade in sibling transaction staging, then apply with same-filesystem renames
+- restore the original Wiki if apply or post-apply verification fails
+- require temporary same-filesystem capacity for a staged vault copy during upgrade
 - pin an exact SHA before execution
-- back up existing operational skills under `.wiki-upgrade-bak/<timestamp>/`
+- back up existing operational skills under a collision-safe `.wiki-upgrade-bak/<timestamp>-<unique-id>/`
 - preserve `raw/`, existing knowledge, and `Output/`
 - customized router/operations documents use `.wiki-proposed`
 - Standard → Evidence adds Evidence folders/templates/canon-review

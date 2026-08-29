@@ -1,0 +1,11 @@
+{
+  "project_name": "My Game Wiki",
+  "domain_summary": "게임의 기획, 구현, 검증, 결정을 연결한다.",
+  "game_title": "My Game",
+  "game_engine": "UNKNOWN",
+  "game_genre": "UNKNOWN",
+  "target_platforms": "Windows",
+  "project_phase": "prototype",
+  "layout": "sidecar",
+  "engine": "auto"
+}

@@ -24,6 +24,7 @@ MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
 REQUIRED_REMOTE_PATHS = (
     "SKILL.md",
     "scripts/bootstrap.py",
+    "scripts/template_render.py",
     "assets/skills-bundle/agents-skills",
     "assets/skills-bundle/claude-adapters",
     "assets/skills-bundle/agents-skills/ingest/scripts/semantic_contract.py",

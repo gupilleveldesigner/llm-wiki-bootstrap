@@ -39,6 +39,21 @@ def make_unity_project(root: Path) -> None:
 
 
 class GameProjectModeTests(unittest.TestCase):
+    def test_game_templates_escape_project_name_in_json_and_frontmatter(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-template-escape-") as temporary:
+            root = Path(temporary)
+            project = root / "UnityGame"
+            make_unity_project(project)
+            config = write_config(root, project_name='Bad "Game"', game_title='Bad "Game"')
+
+            result = game_project.run_local_game_project(project, config, "migrate")
+
+            vault = Path(result["vault_root"])
+            taxonomy = json.loads((vault / "wiki/game/taxonomy.json").read_text(encoding="utf-8"))
+            index = (vault / "wiki/game/index.md").read_text(encoding="utf-8")
+            self.assertEqual(taxonomy["project"], 'Bad "Game"')
+            self.assertIn('project: "Bad \\"Game\\""', index)
+
     def test_migrate_existing_unity_project_creates_sidecar_without_touching_engine_tree(self) -> None:
         with tempfile.TemporaryDirectory(prefix="game-sidecar-") as temporary:
             root = Path(temporary)

@@ -25,6 +25,7 @@ def valid_contract_files(bootstrap_script: str) -> dict[str, str]:
     return {
         "SKILL.md": "skill",
         "scripts/bootstrap.py": bootstrap_script,
+        "scripts/template_render.py": "# template renderer",
         "assets/skills-bundle/agents-skills/ingest/scripts/semantic_contract.py": "# semantic contract",
         "assets/skills-bundle/agents-skills/ingest/scripts/stitch_explicit_links.py": "# structural stitch",
         "assets/skills-bundle/claude-adapters/.keep": "",

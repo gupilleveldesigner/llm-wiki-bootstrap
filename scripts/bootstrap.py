@@ -1,8 +1,13 @@
 import argparse
 import json
+import os
 import shutil
+import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
+
+from template_render import render_template
 
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -136,6 +141,29 @@ EVIDENCE_CONTRACT_MARKERS = {
 }
 
 EVIDENCE_ROUTER_MARKER = "<!-- LLM-WIKI:EVIDENCE-PROFILE -->"
+
+
+def find_symlink_paths(target: Path) -> list[str]:
+    if target.is_symlink():
+        return ["."]
+    if not target.exists():
+        return []
+    links: list[str] = []
+    for current, directories, files in os.walk(target, followlinks=False):
+        current_path = Path(current)
+        for name in [*directories, *files]:
+            candidate = current_path / name
+            if candidate.is_symlink():
+                links.append(candidate.relative_to(target).as_posix())
+    return sorted(set(links))
+
+
+def assert_symlink_safe(target: Path) -> None:
+    links = find_symlink_paths(target)
+    if links:
+        preview = ", ".join(links[:10])
+        suffix = "" if len(links) <= 10 else f" (+{len(links) - 10} more)"
+        raise ValueError(f"target contains symlinks; refusing writes that may escape the Wiki root: {preview}{suffix}")
 
 
 def write_text(path: Path, text: str) -> None:
@@ -348,10 +376,7 @@ def profile_replacements(profile: str) -> dict[str, str]:
 
 
 def render_asset(source_name: str, replacements: dict[str, str]) -> str:
-    content = (ASSETS / "docs" / source_name).read_text(encoding="utf-8")
-    for placeholder, value in replacements.items():
-        content = content.replace(placeholder, value)
-    return content
+    return render_template(ASSETS / "docs" / source_name, replacements)
 
 
 def copy_profile_templates(
@@ -398,10 +423,7 @@ def install_profile_docs(
     proposals: list[str] = []
     for source_name, destination_name, render in PROFILE_DOCS[profile]:
         source = ASSETS / source_name
-        content = source.read_text(encoding="utf-8")
-        if render:
-            for placeholder, value in replacements.items():
-                content = content.replace(placeholder, value)
+        content = render_template(source, replacements) if render else source.read_text(encoding="utf-8")
         destination = target / destination_name
         if destination.exists():
             if destination.read_text(encoding="utf-8") == content:
@@ -460,9 +482,10 @@ def project_name_for_upgrade(target: Path, config_path: Path) -> str:
     return load_config(config_path, ("project_name",))["project_name"]
 
 
-def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict:
+def _upgrade_in_place(target: Path, config_path: Path, profile: str | None = None) -> dict:
     if not ((target / "raw").is_dir() and (target / "wiki").is_dir()):
         raise ValueError("target is not an LLM Wiki; use --mode new or migrate")
+    assert_symlink_safe(target)
 
     previous_manifest = read_manifest(target) or {}
     previous_schema_version = previous_manifest.get("schema_version", 1)
@@ -495,7 +518,8 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
         if (target / destination).is_file()
     ]
     if backup_sources or runtime.is_file() or profile_runtime_sources:
-        backup_dir = target / ".wiki-upgrade-bak" / datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_name = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{uuid.uuid4().hex[:8]}"
+        backup_dir = target / ".wiki-upgrade-bak" / backup_name
         for source in backup_sources:
             destination = backup_dir / source.relative_to(target)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -520,8 +544,8 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
 
     config_destination = target / ".session-memory/config.json"
     if not config_destination.exists():
-        content = (ASSETS / "docs/session-memory-config.json.template").read_text(encoding="utf-8")
-        write_text(config_destination, content.replace("{{PROJECT_NAME}}", project_name))
+        source = ASSETS / "docs/session-memory-config.json.template"
+        write_text(config_destination, render_template(source, {"{{PROJECT_NAME}}": project_name}))
 
     copied_templates = 0
     for source in (ASSETS / "templates").rglob("*"):
@@ -577,7 +601,7 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
     taxonomy_source = ASSETS / "docs/wiki-taxonomy.json.template"
     taxonomy_destination = target / "wiki" / "taxonomy.json"
     taxonomy_status = "unchanged"
-    taxonomy_content = taxonomy_source.read_text(encoding="utf-8").replace("{{PROJECT_NAME}}", project_name)
+    taxonomy_content = render_template(taxonomy_source, {"{{PROJECT_NAME}}": project_name})
     if not taxonomy_destination.exists():
         write_text(taxonomy_destination, taxonomy_content)
         taxonomy_status = "created"
@@ -614,11 +638,99 @@ def upgrade(target: Path, config_path: Path, profile: str | None = None) -> dict
     }
 
 
+def _remove_empty_transaction_root(path: Path) -> None:
+    try:
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    except OSError:
+        pass
+
+
+def upgrade(
+    target: Path,
+    config_path: Path,
+    profile: str | None = None,
+    *,
+    transactional: bool = True,
+) -> dict:
+    """Upgrade a Wiki through a verified sibling staging copy.
+
+    The original target is not touched until the staged upgrade succeeds. The
+    final swap uses same-filesystem renames and restores the original target if
+    post-apply verification fails.
+    """
+    target = target.expanduser().absolute()
+    if not transactional:
+        return _upgrade_in_place(target, config_path, profile)
+    if not ((target / "raw").is_dir() and (target / "wiki").is_dir()):
+        raise ValueError("target is not an LLM Wiki; use --mode new or migrate")
+    assert_symlink_safe(target)
+
+    transaction_root = target.parent / ".llm-wiki-transactions"
+    if transaction_root.is_symlink():
+        raise ValueError(f"transaction root may not be a symlink: {transaction_root}")
+    transaction_root.mkdir(parents=True, exist_ok=True)
+    container = Path(tempfile.mkdtemp(prefix=f"{target.name}.upgrade-", dir=transaction_root))
+    stage = container / "stage"
+    rollback = container / "rollback"
+    failed = container / "failed"
+    mutation_started = False
+
+    try:
+        shutil.copytree(target, stage)
+        result = _upgrade_in_place(stage, config_path, profile)
+        staged_profile = str(result.get("profile", profile or "standard"))
+        staged_verification = verify_profile_installation(stage, staged_profile)
+        if staged_verification["status"] == "failed":
+            raise RuntimeError("staged upgrade verification failed: " + "; ".join(staged_verification["errors"]))
+
+        target.rename(rollback)
+        mutation_started = True
+        try:
+            stage.rename(target)
+            final_verification = verify_profile_installation(target, staged_profile)
+            if final_verification["status"] == "failed":
+                raise RuntimeError("post-apply verification failed: " + "; ".join(final_verification["errors"]))
+        except Exception:
+            if target.exists():
+                target.rename(failed)
+            elif stage.exists():
+                stage.rename(failed)
+            if rollback.exists():
+                rollback.rename(target)
+            raise
+
+        backup_dir = result.get("backup_dir")
+        if isinstance(backup_dir, str) and backup_dir:
+            result["backup_dir"] = str(target / Path(backup_dir).relative_to(stage))
+        result["target"] = str(target)
+        result["mutation_started"] = mutation_started
+        result["transactional"] = True
+        result["transaction_backup"] = None
+
+        try:
+            shutil.rmtree(rollback)
+        except OSError:
+            result["transaction_backup"] = str(rollback)
+        if result["transaction_backup"] is None:
+            container.rmdir()
+            _remove_empty_transaction_root(transaction_root)
+        return result
+    except Exception as error:
+        if not mutation_started:
+            shutil.rmtree(container, ignore_errors=True)
+            _remove_empty_transaction_root(transaction_root)
+        elif failed.exists():
+            raise RuntimeError(f"upgrade failed and the original Wiki was restored; failed staging remains at {failed}: {error}") from error
+        raise
+
+
 def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str | None = None) -> dict:
     if mode == "upgrade":
         return upgrade(target, config_path, profile)
     if mode not in ("new", "migrate"):
         raise ValueError(f"unsupported bootstrap mode: {mode}")
+    assert_symlink_safe(target)
     if mode == "new" and target.exists() and any(target.iterdir()):
         raise ValueError("target is not empty; use --mode migrate for an existing folder")
     markers = ("raw", "wiki", ".agents", "CLAUDE.md", MANIFEST_NAME)
