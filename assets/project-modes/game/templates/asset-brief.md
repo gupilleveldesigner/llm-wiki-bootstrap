@@ -23,6 +23,7 @@ updated: "YYYY-MM-DD"
 
 # 에셋 브리프 — 이름
 
+<!-- GAME-SYNC:DESIGN-START -->
 ## 사용 목적
 
 - 플레이 상황과 사용처:
@@ -61,6 +62,7 @@ updated: "YYYY-MM-DD"
 - 자동 검사:
 - 게임 내 확인:
 - 승인 담당/조건:
+<!-- GAME-SYNC:DESIGN-END -->
 
 ## 기획 ↔ runtime 추적
 

@@ -9,6 +9,7 @@
 - 설치기·업그레이더는 **vault-only write policy**를 지킨다.
 - 임시 staging·backup은 transaction root에만 쓴다.
 - project_root 변경은 사용자가 명시한 `implement` operation에서만 수행한다.
+- sidecar 분리는 코드 추적을 끄지 않는다. runtime은 manifest를 통해 실제 project_root를 읽는다.
 
 ## 절대 규칙
 
@@ -22,6 +23,8 @@
 8. 실패·반례·기각안·예상 밖 플레이를 보존한다.
 9. Evidence profile이면 Source/Claim/Decision/Experiment를 연결한다.
 10. 검증 실패를 성공으로 보고하지 않는다.
+11. 코드나 기획을 자동으로 서로 덮어써 “동기화”하지 않는다.
+12. accepted baseline은 실제 대조가 끝난 implementation check에만 기록한다.
 
 ## 설치·업그레이드 사전 절차
 
@@ -51,14 +54,15 @@ layout_errors
 1. `.llm-wiki.json`에서 `game_project.project_root`, layout, engine adapter를 확인한다.
 2. `wiki/game/index.md`, `overview.md`, `model.md`를 읽는다.
 3. 관련 spec·implementation check·build·playtest·decision을 찾는다.
-4. 구현 요청이면 project_root의 live source와 Git revision을 직접 확인한다.
-5. operation을 분류한다.
+4. `python tools/game_trace.py status`로 현재 동기화 상태를 확인한다.
+5. 구현 요청이면 project_root의 live source와 Git revision을 직접 확인한다.
+6. operation을 분류한다.
 
 ## Operations
 
 ### define
 
-기능·시스템·레벨·콘텐츠·UI·에셋 의도를 정의한다. 안정된 ID와 검증 가능한 성공 조건을 먼저 쓴다.
+기능·시스템·레벨·콘텐츠·UI·에셋 의도를 정의한다. 안정된 ID와 검증 가능한 성공 조건을 먼저 쓴다. 새 template의 `GAME-SYNC:DESIGN` 구간에는 구현과 동기화해야 하는 의미만 둔다.
 
 ### plan
 
@@ -70,17 +74,34 @@ accepted spec과 기존 결정을 확인한 뒤 project_root를 실제로 변경
 
 ### inspect
 
-`templates/game/implementation-check.md`로 spec과 live source를 비교한다. `일치 | 부분 일치 | 불일치 | 확인 불가`를 구분하고 정확한 revision을 고정한다.
+`templates/game/implementation-check.md`로 spec과 live source를 비교한다. `일치 | 부분 일치 | 불일치 | 확인 불가`를 구분하고 정확한 checked path를 고정한다.
 
-### trace
+실제 대조가 끝난 뒤에만 기준점을 확정한다.
 
 ```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
+```
+
+기본적으로 연결 코드에 uncommitted change가 있으면 거부한다. 실험 상태 자체를 기준점으로 남겨야 하는 명시적 이유가 있을 때만 `--allow-dirty`를 쓴다.
+
+### sync / trace
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
 python tools/game_trace.py spec <SPEC-ID>
 python tools/game_trace.py path <project-relative-path#symbol>
 python tools/game_trace.py matrix
 ```
+
+상태 의미:
+
+```text
+in_sync | design_changed | code_changed | both_changed | unverified | missing
+```
+
+`design_changed`, `code_changed`, `both_changed`는 자동 수정 지시가 아니라 재검사 신호다. `proposals`가 양쪽 중 무엇을 검토할지 제시하지만 실제 기획·코드·결정은 사람이 확정한다.
 
 ### impact
 
@@ -88,7 +109,7 @@ python tools/game_trace.py matrix
 python tools/game_trace.py affected --base <REV> --head <REV>
 ```
 
-코드 diff와 연결된 spec을 찾아 재검사 범위를 만든다. 의미 변화는 자동 단정하지 않는다.
+project Git diff를 project-relative path로 정규화하고 연결된 spec을 찾는다. 기획 변경은 vault Git 유무와 관계없이 canonical spec digest로 감지한다.
 
 ### playtest
 
@@ -108,18 +129,28 @@ source revision, build ID, 플랫폼, 구성, 성공·실패 단계와 스모크
 
 ## 변경 후 필수 게이트
 
-기획·구현 확인·build·playtest·decision 문서를 바꾼 뒤:
+기획·코드·구현 확인·build·playtest·decision을 바꾼 뒤:
 
 ```bash
-python tools/game_trace.py rebuild
+python tools/game_trace.py scan
+python tools/game_trace.py status
+```
+
+동기화 문제를 해결한 후 새 implementation check를 만들고 `accept`한다.
+
+일반 검증:
+
+```bash
 python tools/game_trace.py verify
 ```
 
 완료·릴리스 게이트:
 
 ```bash
-python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py verify --strict-sync
 ```
+
+`--strict-sync`는 `in_sync`가 아닌 구현 관계를 실패로 처리한다. 기존 `--strict-stale`은 design/code 변경만 차단하는 호환 옵션이다.
 
 ## Evidence 연결
 
@@ -133,8 +164,9 @@ python tools/game_trace.py verify --strict-stale
 ## 마무리 보고
 
 1. 변경한 project_root 파일과 vault 문서
-2. 상태 변화와 직접 근거
-3. 실제 실행한 검사·테스트·빌드
-4. traceability verify 결과
-5. 실패·미확인·범위 밖 항목
-6. 제안·결정·다음 행동
+2. `in_sync/design_changed/code_changed/both_changed/unverified/missing` 변화
+3. 기준점으로 사용한 implementation check와 digest/fingerprint
+4. 실제 실행한 검사·테스트·빌드
+5. `verify --strict-sync` 결과
+6. 실패·미확인·범위 밖 항목
+7. 제안·결정·다음 행동

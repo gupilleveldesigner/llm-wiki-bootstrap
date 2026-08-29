@@ -21,6 +21,7 @@ updated: "YYYY-MM-DD"
 
 # 시스템명
 
+<!-- GAME-SYNC:DESIGN-START -->
 ## 목적
 
 - 플레이어 경험:
@@ -54,6 +55,7 @@ updated: "YYYY-MM-DD"
 - UI/피드백:
 - AI/레벨/콘텐츠:
 - 저장/네트워크/플랫폼:
+<!-- GAME-SYNC:DESIGN-END -->
 
 ## 기획 ↔ 코드 추적
 

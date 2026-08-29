@@ -1,11 +1,11 @@
 ---
 name: game-project
-description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레벨·콘텐츠·내러티브·UI/UX·기술·에셋을 설계하고, live project 구현 확인, 기획↔코드 추적, Git diff 영향 분석, 플레이테스트, 빌드, 버그, 결정, 마일스톤, 릴리스를 운영한다. 게임 기획서/레벨 설계/구현 일치 확인/코드 영향 분석/플레이테스트/빌드 검증 요청에 사용한다. 일반 지식 질의나 game mode가 아닌 볼트에는 사용하지 않는다.
+description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레벨·콘텐츠·내러티브·UI/UX·기술·에셋을 설계하고, live project 구현 확인, 기획↔코드 양방향 동기화 상태, Git diff 영향 분석, 플레이테스트, 빌드, 버그, 결정, 마일스톤, 릴리스를 운영한다. 게임 기획서/레벨 설계/구현 일치 확인/코드 영향 분석/기획 변경 영향/플레이테스트/빌드 검증 요청에 사용한다. 일반 지식 질의나 game mode가 아닌 볼트에는 사용하지 않는다.
 ---
 
 # Game Project — 게임 제작 운영 스킬
 
-이 스킬은 설계 의도·실제 구현·검증 결과·채택 결정과 그 연결을 유지한다.
+이 스킬은 설계 의도·실제 구현·검증 결과·채택 결정과 그 연결을 유지한다. sidecar는 설치 파일의 위치만 분리할 뿐, live project의 코드·씬·데이터 추적을 분리하지 않는다.
 
 ## 활성 조건과 필독
 
@@ -13,7 +13,8 @@ description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레�
 2. `game_project.project_root`, layout, engine adapter, source roots를 확인한다.
 3. `wiki/game/index.md`, `wiki/game/model.md`, `instructions/game-project.md`, `instructions/game-engine-layouts.md`를 읽는다.
 4. 관련 spec·implementation check·build·playtest·decision을 찾는다.
-5. Evidence profile이면 evidence model/operations/KB도 읽는다.
+5. `python tools/game_trace.py status`로 현재 기획↔코드 동기화 상태를 읽는다.
+6. Evidence profile이면 evidence model/operations/KB도 읽는다.
 
 ## 두 루트와 쓰기 경계
 
@@ -27,6 +28,7 @@ project_root  live engine project·코드·씬·데이터·원본 에셋
 - 엔진 프로젝트를 Raw로 옮기지 않는다.
 - project-relative path만 trace에 기록한다.
 - generated roots는 구현 정본이나 evidence로 사용하지 않는다.
+- runtime은 manifest의 project root를 따라 실제 코드 fingerprint와 Git revision을 계산한다.
 
 ## 절대 규칙
 
@@ -38,8 +40,34 @@ project_root  live engine project·코드·씬·데이터·원본 에셋
 - 미승인 방향은 proposed다.
 - 관찰과 해석을 분리한다.
 - 실패·반례·기각안을 보존한다.
-- `UNKNOWN`, `not run`, `확인 불가`, `stale`을 허용한다.
+- `UNKNOWN`, `not run`, `확인 불가`, `unverified`, `missing`을 허용한다.
 - 사용자가 수정한 관리 문서를 자동 덮어쓰지 않는다.
+- 기획과 코드를 자동으로 서로 덮어써 동기화하지 않는다.
+- `sync_baseline_status: accepted`는 실제 implementation inspection을 끝낸 뒤에만 기록한다.
+
+## 동기화 모델
+
+각 구현 관계는 implementation check에 검사 당시 양쪽 기준점을 남긴다.
+
+```text
+canonical spec digest
+checked path별 code fingerprint
+project revision
+vault revision(있는 경우)
+```
+
+현재 상태:
+
+```text
+in_sync         기획과 코드 모두 기준점과 동일
+design_changed  기획 의미 영역만 변경
+code_changed    연결 코드 fingerprint만 변경
+both_changed    양쪽 모두 변경
+unverified      accepted baseline 없음
+missing         연결 path 또는 필수 문서 없음
+```
+
+새 spec template의 `GAME-SYNC:DESIGN-START/END` 사이만 명시적 의미 영역이다. legacy 문서는 운영 섹션을 제외한 본문을 fallback digest로 사용한다. `updated`, build/playtest refs, 구현·검증 상태 같은 운영 변경은 design digest에서 제외한다.
 
 ## Operation routing
 
@@ -49,8 +77,10 @@ project_root  live engine project·코드·씬·데이터·원본 에셋
 | 작업 순서·마일스톤 | `plan` | `templates/game/milestone.md` |
 | 실제 코드·씬·데이터·에셋 변경 | `implement` | project root |
 | spec 대비 구현 확인 | `inspect` | `templates/game/implementation-check.md` |
-| 기획 또는 코드 역조회 | `trace` | `tools/game_trace.py spec/path/matrix` |
-| Git diff 영향 분석 | `impact` | `tools/game_trace.py affected` |
+| 기준점 확정 | `accept-sync` | `game_trace.py accept` |
+| 기획 또는 코드 역조회 | `trace` | `game_trace.py spec/path/matrix` |
+| 양쪽 변경 상태·제안 | `sync` | `game_trace.py scan/status/proposals` |
+| Git diff 영향 분석 | `impact` | `game_trace.py affected` |
 | 플레이테스트 | `playtest` | `templates/game/playtest-report.md` |
 | 빌드·스모크 | `build` | `templates/game/build-report.md` |
 | 대안 비교와 결정 | `decide` | `templates/game/decision-record.md` |
@@ -60,7 +90,7 @@ project_root  live engine project·코드·씬·데이터·원본 에셋
 일반 순서:
 
 ```text
-define → implement → inspect → trace verify → playtest/build → decide
+define → implement → inspect → accept-sync → scan/verify → playtest/build → decide
 ```
 
 ## Define
@@ -68,7 +98,9 @@ define → implement → inspect → trace verify → playtest/build → decide
 - 안정된 ID를 만든다.
 - 플레이어 경험과 검증 가능한 성공 조건부터 쓴다.
 - 규칙, 상태, 입력/출력, 실패 조건, 의존성, 범위 밖을 분리한다.
+- 동기화할 의미는 `GAME-SYNC:DESIGN` 구간 안에 둔다.
 - 관련 live path를 알고 있어도 실제 확인 전 `implementation_status: unknown`으로 둔다.
+- accepted baseline 이후 의미 영역을 바꾸면 `design_changed`가 발생하는 것이 정상이다.
 
 ## Implement
 
@@ -78,26 +110,41 @@ define → implement → inspect → trace verify → playtest/build → decide
 - 변경 path, symbol/scene/data, revision을 기록한다.
 - 실행하지 못한 검증을 `not run`으로 보고한다.
 - 구현 후 implementation 상태만 근거에 맞게 갱신한다.
+- 기존 baseline이 있으면 변경 후 `code_changed` 또는 `both_changed`가 되는 것이 정상이며 자동으로 baseline을 갱신하지 않는다.
 
-## Inspect
+## Inspect and accept-sync
 
 - 문서보다 live source와 실행 결과를 우선한다.
 - exact Git revision/build와 확인 범위를 고정한다.
 - `일치 | 부분 일치 | 불일치 | 확인 불가`로 판정한다.
 - 확인한 path는 `path#symbol@locator` 형식으로 남긴다.
 - 새 implementation-check를 만들고 spec의 ref를 갱신한다.
-
-## Trace
+- 대조가 끝난 뒤에만 기준점을 확정한다.
 
 ```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
+```
+
+이 명령은 check frontmatter에 `checked_spec_digest`, `checked_code_fingerprints`, `checked_project_revision`, `checked_vault_revision`, `sync_baseline_status: accepted`를 기록하고 index를 재생성한다.
+
+- linked path에 uncommitted change가 있으면 기본 거부한다.
+- 실험 상태 자체를 기준점으로 남길 명시적 이유가 있을 때만 `--allow-dirty`를 쓴다.
+- 기존 check를 몰래 갱신하기보다 새 check로 시간 이력을 남기는 것을 기본으로 한다.
+
+## Sync / Trace
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
 python tools/game_trace.py spec <SPEC-ID>
 python tools/game_trace.py path <path#symbol>
 python tools/game_trace.py matrix
 ```
 
-`traceability.json`은 파생 인덱스이며 직접 편집하지 않는다.
+- `status`는 양쪽 현재 상태와 actionable proposal을 함께 보여준다.
+- `proposals`는 어느 쪽을 검토할지 제안하지만 기획·코드·결정을 자동 수정하지 않는다.
+- `traceability.json`은 기계 관리 파생 인덱스이며 직접 편집하지 않는다.
 
 ## Impact
 
@@ -105,7 +152,28 @@ python tools/game_trace.py matrix
 python tools/game_trace.py affected --base <REV> --head <REV>
 ```
 
-변경 코드와 연결된 spec을 찾고, implementation relation을 재검사 대상으로 만든다. diff만 보고 의미가 바뀌었다고 단정하지 않는다.
+- Git monorepo의 repository root와 game project prefix를 정규화한다.
+- project Git diff에서 변경 코드와 연결된 spec을 찾는다.
+- vault가 별도 Git 저장소가 아니어도 canonical spec digest로 기획 변경을 찾는다.
+- diff만 보고 의미가 바뀌었다고 단정하지 않는다.
+
+## Reconciliation
+
+### design_changed
+
+현재 accepted design을 구현할지, 기획 변경을 supersede/revert할지 결정한다.
+
+### code_changed
+
+구현 변경을 정식 기획으로 제안할지, 코드가 기존 기획을 다시 따르게 할지 결정한다.
+
+### both_changed
+
+어느 한쪽을 자동 우선하지 않는다. 옵션·근거·비용을 decision record로 남긴 뒤 양쪽을 맞추고 새 check를 만든다.
+
+### unverified / missing
+
+검사와 링크 복구가 먼저다. baseline을 임의 생성하지 않는다.
 
 ## Playtest / Build
 
@@ -122,18 +190,21 @@ python tools/game_trace.py affected --base <REV> --head <REV>
 
 ## 변경 후 필수 게이트
 
-기획·구현 확인·build·playtest·decision 문서 변경 후:
+기획·코드·구현 확인·build·playtest·decision 변경 후:
 
 ```bash
-python tools/game_trace.py rebuild
+python tools/game_trace.py scan
+python tools/game_trace.py status
 python tools/game_trace.py verify
 ```
 
 완료·릴리스:
 
 ```bash
-python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py verify --strict-sync
 ```
+
+`--strict-sync`는 `in_sync`가 아닌 구현 관계를 차단한다. 기존 `--strict-stale`은 변경된 관계만 차단하는 호환 옵션이다.
 
 ## Evidence profile
 
@@ -148,8 +219,9 @@ python tools/game_trace.py verify --strict-stale
 ## 완료 보고
 
 1. 변경한 project root 파일과 vault 문서
-2. 상태 변화와 근거
-3. 실행한 테스트·빌드·플레이테스트
-4. trace rebuild/verify와 stale 상태
-5. 실패·미확인·범위 밖 항목
-6. 다음 행동
+2. 동기화 상태 변화와 이유
+3. 기준점 implementation check와 digest/fingerprint
+4. 실행한 테스트·빌드·플레이테스트
+5. `scan`, `status`, `verify --strict-sync` 결과
+6. 실패·미확인·미실행·범위 밖 항목
+7. 다음 행동

@@ -22,10 +22,10 @@ engine_adapter: {{ENGINE_ADAPTER}}
 
 - 기획 정본은 `vault_root/wiki/game/`에 있다.
 - 구현 정본은 `project_root`의 실제 코드·씬·데이터·원본 에셋이다.
-- `wiki/game/implementation/`은 특정 revision에서 기획과 구현을 대조한 기록이다.
-- `wiki/game/traceability.json`은 양쪽 관계를 재생성한 파생 인덱스다.
+- `wiki/game/implementation/`은 특정 시점에 두 정본을 실제로 대조한 기록이다.
+- `wiki/game/traceability.json`은 원문 문서와 live project에서 재생성되는 기계 관리 인덱스다.
 
-설치기와 업그레이더는 **vault-only write policy**를 지킨다. 엔진 프로젝트를 Raw로 옮기거나 설치 파일을 엔진 소유 디렉터리에 넣지 않는다.
+설치기와 업그레이더는 **vault-only write policy**를 지킨다. sidecar는 코드를 복사하지 않지만, manifest의 `game_project.project_root`를 통해 실제 프로젝트를 읽고 Git revision·파일 fingerprint를 계산한다.
 
 ## 독립 상태
 
@@ -69,7 +69,7 @@ production_status: backlog | ready | in_progress | blocked | done
 
 작업 보드의 done은 implemented 또는 passed의 증거가 아니다.
 
-## 기획↔코드 traceability
+## 기획↔코드 동기화 기준점
 
 기획 문서는 안정된 ID와 project-relative live path를 가진다.
 
@@ -81,17 +81,55 @@ implementation_check_refs:
   - wiki/game/implementation/IMPL-LOCKON-004.md
 ```
 
-구현 확인 문서는 정확한 revision에서 비교한 내용을 남긴다.
+구현 확인을 완료한 뒤 다음 명령으로 **검사 당시 양쪽 기준점**을 구현 확인 문서에 기록한다.
 
-```yaml
-check_id: IMPL-LOCKON-004
-subject_id: FEATURE-LOCKON-001
-source_revision: abc123
-checked_paths:
-  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+```bash
+python tools/game_trace.py accept wiki/game/implementation/IMPL-LOCKON-004.md
 ```
 
-파생 그래프:
+기준점에는 다음이 포함된다.
+
+```text
+canonical spec digest
+각 checked_path의 code fingerprint
+project Git revision
+vault Git revision(있는 경우)
+dirty working-tree 여부
+```
+
+기획 digest는 `GAME-SYNC:DESIGN-START/END` 사이의 의미 영역과 운영 필드를 제외한 semantic frontmatter로 계산한다. 따라서 `updated`, 검증 상태, 링크 정리 같은 운영 변경은 동기화를 깨지 않지만 플레이어 경험·규칙·공간·수치·기술 규격의 의미 변경은 잡는다.
+
+코드 fingerprint는 `path#symbol@locator` 관계별로 계산한다. `@lines N-M`가 있으면 해당 범위를, 없으면 파일 전체를 해시한다. Git commit 여부와 별개로 실제 파일 내용이 바뀌면 감지된다.
+
+## 동기화 상태
+
+```text
+in_sync
+  기획 digest와 코드 fingerprint가 모두 기준점과 동일
+
+design_changed
+  기획 의미 영역만 변경
+
+code_changed
+  연결된 live path의 fingerprint만 변경
+
+both_changed
+  기획과 코드가 모두 변경
+
+unverified
+  accepted 구현 확인 기준점이 없음
+
+missing
+  연결된 live path 또는 필수 문서가 사라짐
+```
+
+자동 동기화는 기획이나 코드를 서로 덮어쓰지 않는다. 변경을 감지하고 재검사·제안·결정을 요구한다.
+
+```text
+변경 감지 → 영향 관계 계산 → proposal → inspect/decide → 새 implementation check → accept
+```
+
+## 파생 그래프
 
 ```text
 spec --implemented_by--> code
@@ -100,7 +138,21 @@ spec --validated_by----> test
 spec --governed_by-----> decision
 ```
 
-코드가 구현 확인 revision 이후 변경되면 관계는 `stale`이 된다. stale은 오류 확정이 아니라 재검사 요청이다.
+기본 명령:
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify --strict-sync
+```
+
+## Sidecar와 monorepo
+
+- sidecar에서도 runtime은 실제 `project_root`에서 파일과 Git을 읽는다.
+- game project가 더 큰 Git monorepo 안에 있으면 repository root와 project prefix를 계산해 `git diff` 경로를 project-relative path로 정규화한다.
+- vault가 별도 Git 저장소가 아니어도 spec digest로 기획 변경을 감지한다.
+- project가 Git 저장소가 아니어도 code fingerprint로 구현 변경을 감지한다. revision은 `UNKNOWN`으로 남는다.
 
 ## 문서 계층
 
@@ -123,13 +175,14 @@ Traceability는 “어떤 기획이 어떤 코드·빌드·테스트·결정과 
 
 ## 완료 계약
 
-다음 중 하나라도 빠지면 “검증 완료”라고 보고하지 않는다.
+다음 중 하나라도 빠지면 “동기화·검증 완료”라고 보고하지 않는다.
 
 1. 정확한 기획 ID 또는 기대 동작
 2. 확인한 project-relative path와 revision/build
-3. 실제 실행한 테스트·플레이테스트·검사
-4. 실패·미확인·범위 밖 조건
-5. traceability rebuild/verify
-6. 관련 index와 상태 갱신
+3. 실제 implementation check
+4. `sync_baseline_status: accepted`
+5. `game_trace.py scan` 및 `verify --strict-sync`
+6. 실패·미확인·범위 밖 조건
+7. 관련 index와 상태 갱신
 
 모르면 `UNKNOWN`으로 남긴다.

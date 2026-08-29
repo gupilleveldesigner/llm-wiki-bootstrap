@@ -15,8 +15,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
 PROJECT_MODE = "game"
-PROJECT_MODE_VERSION = 3
-TRACEABILITY_SCHEMA_VERSION = 1
+PROJECT_MODE_VERSION = 4
+TRACEABILITY_SCHEMA_VERSION = 2
+SYNC_BASELINE_VERSION = 1
 GAME_SKILL = "game-project"
 GAME_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROJECT-MODE -->"
 GAME_TRACE_RUNTIME_SOURCE = "project-modes/game/runtime/game_trace.py"
@@ -86,12 +87,12 @@ GAME_CONTRACT_MARKERS = {
     "project-modes/game/docs/game-engine-layouts.md.template": "sidecar",
     "project-modes/game/docs/game-index.md.template": "project_mode: game",
     "project-modes/game/docs/game-CLAUDE.md.template": "game-project",
-    "project-modes/game/docs/traceability.json.template": '"source_of_truth"',
-    GAME_TRACE_RUNTIME_SOURCE: "TRACEABILITY_SCHEMA_VERSION = 1",
-    "project-modes/game/templates/feature-spec.md": "implementation_status: unknown",
-    "project-modes/game/templates/implementation-check.md": "checked_paths: []",
+    "project-modes/game/docs/traceability.json.template": '"sync_baseline_version"',
+    GAME_TRACE_RUNTIME_SOURCE: "TRACEABILITY_SCHEMA_VERSION = 2",
+    "project-modes/game/templates/feature-spec.md": "GAME-SYNC:DESIGN-START",
+    "project-modes/game/templates/implementation-check.md": "checked_spec_digest",
     "project-modes/game/templates/playtest-report.md": "## 관찰 — 해석을 섞지 않음",
-    "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "vault-only",
+    "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "sync_baseline_status",
     "skills-bundle/claude-adapters/game-project/SKILL.md.bundled": "../../../.agents/skills/game-project/SKILL.md",
 }
 
@@ -275,9 +276,21 @@ def write_game_manifest(target: Path, metadata: dict[str, Any]) -> None:
     manifest["game_project"] = metadata
     manifest["game_traceability"] = {
         "schema_version": TRACEABILITY_SCHEMA_VERSION,
+        "sync_baseline_version": SYNC_BASELINE_VERSION,
         "index": GAME_TRACE_INDEX_DESTINATION,
         "runtime": GAME_TRACE_RUNTIME_DESTINATION,
-        "source_of_truth": "vault specs/checks/builds/playtests/decisions plus live project paths and Git revisions",
+        "baseline_source": "implementation-check frontmatter",
+        "design_baseline": "canonical spec digest",
+        "implementation_baseline": "per-path code fingerprint plus project revision",
+        "sync_statuses": [
+            "in_sync",
+            "design_changed",
+            "code_changed",
+            "both_changed",
+            "unverified",
+            "missing",
+        ],
+        "source_of_truth": "vault specs/checks/builds/playtests/decisions plus live project paths, fingerprints, and Git revisions",
     }
     manifest["managed_files"] = {
         "schema_version": MANAGED_MANIFEST_SCHEMA_VERSION,

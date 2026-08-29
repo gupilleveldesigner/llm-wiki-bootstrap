@@ -21,6 +21,7 @@ updated: "YYYY-MM-DD"
 
 # 기능명
 
+<!-- GAME-SYNC:DESIGN-START -->
 ## 플레이어 경험
 
 이 기능으로 플레이어가 무엇을 느끼고 무엇을 할 수 있어야 하는가?
@@ -49,12 +50,14 @@ updated: "YYYY-MM-DD"
 - 영향받는 콘텐츠:
 - UI/피드백:
 - 저장·네트워크·플랫폼 제약:
+<!-- GAME-SYNC:DESIGN-END -->
 
 ## 기획 ↔ 코드 추적
 
 - `live_paths`에는 `project/relative/path#symbol@locator` 형식으로 현재 구현 후보를 적는다.
 - 실제 확인 결과는 `implementation_check_refs`의 구현 확인 문서에 기록한다.
 - `live_paths`가 있다고 해서 자동으로 `implemented`가 되지는 않는다.
+- `GAME-SYNC:DESIGN` 구간의 의미가 바뀌면 기획 digest가 바뀌어 기존 구현 관계가 `design_changed` 또는 `both_changed`가 된다.
 
 ## 실제 구현 상태
 

@@ -65,12 +65,18 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertTrue((vault / ".llm-wiki-managed.json").is_file())
             self.assertTrue((vault / "tools/game_trace.py").is_file())
             self.assertTrue((vault / "wiki/game/traceability.json").is_file())
+            self.assertIn("checked_spec_digest", (vault / "templates/game/implementation-check.md").read_text(encoding="utf-8"))
             manifest = json.loads((vault / ".llm-wiki.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["project_mode_version"], 3)
+            self.assertEqual(manifest["project_mode_version"], 4)
+            self.assertEqual(manifest["game_traceability"]["schema_version"], 2)
+            self.assertEqual(manifest["game_traceability"]["sync_baseline_version"], 1)
             self.assertEqual(manifest["game_project"]["layout"], "sidecar")
             self.assertEqual(manifest["game_project"]["project_root"], "../UnityGame")
             self.assertEqual(manifest["game_project"]["engine_adapter"], "unity")
             self.assertEqual(manifest["game_project"]["write_policy"], "vault-only")
+            trace_index = json.loads((vault / "wiki/game/traceability.json").read_text(encoding="utf-8"))
+            self.assertEqual(trace_index["schema_version"], 2)
+            self.assertIn("sync_counts", trace_index)
 
     def test_dry_run_reports_exact_plan_without_final_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="game-dry-run-") as temporary:
@@ -141,7 +147,8 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(model.read_text(encoding="utf-8"), "# user-owned game model\n")
             self.assertTrue(model.with_name("model.md.wiki-proposed").is_file())
-            self.assertIn("TRACEABILITY_SCHEMA_VERSION = 1", runtime.read_text(encoding="utf-8"))
+            self.assertIn("TRACEABILITY_SCHEMA_VERSION = 2", runtime.read_text(encoding="utf-8"))
+            self.assertIn("accept_sync_baseline", runtime.read_text(encoding="utf-8"))
             base_backup = Path(result["backup_dir"])
             self.assertEqual(
                 (base_backup / "tools/game_trace.py").read_text(encoding="utf-8"),

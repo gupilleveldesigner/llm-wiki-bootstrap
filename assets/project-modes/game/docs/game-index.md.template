@@ -52,14 +52,21 @@ updated: "{{TODAY}}"
 - [마일스톤](milestones/)
 - [릴리스](releases/)
 
-## Trace commands
+## Sync and trace commands
 
 ```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
-python tools/game_trace.py matrix
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify --strict-sync
+```
+
+구현 확인을 실제로 완료한 뒤 기준점을 확정한다.
+
+```bash
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
 ```
 
 ## 현재 핵심 문서
 
-아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 ID, 상태, 링크를 이 섹션에 추가한다.
+아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 ID, 상태, 링크, 동기화 상태를 이 섹션에 추가한다.

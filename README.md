@@ -26,7 +26,7 @@ Game mode adds:
 Design Intent → Implementation State → Validation Evidence → Project Decision
 ```
 
-Game mode v3 keeps the live engine project and the Wiki as separate roots. The default layout is a sibling sidecar vault, so Unity, Unreal, Godot, and web-project directory structures remain intact. Installation and upgrade use a dry-run write plan, engine protected paths, transaction staging, managed-file ownership, project-integrity verification, and rollback.
+Game mode v4 keeps the live engine project and Wiki as separate roots while tracking both sides. The default sibling sidecar preserves Unity, Unreal, Godot, and web-project layouts. Installation and upgrade use dry-run planning, engine protected paths, transaction staging, managed-file ownership, project-integrity verification, and rollback.
 
 ```bash
 python scripts/game_project.py \
@@ -37,6 +37,20 @@ python scripts/game_project.py \
   --dry-run
 ```
 
-Game mode also derives `wiki/game/traceability.json` and installs `tools/game_trace.py` for spec→code, code→spec, build/test/decision links, Git-diff impact analysis, and stale implementation checks.
+`tools/game_trace.py` now records an accepted implementation-check baseline containing a canonical design digest and per-path code fingerprints. Rebuilds distinguish:
+
+```text
+in_sync | design_changed | code_changed | both_changed | unverified | missing
+```
+
+```bash
+python tools/game_trace.py accept wiki/game/implementation/IMPL-001.md
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify --strict-sync
+```
+
+The runtime also supports spec→code, code→spec, build/test/decision links, monorepo-safe Git-diff impact analysis, and non-Git change detection through fingerprints. It never automatically overwrites design with code or code with design; changed relations require inspection, proposal/decision, and a new accepted baseline.
 
 **Upgrade means GitHub latest by default.** The updater pins and validates the official repository's exact default-branch HEAD before staging any target changes. Game-mode Wikis use `scripts/game_project.py --mode upgrade` so the base Wiki, engine-layout safety layer, Game overlay, and trace runtime advance together. No updater silently falls back to a stale local bundle.

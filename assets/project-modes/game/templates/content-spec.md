@@ -22,6 +22,7 @@ updated: "YYYY-MM-DD"
 
 # 콘텐츠명
 
+<!-- GAME-SYNC:DESIGN-START -->
 ## 역할과 플레이어 가치
 
 - 콘텐츠 유형:
@@ -50,6 +51,7 @@ updated: "YYYY-MM-DD"
 - 핵심 수치:
 - 금지 조합/예외:
 - 성능·메모리·플랫폼 제약:
+<!-- GAME-SYNC:DESIGN-END -->
 
 ## 기획 ↔ 코드·데이터 추적
 

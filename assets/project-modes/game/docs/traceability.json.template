@@ -1,18 +1,26 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "sync_baseline_version": 1,
   "project_mode": "game",
   "generated_at": null,
-  "project_root": {
-    "kind": "relative",
-    "value": "{{PROJECT_ROOT_REFERENCE}}"
-  },
+  "project_root": null,
+  "project_revision": "UNKNOWN",
+  "vault_revision": "UNKNOWN",
   "source_revision": "UNKNOWN",
   "source_of_truth": [
-    "vault game-spec frontmatter",
-    "vault implementation-check frontmatter",
+    "vault game-spec frontmatter and marked design body",
+    "vault implementation-check frontmatter with accepted sync baselines",
     "vault build, playtest, and decision frontmatter",
-    "live project paths and Git revisions"
+    "live project paths, fingerprints, and Git revisions"
   ],
+  "sync_counts": {
+    "in_sync": 0,
+    "design_changed": 0,
+    "code_changed": 0,
+    "both_changed": 0,
+    "unverified": 0,
+    "missing": 0
+  },
   "nodes": [],
   "edges": [],
   "issues": []
