@@ -1,58 +1,74 @@
 ---
 name: llm-wiki-bootstrap
-description: LLM Wiki 볼트를 신규 구축(new), 기존 일반 폴더에서 비파괴 전환(migrate), 또는 기존 Wiki를 GitHub의 gupilleveldesigner/llm-wiki-bootstrap 최신 기본 브랜치 커밋 기준으로 업그레이드(upgrade)한다. Vault profile은 standard/evidence로 분리한다. Evidence profile은 Raw→Source→Claim→Evidence/Conflict/Experiment→reviewed Canon 구조와 source lineage, epistemic state, canon-review를 추가한다. 사용자가 "LLM 위키 만들어줘", "세컨드브레인 구축", "이 폴더를 위키로 전환", "위키 최신버전으로 업그레이드", "스킬 최신화", "Evidence Wiki", "근거/가설/실험을 분리하는 연구 위키"를 말하거나 개인 지식관리/AI 연구 지식베이스를 새로 시작·전환·업그레이드하려는 의도를 보이면 사용한다. 기존 Wiki의 일상 ingest/query/lint/canon-review 작업에는 해당 설치 스킬을 사용한다.
+description: LLM Wiki를 신규 구축(new), 기존 일반 폴더에서 비파괴 전환(migrate), 또는 GitHub 공식 저장소 최신 exact commit 기준으로 업그레이드(upgrade)한다. 지식관리 profile은 standard/evidence, 프로젝트 운영 mode는 knowledge/game으로 분리한다. Evidence는 Raw→Source→Claim/Project Decision→Evidence/Conflict/Experiment→reviewed Canon을 제공한다. Game mode는 실제 엔진 프로젝트와 Wiki를 project_root/vault_root로 분리하고, engine-aware sidecar 설치, dry-run write plan, protected paths, staging·rollback, managed-files manifest, 기획↔코드 traceability를 제공한다. 사용자가 LLM Wiki, 세컨드브레인, Evidence Wiki, 기존 폴더 전환, Wiki 최신화, 게임 프로젝트용 기획·구현·검증 지식베이스 구축을 요청할 때 사용한다. 설치 후 일상 ingest/query/lint/canon-review/game-project 작업에는 프로젝트 로컬 스킬을 사용한다.
 ---
 
 # LLM Wiki Bootstrap
 
-폴더를 Claude Code / Codex가 운영하는 LLM Wiki로 구축·전환·업그레이드한다.
+Claude Code / Codex가 운영하는 LLM Wiki를 구축·전환·업그레이드한다.
 
-핵심 축은 두 개다.
+서로 다른 세 축을 섞지 않는다.
 
-- lifecycle mode: `new` / `migrate` / `upgrade`
-- vault profile: `standard` / `evidence`
+```text
+lifecycle mode: new | migrate | upgrade
+vault profile:  standard | evidence
+project mode:   knowledge | game
+```
 
-둘을 섞지 않는다.
+예:
+
+```text
+new + standard + knowledge
+migrate + evidence + knowledge
+migrate + standard + game
+upgrade + evidence + game
+```
 
 ## 절대 규칙
 
 1. `raw/`는 불변이다. 기존 Raw를 수정·삭제하지 않는다.
-2. `migrate`는 기존 파일을 임의로 이동하지 않는다. 이동 계획을 제시하고 사용자 승인 후 수행한다.
-3. `upgrade`는 **GitHub 공식 저장소의 최신 기본 브랜치 HEAD**를 먼저 조회한다.
-4. `upgrade`는 GitHub 조회/다운로드/검증이 실패하면 대상 Wiki를 수정하지 않는다. 로컬 번들로 조용히 fallback하지 않는다.
-5. 오프라인에서 로컬 번들을 쓰려면 사용자가 명시적으로 요청했을 때만 `--source local`을 사용한다.
-6. 기존 운영 스킬은 교체 전에 `.wiki-upgrade-bak/<timestamp>/`에 백업한다.
-7. Evidence의 Claim은 자동으로 Canon으로 승격하지 않는다.
-8. `.wiki-proposed`가 생기면 기존 문서를 덮어쓰지 않고 차이를 검토한다.
-9. 실패한 검증을 성공으로 보고하지 않는다.
-10. Evidence 설치는 파일 존재만으로 완료하지 않는다. 설치된 ingest/lint/query 회귀 테스트, `tools/kb.py selftest`, profile verification을 실제 대상에서 통과해야 한다.
+2. `migrate`는 기존 파일을 임의로 이동하지 않는다. 이동이 필요하면 파일별 계획과 승인을 먼저 받는다.
+3. Game mode의 엔진 프로젝트·코드·씬·데이터·원본 에셋은 Raw가 아니다.
+4. Game mode 설치·업그레이드는 기본적으로 **vault-only write policy**를 사용한다.
+5. Game mode의 기본 배치는 project root 옆의 sidecar vault다. 엔진 프로젝트 루트에 Wiki 폴더를 흩어 놓지 않는다.
+6. Game mode 적용 전 engine adapter, protected paths, 충돌, symlink, root 중첩을 포함한 dry-run write plan을 확인한다.
+7. `upgrade`는 GitHub 공식 저장소의 현재 default branch HEAD를 조회하고 exact 40자 commit SHA를 고정한다.
+8. GitHub 조회·다운로드·checkout 검증 실패 시 대상 Wiki를 수정하지 않는다. 오래된 local bundle로 자동 fallback하지 않는다.
+9. local/offline bundle은 사용자가 명시한 `--source local`에서만 쓴다.
+10. 기존 관리 스킬과 runtime은 upgrade 전 백업한다.
+11. `.wiki-proposed`가 생기면 사용자 문서를 덮어쓰지 않고 검토한다.
+12. Evidence Claim은 자동 Canon 승격하지 않는다.
+13. Game의 design, implementation, validation, decision, production 상태를 하나로 합치지 않는다.
+14. 실행하지 않은 검증을 성공으로 보고하지 않는다.
+15. staging 또는 post-apply 검증이 실패하면 완료라고 말하지 않는다.
 
 ## 전제 조건
 
 - Python 3.10+
 - Claude Code 또는 Codex
-- 온라인 `upgrade`에는 GitHub HTTPS 접근 가능 환경
-- Graphify는 선택 사항이지만 batch ingest의 기존 완료 계약이 Graphify를 요구하면 그 계약을 따른다.
+- 온라인 upgrade에는 GitHub HTTPS 접근
+- Game trace의 Git revision/stale 판정에는 Git 저장소 권장
+- Graphify는 선택 사항이며 truth database가 아니다.
 
-Python 실행기는 `python` → `py -3` → `python3` 순으로 찾고, Windows Microsoft Store stub은 유효한 Python으로 취급하지 않는다.
+Python 실행기는 `python` → `py -3` → `python3` 순으로 찾고, Windows Microsoft Store stub은 실제 Python으로 취급하지 않는다.
 
-# 1. Lifecycle mode 판정
+# 1. Lifecycle mode
 
-| 대상 상태 | 사용자 의도 | mode |
+| 대상 | 의도 | mode |
 |---|---|---|
 | 비어 있거나 없음 | 새 Wiki | `new` |
-| 파일은 있으나 Wiki marker 없음 | Wiki로 전환 | `migrate` |
-| `raw/` + `wiki/` 등 기존 Wiki | 최신화/업그레이드 | `upgrade` |
+| 기존 자료 폴더지만 Wiki marker 없음 | 비파괴 Wiki 전환 | `migrate` |
+| 기존 `.llm-wiki.json` 또는 `raw/` + `wiki/` | 최신화·profile 승격·Game 갱신 | `upgrade` |
 
-기존 Wiki에 "새로 만들어줘"처럼 파괴 가능성이 있는 표현이 오면 덮어쓰지 말고 `upgrade`가 비파괴 경로임을 설명한다.
+기존 Wiki에 “새로 만들어줘”가 와도 파괴적 재생성을 하지 않고 `upgrade`를 우선 설명한다.
 
-# 2. Vault profile 판정
+Game mode에서 lifecycle은 **vault root 상태**를 기준으로 적용한다. Sidecar vault가 없고 live project만 존재한다면 사용자 의도는 migrate여도 base vault 생성은 `new`로 수행할 수 있다. live project는 이동·수정하지 않는다.
 
-사용자가 명시하면 그대로 사용한다.
+# 2. Vault profile
 
 ## standard
 
-일반 공부, 자료 정리, 세컨드브레인, 프로젝트 메모, 기사/영상/책 요약에 사용한다.
+일반 공부, 자료 정리, 프로젝트 메모, 기사·영상·책 요약에 사용한다.
 
 ```text
 raw → wiki → Output
@@ -60,203 +76,458 @@ raw → wiki → Output
 
 ## evidence
 
-다음 신호가 핵심이면 Evidence profile을 선택한다.
+다음 신호가 핵심이면 사용한다.
 
-- 역공학/숨겨진 구현 추정
-- 여러 LLM 분석을 누적
-- 관찰과 추론/가설을 분리
-- provenance/source lineage 필요
+- 역공학·숨겨진 구현 추정
+- 여러 LLM 분석 누적
+- 관찰과 추론·가설 분리
+- source lineage와 provenance 필요
 - conflicting/rejected claim 보존
-- hypothesis → experiment → conclusion 연구 루프
-- 모든 결론을 원문까지 trace
+- hypothesis → experiment → conclusion
+- 결론을 원문 locator까지 trace
 
 ```text
-Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon
+Raw → Source → Claim 또는 Project Decision
+    → Evidence/Conflict/Experiment → reviewed Canon
 ```
 
-핵심 문장:
+핵심 원칙:
 
 > **“LLM이 말했다”와 “우리가 확인했다”를 같은 것으로 취급하지 않는다.**
 
-`upgrade`에서 profile을 생략하면 `.llm-wiki.json`의 기존 profile을 보존한다. manifest 없는 legacy Wiki는 `standard`로 본다. Evidence → Standard 자동 downgrade는 금지한다.
+Upgrade에서 profile을 생략하면 기존 `.llm-wiki.json` profile을 보존한다. manifest 없는 legacy Wiki는 standard로 본다. Evidence → Standard 자동 downgrade는 금지한다.
 
-# 3. 짧은 인터뷰
+# 3. Project mode
 
-이미 받은 정보는 다시 묻지 않는다. 빠진 항목만 최대 한 번에 묻는다.
+## knowledge
+
+일반 LLM Wiki다. `scripts/bootstrap.py`와 `scripts/upgrade.py`를 사용한다.
+
+## game
+
+다음 의도가 있으면 사용한다.
+
+- 실제 Unity·Unreal·Godot·웹 게임 프로젝트와 함께 쓰는 Wiki
+- 기능·시스템·레벨·콘텐츠·내러티브·UI/UX·기술·에셋 명세
+- 기획과 코드·씬·데이터·에셋의 대응 관계 추적
+- 빌드·플레이테스트·버그·결정·마일스톤·릴리스 기록
+- 코드 diff가 어떤 기획에 영향을 주는지 분석
+- “기획됨 / 구현됨 / 검증됨 / 채택됨 / 작업완료” 분리
+
+핵심 추적선:
+
+```text
+Design Intent → Implementation State → Validation Evidence → Project Decision
+```
+
+Game mode는 profile을 대체하지 않는다.
+
+```text
+standard + game
+evidence + game
+```
+
+Game → knowledge 자동 제거는 제공하지 않는다. Game 기록과 router를 없애는 작업은 별도 migration이다.
+
+# 4. 짧은 인터뷰와 config
+
+이미 받은 정보는 다시 묻지 않는다. 빠진 항목만 한 번에 묻는다.
+
+공통:
 
 1. Wiki 주제와 목적
-2. 주로 모을 자료 유형
+2. 주요 자료 유형
 3. 프로젝트 이름
 
-이 정보로 `project_name`, `domain_summary`, 초기 overview/questions/taxonomy를 만든다.
+Game에서 필요하면:
 
-# 4. new / migrate 스캐폴드
+- 정확한 live project root
+- 게임 제목·엔진·장르·플랫폼·제작 단계
+- source roots
+- sidecar/embedded/custom 배치 선호
 
-config 예:
+모르면 `UNKNOWN` 또는 빈 목록으로 시작한다. 엔진 표지를 근거 없이 추정하지 않는다.
+
+기본 config:
 
 ```json
-{"project_name":"My Wiki","domain_summary":"프로젝트 목적 한 문장"}
+{
+  "project_name": "My Wiki",
+  "domain_summary": "프로젝트 목적 한 문장"
+}
 ```
+
+Game config:
+
+```json
+{
+  "project_name": "My Game Wiki",
+  "domain_summary": "기획과 실제 구현·검증을 연결한다",
+  "project_root": "../MyGame",
+  "layout": "sidecar",
+  "engine": "auto",
+  "game_title": "My Game",
+  "game_engine": "Godot 4",
+  "game_genre": "2D action puzzle",
+  "target_platforms": "Windows, Web",
+  "project_phase": "prototype",
+  "source_roots": ["scenes/", "scripts/", "assets/"]
+}
+```
+
+# 5. Knowledge mode new / migrate
 
 Standard:
 
 ```bash
-python "<SKILL_ROOT>/scripts/bootstrap.py" --target "<TARGET>" --config "<CONFIG>" --mode new --profile standard
+python "<SKILL_ROOT>/scripts/bootstrap.py" \
+  --target "<VAULT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode new \
+  --profile standard
 ```
 
 Evidence:
 
 ```bash
-python "<SKILL_ROOT>/scripts/bootstrap.py" --target "<TARGET>" --config "<CONFIG>" --mode new --profile evidence
+python "<SKILL_ROOT>/scripts/bootstrap.py" \
+  --target "<VAULT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode new \
+  --profile evidence
 ```
 
-migrate는 `--mode migrate`를 사용한다.
+기존 일반 폴더는 `--mode migrate`를 사용한다.
 
-stdout 마지막 JSON에서 `ok: true`를 확인한다.
+# 6. Game mode layout safety
 
-생성/설치:
-
-- `raw/`, `wiki/`, `Output/`
-- `.agents/skills/`, `.claude/skills/`
-- `.session-memory/`
-- `templates/`
-- `.llm-wiki.json`
-- base 스킬 6종: ingest/query/lint/session-memory/brief-tuner/wiki-audit
-- Evidence면 canon-review와 claims/canon/conflicts/experiments/questions/.wiki-cache
-- Evidence면 decisions, `instructions/evidence-kb.md`, `tools/kb.py`, semantic ingest runtime과 Source/Decision templates도 포함한다.
-
-# 5. upgrade — GitHub 최신 커밋이 정본
-
-사용자가 기존 Wiki를 "업그레이드", "최신화", "스킬 업데이트"해 달라고 하면 **반드시 이 절차**를 사용한다.
-
-## 기본 경로: GitHub latest
-
-```bash
-python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>"
-```
-
-profile 전환을 함께 요청한 경우:
-
-```bash
-python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>" --profile evidence
-```
-
-`upgrade.py`의 계약:
-
-1. `gupilleveldesigner/llm-wiki-bootstrap` 저장소 메타데이터에서 **현재 default branch**를 읽는다.
-2. 그 default branch의 최신 commit SHA를 조회한다.
-3. branch 이름이 아니라 **검증된 정확한 40자 SHA**의 ZIP을 GitHub codeload에서 받는다.
-4. archive path traversal을 차단하고 필수 파일/skills bundle 존재를 검증한다.
-   Evidence 계약의 `semantic_contract.py`, structural stitch, `tools/kb.py`, Decision template이 없는 구버전 checkout도 target 수정 전에 거부한다.
-5. 여기까지 전부 성공하기 전에는 대상 Wiki를 건드리지 않는다.
-6. 다운로드한 그 커밋의 `scripts/bootstrap.py --mode upgrade`를 실행한다.
-7. 기존 스킬은 최신 bootstrap logic에 의해 `.wiki-upgrade-bak/<timestamp>/`로 백업된 뒤 교체된다.
-8. 성공 결과에 `bootstrap_repository`, `bootstrap_branch`, `bootstrap_commit`을 기록한다.
-9. 대상 `.llm-wiki.json`에도 `last_upgrade.source=github`와 정확한 commit SHA를 남긴다.
-
-즉 `upgrade`의 의미는:
-
-> **“현재 로컬 bundle로 덮어쓰기”가 아니라 “GitHub 공식 저장소 기본 브랜치의 현재 최신 commit을 고정해 그 버전의 upgrade logic과 skills bundle을 적용한다.”**
-
-## GitHub 실패 시
-
-네트워크, GitHub API, ZIP, checkout 검증 중 하나라도 실패하면:
-
-- 대상 Wiki를 수정하지 않는다.
-- 실패 이유를 그대로 보고한다.
-- 로컬 bundle로 자동 fallback하지 않는다.
-- 공식 HEAD가 현재 Evidence contract보다 오래돼 checkout 검증이 실패하면 upstream publication이 필요하다고 보고한다.
-
-## 명시적 offline/local 경로
-
-사용자가 GitHub를 사용하지 않거나 오프라인 local bundle을 명시한 경우에만:
-
-```bash
-python "<SKILL_ROOT>/scripts/upgrade.py" --target "<TARGET>" --config "<CONFIG>" --source local
-```
-
-이 모드는 "GitHub 최신"이 아니다. 보고할 때 반드시 `upgrade_source: local`임을 구분한다.
-
-## bootstrap.py --mode upgrade 직접 호출 금지
-
-사용자 의도의 "최신 업그레이드"에 `bootstrap.py --mode upgrade`를 직접 사용하지 않는다. 그것은 다운로드된 최신 checkout 내부에서 실제 적용을 수행하는 local apply primitive다.
-
-# 6. migrate 규칙
-
-migrate는 기존 일반 폴더를 Wiki로 만든다.
-
-- 기존 파일 삭제/수정 금지
-- 루트 문서 충돌은 `.wiki-proposed`
-- templates, skills, session runtime, Output 문서를 포함해 생성 경로가 기존 파일과 충돌하면 원본을 유지하고 새 버전을 `.wiki-proposed`로만 제안한다.
-- 기존 파일을 raw로 옮길 때 파일별 원래 경로와 목적지를 표로 제시
-- 사용자 승인 후 이동
-- 이동 뒤 `/ingest` batch 처리
-
-# 7. Evidence 운영 계약
-
-Evidence profile이면 `wiki/evidence-model.md`와 `instructions/evidence-operations.md`를 필독한다.
-
-## Ingest
+Game mode는 두 정본 루트를 분리한다.
 
 ```text
-Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question
-Raw → Source Record → Project Decision → next action/chronology/supersedes
+project_root
+  live engine project와 implementation source of truth
+
+vault_root
+  Wiki, specs, implementation checks, tests, decisions, skills, trace index
 ```
 
-Canon 자동 수정 금지.
+## 기본 sidecar
 
-- `structurally_verified`와 `semantic_status: pending|partial|reviewed`를 분리한다.
-- 긴 Source는 start/middle/EOF coverage와 실제 locator 인용이 필요하다.
-- 대화의 최종 결정·다음 행동·대체 이력은 Claim이 아니라 Decision 계약으로 보존한다.
-- Claim evidence와 Decision evidence·각 next action·chronology는 Source ID, `lines N-M` locator와 excerpt를 가져야 하며 Raw와 직접 대조한다.
-- Markdown뿐 아니라 Python·JavaScript·TypeScript·PowerShell 등 텍스트 코드 원문에도 line/EOF coverage를 적용한다.
-- outgoing Wiki link와 deterministic stitch edge는 semantic completion 증거가 아니다.
+```text
+Workspace/
+├─ MyGame/        # project_root
+└─ MyGame.wiki/   # vault_root
+```
 
-## Claim 상태
+`--vault-root`를 생략하면 sidecar를 선택한다.
 
-`OBSERVED`, `INFERRED`, `HYPOTHESIS`, `SUPPORTED`, `CONFIRMED`, `REJECTED`, `DISPUTED`, `DEPRECATED`, `UNKNOWN`
+## embedded
 
-## Source lineage
+```text
+MyGame/.llm-wiki/
+```
 
-같은 정보 계보에서 나온 여러 LLM 답변을 독립 evidence로 중복 계산하지 않는다. `parent_sources` 또는 동등 provenance를 기록한다.
+`--layout embedded`에서만 사용한다. Godot에는 `.gdignore`를 설치한다.
 
-## Query mode
+## custom
 
-- `answer`
-- `research`
-- `verify`
-- `challenge`
+프로젝트 밖 별도 경로를 `--vault-root`로 지정한다.
+
+## legacy-in-place
+
+`project_root == vault_root`인 과거 구조다. 기본 거부하며 `--layout legacy-in-place --allow-legacy-in-place`가 모두 필요하다.
+
+## engine adapters
+
+- Unity: `Assets`, `Packages`, `ProjectSettings` 보호
+- Unreal: `.uproject`, `Content`, `Config`, `Source`, `Plugins` 보호
+- Godot: `project.godot`과 기존 최상위 프로젝트 항목 보호, `.godot`/`.import` 생성 경로
+- Web: `package.json`, `src`, `app`, `pages`, `public`, 주요 config 보호
+- Generic: 기존 최상위 항목과 사용자가 지정한 source roots를 기준으로 보수적으로 처리
+
+선택 root 아래 여러 엔진 프로젝트가 있으면 workspace로 판정하고 적용을 거부한다.
+
+# 7. Game mode dry-run, staging, apply
+
+실제 적용 전 dry-run을 우선한다.
+
+```bash
+python "<SKILL_ROOT>/scripts/game_project.py" \
+  --project-root "<PROJECT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode migrate \
+  --profile standard \
+  --dry-run
+```
+
+Dry-run은 transaction staging에서 실제 설치와 검증을 수행하지만 최종 vault를 만들거나 바꾸지 않는다.
+
+확인 항목:
+
+```text
+write_plan.safe_to_apply
+collisions
+protected_path_writes
+symlink_violations
+layout_errors
+writes.creates / updates / deletes
+mutation_started: false
+```
+
+다음이 있으면 적용하지 않는다.
+
+- 모호한 engine/project root
+- protected path write
+- unmanaged file overwrite
+- 사용자 편집 관리 문서 direct overwrite
+- delete 계획
+- 기존 vault symlink 또는 vault 밖 symlink write. Staging은 symlink를 따라가지 않음
+- 위험한 root 중첩
+- 검토하지 않은 foreign non-Wiki vault
+
+기존 비-Wiki 폴더를 의도적으로 vault로 채택할 때만 dry-run 검토 후 `--adopt-existing-vault`를 사용한다.
+
+안전하면 `--dry-run`을 제거한다.
+
+```bash
+python "<SKILL_ROOT>/scripts/game_project.py" \
+  --project-root "<PROJECT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode migrate \
+  --profile standard
+```
+
+적용 계약:
+
+1. 기존 vault를 transaction staging에 복사
+2. base Wiki와 Game overlay를 staging에서 생성·업그레이드
+3. profile/runtime/trace 검증
+4. `.llm-wiki-managed.json`과 write plan 생성
+5. 같은 파일시스템 rename으로 vault 교체
+6. 기존 vault rollback backup 유지
+7. 적용 후 managed files, trace, Game contract, project integrity 재검증
+8. 실패 시 이전 vault 자동 복구
+
+기본 integrity는 `metadata`; 강한 검증은 `--integrity full`이다.
+
+# 8. Game mode upgrade
+
+Game mode 또는 Game 추가 upgrade:
+
+```bash
+python "<SKILL_ROOT>/scripts/game_project.py" \
+  --project-root "<PROJECT_ROOT>" \
+  --vault-root "<VAULT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode upgrade
+```
+
+Evidence 승격:
+
+```bash
+python "<SKILL_ROOT>/scripts/game_project.py" \
+  --project-root "<PROJECT_ROOT>" \
+  --vault-root "<VAULT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode upgrade \
+  --profile evidence
+```
+
+명시적 local/offline:
+
+```bash
+python "<SKILL_ROOT>/scripts/game_project.py" \
+  --project-root "<PROJECT_ROOT>" \
+  --vault-root "<VAULT_ROOT>" \
+  --config "<CONFIG>" \
+  --mode upgrade \
+  --source local
+```
+
+Game mode Wiki에 base `upgrade.py`만 사용하지 않는다. `game_project.py --mode upgrade`가 base Wiki, Game overlay, layout safety, managed manifest, trace runtime을 같은 exact checkout에서 함께 갱신한다.
+
+## GitHub latest 계약
+
+1. 저장소 metadata에서 현재 default branch 확인
+2. 최신 40자 commit SHA 확인
+3. exact SHA archive 다운로드
+4. archive path traversal과 base 계약 검증
+5. Game wrapper, workspace safety runtime, docs, templates, skills, trace runtime 추가 검증
+6. 여기까지 성공 전에는 대상 vault에 최종 mutation 없음
+7. 다운로드된 checkout의 local apply를 staging에서 실행
+8. exact repository/branch/commit provenance 기록
+
+실패 시 local fallback하지 않는다.
+
+# 9. Game traceability와 dual baseline
+
+기획 정본은 vault, 구현 정본은 project root다. 구현 확인 문서에서 실제 대조가 끝난 뒤 다음 명령으로 양쪽 기준점을 확정한다.
+
+```bash
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
+```
+
+기준점:
+
+```text
+canonical spec digest
+checked path별 code fingerprint
+project revision
+독립 vault revision(있는 경우)
+```
+
+상태:
+
+```text
+in_sync
+design_changed
+code_changed
+both_changed
+unverified
+missing
+```
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify
+python tools/game_trace.py verify --strict-sync
+python tools/game_trace.py spec <SPEC-ID>
+python tools/game_trace.py path <path#symbol>
+python tools/game_trace.py affected --base <REV> --head <REV>
+python tools/game_trace.py matrix
+```
+
+변경 감지는 자동으로 어느 한쪽을 정본으로 승격하지 않는다. inspect, proposal/decision, 새 implementation check, 명시적 accept가 필요하다.
+
+## Game-aware ingest
+
+Game mode v5는 공용 ingest engine과 vault-local Game adapter를 결합한다.
+
+```text
+shared ingest: Raw scan → Source/SHA/semantic review → Graphify → ledger
+Game adapter:  sidecar context → typed Game validation → trace scan/status/verify
+```
+
+- 일반 `/ingest`는 manifest의 `ingest.adapter: game`을 읽어 자동 라우팅한다.
+- `/game-ingest`는 같은 engine의 명시적 UX다.
+- `raw/game/design|playtests|builds|telemetry|references`를 유형별로 라우팅한다.
+- Game 문서는 `topics/tags` 대신 안정된 Game ID와 `raw_refs/evidence_refs`를 검증한다.
+- ledger v3는 Source ID, 반영된 Game ID, subject refs, sync counts를 기록한다.
+- ingest는 `game_trace accept`를 자동 실행하지 않는다.
+
+필독:
+
+```text
+instructions/game-ingest.md
+.agents/skills/game-ingest/SKILL.md
+```
+
+# 10. Game 운영 계약
+
+필독:
+
+```text
+wiki/game/index.md
+wiki/game/model.md
+instructions/game-project.md
+instructions/game-engine-layouts.md
+instructions/game-ingest.md
+.agents/skills/game-project/SKILL.md
+.agents/skills/game-ingest/SKILL.md
+```
+
+독립 상태:
+
+```text
+design_status:         idea | proposed | accepted | superseded | rejected
+implementation_status: unknown | not_started | in_progress | implemented | blocked
+validation_status:     untested | partial | passed | failed
+decision_status:       proposed | accepted | rejected | superseded
+production_status:     backlog | ready | in_progress | blocked | done
+```
+
+Operations:
+
+- `define`
+- `plan`
+- `implement` — 명시적 요청에서만 project root 변경
+- `inspect`
 - `trace`
-- `compare`
+- `impact`
+- `game-ingest` — 공용 ingest engine + Game adapter
+- `playtest`
+- `build`
+- `decide`
+- `bug`
+- `release`
 
-## Lint
+기획·implementation check·build·playtest·decision 변경 뒤 `game_trace.py scan`, `status`, `verify`를 실행한다. 완료·릴리스에는 `verify --strict-sync`를 사용한다. Raw 게임 자료 반영은 `/ingest` 자동 라우팅 또는 `/game-ingest`를 사용한다.
 
-일반 문서 위생 외에 source 없는 Claim, broken provenance, lineage cycle, 근거 없는 CONFIRMED, REJECTED Claim을 현재 Canon이 사용하는 문제, unresolved conflict, orphan experiment 등을 점검한다.
+# 11. Evidence 운영 계약
 
-## Canon review
+Evidence이면 다음을 필독한다.
 
-`canon-review`는 기본 읽기 전용 recommendation이다. 명시적 승격/상태 변경 요청 없이는 Canon을 수정하지 않는다.
+```text
+wiki/evidence-model.md
+instructions/evidence-operations.md
+instructions/evidence-kb.md
+tools/kb.py
+```
 
-# 8. Graphify
+Ingest:
 
-Graphify는 선택적 탐색/시각화 보조다. truth database가 아니다.
+```text
+Raw → Source Record → atomic Claim → support/contradiction
+Raw → Source Record → Project Decision → chronology/supersedes
+```
 
-- Codex: `$graphify <WIKI_ROOT>` / `$graphify <WIKI_ROOT> --update`
-- Claude: `/graphify <WIKI_ROOT>` / `/graphify <WIKI_ROOT> --update`
-- Python subprocess에서 bare `graphify <path>`를 직접 호출하지 않는다.
-- 실행 뒤 `ingest_runtime.py record-graphify-run --host codex|claude`
-- batch 완료는 필요 시 `verify --complete-batch --require-graph`
+- `structurally_verified`와 `semantic_status` 분리
+- 긴 Source는 start/middle/EOF coverage와 실제 locator 필요
+- Decision evidence와 next action에도 Source ID, locator, excerpt 필요
+- 같은 lineage LLM 답변을 독립 evidence로 중복 계산하지 않음
+- Canon 자동 수정 금지
 
-# 9. 스모크 체크
+Claim 상태:
 
-new/migrate/upgrade 후 대상 기준으로:
+```text
+OBSERVED INFERRED HYPOTHESIS SUPPORTED CONFIRMED
+REJECTED DISPUTED DEPRECATED UNKNOWN
+```
+
+Query mode:
+
+```text
+answer research verify challenge trace compare
+```
+
+`canon-review`는 기본 읽기 전용 recommendation이다.
+
+# 12. Managed files와 사용자 문서
+
+Game sidecar의 `.llm-wiki-managed.json`은 관리 파일 hash와 정책을 기록한다.
+
+```text
+system-managed
+metadata
+managed-proposal
+seeded-user-editable
+derived
+```
+
+업그레이드는 사용자 편집 문서와 system runtime을 구분한다. 사용자 편집 관리 문서를 직접 바꿔야 하면 `.wiki-proposed` 또는 collision으로 처리한다. 기존 파일 삭제를 자동 계획하지 않는다.
+
+# 13. Smoke checks
+
+공통:
 
 ```bash
 python ".claude/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
 ```
 
-Evidence profile이면 설치된 실제 런타임으로 추가 실행한다.
+Evidence:
 
 ```bash
 python -m unittest discover ".agents/skills/ingest/tests" -p "test_*.py"
@@ -265,31 +536,38 @@ python -m unittest discover ".agents/skills/query/tests" -p "test_*.py"
 python "tools/kb.py" selftest
 ```
 
+Game:
+
+```bash
+python "tools/game_trace.py" verify
+```
+
 확인:
 
-- 올바른 root
-- `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json`
-- 렌더링 placeholder 없음
-- Evidence면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `canon-review`
-- Evidence new는 결과의 `profile_verification.status: ok`를 요구한다. migrate/upgrade가 기존 관리 문서를 보존해 `.wiki-proposed`를 만들면 `status: pending`과 `profile_activation_pending: true`가 정상이다. 기존 manifest schema가 낮으면 `knowledge_migration_pending: true`로 표시하며, 제안 검토와 실제 KB rebuild/query가 끝나기 전에는 Evidence 계약 활성화를 완료로 보고하지 않는다.
-- Evidence면 `wiki/decisions/`, `instructions/evidence-kb.md`, `tools/kb.py`, `semantic_contract.py`, Source/Decision template을 확인한다.
-- upgrade면 결과의 `upgrade_source`, `bootstrap_commit`, `backup_dir`
-- GitHub upgrade 성공이면 `.llm-wiki.json.last_upgrade.commit`과 결과 commit이 일치
-- 기존 Raw가 있는 migrate/upgrade는 대표 긴 Source 하나에서 head-only가 partial로 실패하고, 전체 coverage·locator가 있는 reviewed Source와 Decision/Claim trace가 실제 query에서 회수되는지 확인한다.
+- 올바른 project root / vault root / layout / engine adapter
+- sidecar 또는 isolated embedded placement
+- dry-run plan에 protected writes, symlink violations, collisions, deletes 없음
+- `.llm-wiki.json`, `.llm-wiki-managed.json`
+- `wiki/game/index.md`, `model.md`, `traceability.json`
+- `instructions/game-project.md`, `game-engine-layouts.md`
+- 양 host의 `game-project` skill
+- installed runtime과 trace verification
+- project integrity unchanged
+- upgrade exact commit provenance
+- `.wiki-proposed`와 activation pending
 
-실패를 숨기지 않는다.
+# 14. 마무리 보고
 
-# 10. 마무리 보고
+1. lifecycle / profile / project mode
+2. project root / vault root / layout / engine adapter
+3. dry-run 또는 apply write plan 요약
+4. protected path writes, collisions, symlink violations, deletes 여부
+5. mutation_started와 rollback backup
+6. project integrity 결과
+7. 설치·갱신 skill/runtime/docs
+8. traceability rebuild/verify 결과
+9. `.wiki-proposed`와 activation pending
+10. upgrade source와 exact commit
+11. 다음 실제 행동
 
-보고 항목:
-
-1. mode/profile
-2. upgrade면 source가 `github`인지 `local`인지
-3. GitHub upgrade면 repository/default branch/exact commit SHA
-4. backup 위치
-5. 설치/갱신 스킬 목록
-6. `.wiki-proposed` / `profile_activation_pending`
-7. smoke/verification 결과
-8. 다음 단계 (`raw/` → ingest, `SAVE`, canon-review 등)
-
-GitHub 최신을 기대한 upgrade에 `bootstrap_commit`을 보고하지 못했다면 완료라고 말하지 않는다.
+GitHub 최신 upgrade에서 `bootstrap_commit`을 보고하지 못했거나, Game apply에서 `safe_to_apply`, post-apply verification, project integrity를 확인하지 못했다면 완료라고 말하지 않는다.

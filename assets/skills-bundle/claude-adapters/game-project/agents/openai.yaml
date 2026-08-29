@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Project"
+  short_description: "Claude adapter for the canonical game-project skill"
+  default_prompt: "Use /game-project and follow the canonical project-local game workflow."

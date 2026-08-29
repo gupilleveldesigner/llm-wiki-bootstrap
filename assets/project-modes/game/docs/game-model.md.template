@@ -1,0 +1,192 @@
+---
+type: game_project_model
+project_mode: game
+project: "{{PROJECT_NAME}}"
+updated: "{{TODAY}}"
+---
+
+# 게임 프로젝트 운영 모델
+
+이 모드는 문서를 한곳에 모으는 프리셋이 아니다. 기획이 의도한 것, live project가 실제로 구현한 것, 테스트에서 확인된 것, 팀이 채택한 결정을 분리하고 서로 추적한다.
+
+> **Design Intent → Implementation State → Validation Evidence → Project Decision**
+
+## 두 개의 정본
+
+```text
+project_root: {{PROJECT_ROOT_REFERENCE}}
+vault_root: .
+layout: {{LAYOUT}}
+engine_adapter: {{ENGINE_ADAPTER}}
+```
+
+- 기획 정본은 `vault_root/wiki/game/`에 있다.
+- 구현 정본은 `project_root`의 실제 코드·씬·데이터·원본 에셋이다.
+- `wiki/game/implementation/`은 특정 시점에 두 정본을 실제로 대조한 기록이다.
+- `wiki/game/traceability.json`은 원문 문서와 live project에서 재생성되는 기계 관리 인덱스다.
+
+설치기와 업그레이더는 **vault-only write policy**를 지킨다. sidecar는 코드를 복사하지 않지만, manifest의 `game_project.project_root`를 통해 실제 프로젝트를 읽고 Git revision·파일 fingerprint를 계산한다.
+
+## 독립 상태
+
+### Design Intent
+
+```text
+design_status: idea | proposed | accepted | superseded | rejected
+```
+
+문서가 accepted여도 구현 완료를 뜻하지 않는다.
+
+### Implementation State
+
+```text
+implementation_status: unknown | not_started | in_progress | implemented | blocked
+```
+
+실제 path, symbol, scene, data key, commit 또는 build ID가 필요하다.
+
+### Validation Evidence
+
+```text
+validation_status: untested | partial | passed | failed
+```
+
+관찰과 해석을 분리한다. passed는 실행한 build·플랫폼·조건에만 유효하다.
+
+### Project Decision
+
+```text
+decision_status: proposed | accepted | rejected | superseded
+```
+
+결정은 설계 방향을 바꾸지만 구현과 검증을 자동 완료시키지 않는다.
+
+### Production Status
+
+```text
+production_status: backlog | ready | in_progress | blocked | done
+```
+
+작업 보드의 done은 implemented 또는 passed의 증거가 아니다.
+
+## 기획↔코드 동기화 기준점
+
+기획 문서는 안정된 ID와 project-relative live path를 가진다.
+
+```yaml
+feature_id: FEATURE-LOCKON-001
+live_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+implementation_check_refs:
+  - wiki/game/implementation/IMPL-LOCKON-004.md
+```
+
+구현 확인을 완료한 뒤 다음 명령으로 **검사 당시 양쪽 기준점**을 구현 확인 문서에 기록한다.
+
+```bash
+python tools/game_trace.py accept wiki/game/implementation/IMPL-LOCKON-004.md
+```
+
+기준점에는 다음이 포함된다.
+
+```text
+canonical spec digest
+각 checked_path의 code fingerprint
+project Git revision
+vault Git revision(있는 경우)
+dirty working-tree 여부
+```
+
+기획 digest는 `GAME-SYNC:DESIGN-START/END` 사이의 의미 영역과 운영 필드를 제외한 semantic frontmatter로 계산한다. 따라서 `updated`, 검증 상태, 링크 정리 같은 운영 변경은 동기화를 깨지 않지만 플레이어 경험·규칙·공간·수치·기술 규격의 의미 변경은 잡는다.
+
+코드 fingerprint는 `path#symbol@locator` 관계별로 계산한다. `@lines N-M`가 있으면 해당 범위를, 없으면 파일 전체를 해시한다. Git commit 여부와 별개로 실제 파일 내용이 바뀌면 감지된다.
+
+## 동기화 상태
+
+```text
+in_sync
+  기획 digest와 코드 fingerprint가 모두 기준점과 동일
+
+design_changed
+  기획 의미 영역만 변경
+
+code_changed
+  연결된 live path의 fingerprint만 변경
+
+both_changed
+  기획과 코드가 모두 변경
+
+unverified
+  accepted 구현 확인 기준점이 없음
+
+missing
+  연결된 live path 또는 필수 문서가 사라짐
+```
+
+자동 동기화는 기획이나 코드를 서로 덮어쓰지 않는다. 변경을 감지하고 재검사·제안·결정을 요구한다.
+
+```text
+변경 감지 → 영향 관계 계산 → proposal → inspect/decide → 새 implementation check → accept
+```
+
+## 파생 그래프
+
+```text
+spec --implemented_by--> code
+spec --built_in--------> build
+spec --validated_by----> test
+spec --governed_by-----> decision
+```
+
+기본 명령:
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify --strict-sync
+```
+
+## Sidecar와 monorepo
+
+- sidecar에서도 runtime은 실제 `project_root`에서 파일과 Git을 읽는다.
+- game project가 더 큰 Git monorepo 안에 있으면 repository root와 project prefix를 계산해 `git diff` 경로를 project-relative path로 정규화한다.
+- vault가 별도 Git 저장소가 아니어도 spec digest로 기획 변경을 감지한다.
+- project가 Git 저장소가 아니어도 code fingerprint로 구현 변경을 감지한다. revision은 `UNKNOWN`으로 남는다.
+
+## Game-aware ingest
+
+`raw/game/**`는 공용 ingest runtime이 Source로 처리하고 Game adapter가 typed Game 문서 반영을 검증한다. `ingest_status`, `game_reflection_status`, `game_sync_status`는 서로 독립이다. Source 반영으로 spec digest가 바뀌면 `design_changed`가 정상적으로 발생할 수 있으며, ingest는 새 baseline을 자동 승인하지 않는다.
+
+## 문서 계층
+
+- `vision.md`, `pillars.md`, `roadmap.md`
+- `features/`, `systems/`, `levels/`, `content/`, `narrative/`, `ui-ux/`, `technical/`, `assets/`
+- `implementation/`, `playtests/`, `builds/`, `bugs/`
+- `decisions/`, `proposals/`, `milestones/`, `releases/`
+
+## Standard / Evidence
+
+### standard + game
+
+상태와 링크를 Markdown/frontmatter 및 traceability index로 관리한다.
+
+### evidence + game
+
+플레이테스트 원본·로그·텔레메트리·외부 분석을 Source로, 경험적 결론을 Claim으로, 반례를 Conflict로, 재검증을 Experiment로 추적한다.
+
+Traceability는 “어떤 기획이 어떤 코드·빌드·테스트·결정과 연결되는가”를 답하고, Evidence는 “그 결론이 어떤 원본 근거에 의해 지지되는가”를 답한다. 두 그래프를 같은 것으로 취급하지 않는다.
+
+## 완료 계약
+
+다음 중 하나라도 빠지면 “동기화·검증 완료”라고 보고하지 않는다.
+
+1. 정확한 기획 ID 또는 기대 동작
+2. 확인한 project-relative path와 revision/build
+3. 실제 implementation check
+4. `sync_baseline_status: accepted`
+5. `game_trace.py scan` 및 `verify --strict-sync`
+6. 실패·미확인·범위 밖 조건
+7. 관련 index와 상태 갱신
+
+모르면 `UNKNOWN`으로 남긴다.

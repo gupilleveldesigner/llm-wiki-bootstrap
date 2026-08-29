@@ -76,8 +76,19 @@ def primary_git_worktree(start: Path) -> Path | None:
     return None
 
 
-def resolve_wiki_root(value: str | Path | None = None, *, start: Path | None = None) -> Path:
-    """Resolve an explicit root or the invoking project's LLM Wiki root."""
+def resolve_wiki_root(
+    value: str | Path | None = None,
+    *,
+    start: Path | None = None,
+    skill_root: Path | None = None,
+) -> Path:
+    """Resolve an explicit root, invoking Wiki, or the vault that installed the skill.
+
+    Game mode defaults to a sibling sidecar, so a command launched from
+    ``project_root`` cannot find ``<project>.wiki`` by walking parents. The
+    installed ingest skill is itself inside that vault; use it only after the
+    invocation and primary-worktree searches fail, preserving generic behavior.
+    """
     if value is not None:
         candidate = Path(value).expanduser().resolve()
         if not is_wiki_root(candidate):
@@ -93,9 +104,15 @@ def resolve_wiki_root(value: str | Path | None = None, *, start: Path | None = N
     if primary is not None and is_wiki_root(primary):
         return primary
 
+    if skill_root is not None:
+        installed = skill_root.expanduser().resolve()
+        for candidate in (installed, *installed.parents):
+            if is_wiki_root(candidate):
+                return candidate
+
     raise ValueError(
-        "Could not find an LLM Wiki root in the invoking project "
-        f"or its primary Git worktree from: {current}"
+        "Could not find an LLM Wiki root in the invoking project, its primary Git "
+        f"worktree, or the installed ingest skill vault from: {current}"
     )
 
 
@@ -349,7 +366,7 @@ def main() -> int:
     args = parser.parse_args()
     configure_utf8_stdout()
     try:
-        root = resolve_wiki_root(args.root)
+        root = resolve_wiki_root(args.root, skill_root=Path(__file__).resolve().parent.parent)
     except ValueError as error:
         parser.error(str(error))
     result = scan(root)

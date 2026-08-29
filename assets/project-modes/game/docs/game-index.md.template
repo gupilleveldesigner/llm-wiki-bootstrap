@@ -1,0 +1,75 @@
+---
+type: game_project_index
+project_mode: game
+project: "{{PROJECT_NAME}}"
+updated: "{{TODAY}}"
+---
+
+# {{GAME_TITLE}} — Game Project Index
+
+- layout: {{LAYOUT}}
+- project root: {{PROJECT_ROOT_REFERENCE}}
+- engine adapter: {{ENGINE_ADAPTER}}
+- 엔진 표기: {{GAME_ENGINE}}
+- 장르: {{GAME_GENRE}}
+- 대상 플랫폼: {{TARGET_PLATFORMS}}
+- 현재 단계: {{PROJECT_PHASE}}
+- source roots: {{SOURCE_ROOTS}}
+
+## 먼저 읽기
+
+- [프로젝트 개요](overview.md)
+- [게임 비전](vision.md)
+- [설계 기둥](pillars.md)
+- [운영 모델](model.md)
+- [로드맵](roadmap.md)
+- [Game operations](../../instructions/game-project.md)
+- [Engine layout safety](../../instructions/game-engine-layouts.md)
+- [Game ingest](../../instructions/game-ingest.md)
+- [Traceability index](traceability.json)
+
+## 설계
+
+- [기능](features/)
+- [시스템](systems/)
+- [레벨](levels/)
+- [콘텐츠](content/)
+- [내러티브](narrative/)
+- [UI/UX](ui-ux/)
+- [기술](technical/)
+- [에셋](assets/)
+
+## 구현과 검증
+
+- [구현 확인](implementation/)
+- [플레이테스트](playtests/)
+- [빌드](builds/)
+- [버그](bugs/)
+
+## 결정과 제작
+
+- [결정](decisions/)
+- [제안](proposals/)
+- [마일스톤](milestones/)
+- [릴리스](releases/)
+
+## Sync and trace commands
+
+```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py status
+python .agents/skills/ingest/scripts/ingest_runtime.py scan --json
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py verify --strict-sync
+```
+
+구현 확인을 실제로 완료한 뒤 기준점을 확정한다.
+
+```bash
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
+```
+
+## 현재 핵심 문서
+
+아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 ID, 상태, 링크, 동기화 상태를 이 섹션에 추가한다.

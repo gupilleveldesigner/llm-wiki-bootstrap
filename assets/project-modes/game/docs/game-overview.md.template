@@ -1,0 +1,38 @@
+---
+type: game_project_overview
+project: "{{PROJECT_NAME}}"
+updated: "{{TODAY}}"
+---
+
+# {{GAME_TITLE}} — 프로젝트 개요
+
+## 한 문장
+
+{{DOMAIN_SUMMARY}}
+
+## 현재 상태
+
+- 프로젝트 단계: {{PROJECT_PHASE}}
+- 엔진: {{GAME_ENGINE}}
+- 대상 플랫폼: {{TARGET_PLATFORMS}}
+- 현재 확인된 build/revision: UNKNOWN
+
+## 지금 만들고 있는 플레이어 경험
+
+확인 필요.
+
+## 현재 범위
+
+확인 필요.
+
+## 범위 밖
+
+확인 필요.
+
+## 가장 큰 리스크
+
+확인 필요.
+
+## 다음 검증 질문
+
+확인 필요.

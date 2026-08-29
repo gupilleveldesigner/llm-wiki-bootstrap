@@ -1,0 +1,190 @@
+{
+  "schema": "llm-wiki-game-taxonomy-v2",
+  "project": "{{PROJECT_NAME}}",
+  "project_mode": "game",
+  "concepts": [
+    {
+      "id": "game:design",
+      "prefLabel": "Design",
+      "altLabel": [
+        "설계"
+      ],
+      "broader": null,
+      "scopeNote": "플레이어 경험과 게임 규칙의 의도"
+    },
+    {
+      "id": "game:validation",
+      "prefLabel": "Validation",
+      "altLabel": [
+        "검증"
+      ],
+      "broader": null,
+      "scopeNote": "테스트·실행·관찰을 통한 확인"
+    },
+    {
+      "id": "game:production",
+      "prefLabel": "Production",
+      "altLabel": [
+        "제작"
+      ],
+      "broader": null,
+      "scopeNote": "작업 흐름·범위·일정·산출물 관리"
+    },
+    {
+      "id": "game:traceability",
+      "prefLabel": "Traceability",
+      "altLabel": [
+        "추적성",
+        "기획 코드 연결"
+      ],
+      "broader": null,
+      "scopeNote": "기획 ID와 코드·빌드·테스트·결정의 양방향 연결 및 현재성"
+    },
+    {
+      "id": "game:ingest",
+      "prefLabel": "Game Ingest",
+      "altLabel": [
+        "게임 인제스트"
+      ],
+      "broader": "game:production",
+      "scopeNote": "Raw 게임 증거를 Source와 typed Game 문서로 반영하는 adapter workflow"
+    },
+    {
+      "id": "game:source-reflection",
+      "prefLabel": "Source Reflection",
+      "altLabel": [
+        "Source 반영",
+        "근거 반영"
+      ],
+      "broader": "game:ingest",
+      "scopeNote": "Source ID와 Game 문서 ID 사이의 양방향 provenance"
+    },
+    {
+      "id": "game:vision",
+      "prefLabel": "Vision",
+      "altLabel": [
+        "게임 비전"
+      ],
+      "broader": "game:design",
+      "scopeNote": "플레이어 약속과 장기 방향"
+    },
+    {
+      "id": "game:feature",
+      "prefLabel": "Feature",
+      "altLabel": [
+        "기능"
+      ],
+      "broader": "game:design",
+      "scopeNote": "플레이어가 인지하는 기능 단위"
+    },
+    {
+      "id": "game:system",
+      "prefLabel": "System",
+      "altLabel": [
+        "시스템"
+      ],
+      "broader": "game:design",
+      "scopeNote": "규칙·상태·데이터·상호작용 구조"
+    },
+    {
+      "id": "game:level",
+      "prefLabel": "Level",
+      "altLabel": [
+        "레벨",
+        "스테이지"
+      ],
+      "broader": "game:design",
+      "scopeNote": "공간 흐름·조우·학습·페이싱"
+    },
+    {
+      "id": "game:content",
+      "prefLabel": "Content",
+      "altLabel": [
+        "콘텐츠"
+      ],
+      "broader": "game:design",
+      "scopeNote": "캐릭터·적·아이템·퀘스트·월드 콘텐츠"
+    },
+    {
+      "id": "game:implementation",
+      "prefLabel": "Implementation",
+      "altLabel": [
+        "구현"
+      ],
+      "broader": null,
+      "scopeNote": "live project에서 관찰한 실제 동작"
+    },
+    {
+      "id": "game:implementation-check",
+      "prefLabel": "Implementation Check",
+      "altLabel": [
+        "구현 확인"
+      ],
+      "broader": "game:traceability",
+      "scopeNote": "특정 revision에서 기획과 live source를 비교한 기록"
+    },
+    {
+      "id": "game:impact-analysis",
+      "prefLabel": "Impact Analysis",
+      "altLabel": [
+        "영향 분석"
+      ],
+      "broader": "game:traceability",
+      "scopeNote": "Git diff와 code relation을 이용한 영향받는 기획 계산"
+    },
+    {
+      "id": "game:stale-relation",
+      "prefLabel": "Stale Relation",
+      "altLabel": [
+        "재확인 필요 연결"
+      ],
+      "broader": "game:traceability",
+      "scopeNote": "마지막 구현 확인 이후 연결된 code path가 변경된 관계"
+    },
+    {
+      "id": "game:playtest",
+      "prefLabel": "Playtest",
+      "altLabel": [
+        "플레이테스트"
+      ],
+      "broader": "game:validation",
+      "scopeNote": "플레이 관찰과 해석"
+    },
+    {
+      "id": "game:build",
+      "prefLabel": "Build",
+      "altLabel": [
+        "빌드"
+      ],
+      "broader": "game:validation",
+      "scopeNote": "정확한 revision과 실행 환경을 가진 빌드 기록"
+    },
+    {
+      "id": "game:decision",
+      "prefLabel": "Decision",
+      "altLabel": [
+        "결정"
+      ],
+      "broader": null,
+      "scopeNote": "대안과 근거를 가진 채택·기각·대체 결정"
+    },
+    {
+      "id": "game:asset",
+      "prefLabel": "Asset",
+      "altLabel": [
+        "에셋"
+      ],
+      "broader": "game:production",
+      "scopeNote": "사용처·규격·승인 기준이 있는 에셋"
+    },
+    {
+      "id": "game:milestone",
+      "prefLabel": "Milestone",
+      "altLabel": [
+        "마일스톤"
+      ],
+      "broader": "game:production",
+      "scopeNote": "범위와 검증 가능한 출구 조건"
+    }
+  ]
+}

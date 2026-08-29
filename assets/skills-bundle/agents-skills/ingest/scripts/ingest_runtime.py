@@ -30,6 +30,7 @@ from find_uningested import (
 )
 from audit_categories import audit as audit_categories
 from semantic_contract import review_source_record, semantic_partition
+from ingest_core.adapter_contract import AdapterError, dispatch_configured_adapter
 
 
 TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*", re.MULTILINE)
@@ -1041,9 +1042,12 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     try:
-        root = resolve_wiki_root(args.root)
-    except ValueError as error:
+        root = resolve_wiki_root(args.root, skill_root=SCRIPT_ROOT.parent)
+        adapter_exit = dispatch_configured_adapter(root, sys.argv[1:], runtime_path=Path(__file__))
+    except (ValueError, AdapterError) as error:
         parser.error(str(error))
+    if adapter_exit is not None:
+        return adapter_exit
 
     if args.command == "status":
         workspace = graph_workspace(root)
