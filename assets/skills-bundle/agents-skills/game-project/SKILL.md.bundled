@@ -1,0 +1,106 @@
+---
+name: game-project
+description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레벨·콘텐츠·내러티브·UI/UX·기술·에셋 브리프를 설계하고, 실제 구현 확인, 빌드, 플레이테스트, 버그, 결정, 마일스톤, 릴리스 기록을 운영한다. 사용자가 게임 기획서/시스템 명세/레벨 설계/에셋 규격/구현 일치 확인/플레이테스트/빌드 검증/게임 프로젝트 결정 기록을 요청할 때 사용한다. 일반 지식 질의나 `project_mode: game`이 아닌 볼트에는 사용하지 않는다.
+---
+
+# Game Project — 게임 제작 운영 스킬
+
+이 스킬은 게임 문서를 많이 만드는 도구가 아니라, **설계 의도·실제 구현·검증 결과·채택 결정**을 서로 추적 가능하게 유지하는 작업 라우터다.
+
+## 활성 조건과 필독
+
+1. 루트 `.llm-wiki.json`을 읽고 `project_mode: game`인지 확인한다. 아니면 이 스킬을 적용하지 않는다.
+2. `wiki/game/index.md`, `wiki/game/model.md`, `instructions/game-project.md`를 끝까지 읽는다.
+3. 요청과 관련된 기능·시스템·레벨·콘텐츠·구현·플레이테스트·결정 문서를 찾는다.
+4. `profile: evidence`이면 `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `instructions/evidence-kb.md`도 읽는다.
+
+## 절대 규칙
+
+- `design_status`, `implementation_status`, `validation_status`, `decision_status`, `production_status`를 하나의 완료 상태로 합치지 않는다.
+- 기획 문서가 존재한다는 이유로 구현됐다고 말하지 않는다.
+- 코드가 존재한다는 이유로 플레이어 경험이 검증됐다고 말하지 않는다.
+- 작업 보드의 `done`을 `validation_status: passed`로 번역하지 않는다.
+- 실제로 읽지 않은 코드·씬·데이터·에셋, 실행하지 않은 빌드·테스트를 확인했다고 쓰지 않는다.
+- 실행 중인 엔진 프로젝트·코드·원본 에셋을 `raw/`로 이동하지 않는다. `raw/game/`에는 불변 증거 사본·로그·export만 둔다.
+- 사용자가 정하지 않은 게임 비전·설계 기둥·채택 결정을 임의로 확정하지 않는다. 제안은 `proposed`로 둔다.
+- 플레이테스트의 직접 관찰과 해석을 분리한다.
+- 실패·반례·기각안·예상 밖 플레이를 삭제하거나 성공으로 축약하지 않는다.
+- `UNKNOWN`, `not run`, `확인 불가`를 허용한다. 빈칸을 그럴듯하게 채우지 않는다.
+
+## 요청 라우팅
+
+| 요청 | Operation | 기본 템플릿/위치 |
+|---|---|---|
+| 기능·시스템·레벨·콘텐츠 정의 | `define` | `templates/game/*-spec.md` → 대응 `wiki/game/` 폴더 |
+| 작업 순서·마일스톤 | `plan` | `templates/game/milestone.md` |
+| 실제 코드·씬·데이터·에셋 변경 | `implement` | accepted spec + live project |
+| 기획 대비 구현 확인 | `inspect` | `templates/game/implementation-check.md` |
+| 플레이테스트 계획·결과 | `playtest` | `templates/game/playtest-report.md` |
+| 빌드·패키징·스모크 | `build` | `templates/game/build-report.md` |
+| 대안 비교와 채택 | `decide` | `templates/game/decision-record.md` |
+| 버그·회귀 | `bug` | `templates/game/bug-report.md` |
+| 릴리스 고정 | `release` | `wiki/game/releases/` |
+
+여러 operation이 섞여 있으면 순서를 명시한다. 보통 `define → implement → inspect → playtest/build → decide`다.
+
+## Define
+
+- 플레이어 경험과 검증 가능한 성공 조건부터 쓴다.
+- 규칙, 상태, 입력/출력, 실패 조건, 의존성, 범위 밖을 분리한다.
+- 미채택 설계는 `design_status: proposed`다.
+- 관련 문서와 `wiki/game/index.md`를 연결한다.
+
+## Implement
+
+- accepted spec과 기존 결정을 먼저 확인한다.
+- live project에서 최소 범위로 수정한다. unrelated 정리·대규모 이름 변경을 끼워 넣지 않는다.
+- 변경 path, 핵심 심볼/씬/데이터, revision을 기록한다.
+- 실행한 검사와 실행하지 못한 검사를 구분한다.
+- 구현 후 `implementation_status`만 근거에 맞게 갱신한다. 검증 상태를 자동 변경하지 않는다.
+
+## Inspect
+
+- 문서보다 live source와 실행 결과를 우선한다.
+- 정확한 revision/build와 확인 범위를 고정한다.
+- 항목별로 `일치 | 부분 일치 | 불일치 | 확인 불가`를 판정한다.
+- 추정은 직접 관찰과 분리하고, 확인하지 못한 경로·플랫폼을 남긴다.
+
+## Playtest / Build
+
+- 테스트 전 검증 질문과 성공·실패 기준을 고정한다.
+- build ID, source revision, 플랫폼, 설정, 참가자 조건을 기록한다.
+- 관찰을 먼저 기록하고 해석·가설은 다음 섹션에 둔다.
+- `passed`는 실제로 실행한 조건에만 적용한다.
+- 실패 로그·재현 조건·범위 밖 조건을 보존한다.
+
+## Decide
+
+- 옵션, 판단 기준, 근거, 비용, 부작용, 되돌림 조건을 비교한다.
+- 명시적 사용자/팀 결정 전에는 `decision_status: proposed`다.
+- 이전 결정을 대체하면 새 기록을 만들고 `supersedes`/`superseded_by`를 연결한다.
+- 결정이 spec을 바꾸더라도 구현·검증 상태는 자동 완료하지 않는다.
+
+## Evidence profile
+
+`profile: evidence`이면 경험적 주장과 결정의 provenance를 추가한다.
+
+- 플레이테스트 원본, 로그, 텔레메트리, 외부 분석은 Raw/Source로 보존한다.
+- 관찰에서 도출한 일반화는 Claim으로 분리한다.
+- 반례는 Conflict 또는 contradicts relation으로 남긴다.
+- 재검증은 Experiment로 연결한다.
+- 게임 문서의 `evidence_refs`에서 Source/Claim/Experiment/Decision을 링크한다.
+- 현재 채택된 설계와 경험적 사실을 같은 것으로 취급하지 않는다.
+- Canon 자동 승격은 금지한다.
+
+## 완료 조건
+
+완료 보고 전 확인한다.
+
+1. 바뀐 live project 파일과 game 문서가 정확히 식별됐는가.
+2. 각 상태 변경에 직접 근거가 있는가.
+3. 실행한 테스트·빌드·플레이테스트와 결과가 기록됐는가.
+4. 실패·미확인·미실행·범위 밖 조건이 숨겨지지 않았는가.
+5. 새 문서가 `wiki/game/index.md`와 관련 문서에 연결됐는가.
+6. Evidence면 필요한 `evidence_refs`가 있는가.
+
+마무리에는 변경점, 상태 변화, 실제 검증, 남은 불확실성, 다음 한 가지 행동을 보고한다.

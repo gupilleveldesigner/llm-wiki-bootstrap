@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Project"
+  short_description: "Trace game design, implementation, validation, and decisions"
+  default_prompt: "Use $game-project to operate this game project's specs, implementation checks, playtests, builds, and decisions without conflating their states."

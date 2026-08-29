@@ -1,0 +1,20 @@
+# wiki/game/ — 게임 프로젝트 운영 계층
+
+이 폴더는 {{PROJECT_NAME}}의 설계 의도, 실제 구현, 검증 결과, 채택 결정을 연결한다.
+
+## 먼저 읽기
+
+1. `index.md`
+2. `model.md`
+3. `../../instructions/game-project.md`
+4. 관련 기능·시스템·레벨·플레이테스트·결정 문서
+5. 설치된 `game-project` 스킬
+
+## 핵심 규칙
+
+- `design_status`, `implementation_status`, `validation_status`, `decision_status`, `production_status`를 합치지 않는다.
+- 구현을 말할 때는 live source path와 revision/build를 확인한다.
+- 플레이테스트의 관찰과 해석을 분리한다.
+- 새 문서를 만들면 `index.md`에 연결한다.
+- 실행 중인 게임 코드와 에셋을 `raw/`로 이동하지 않는다.
+- `profile: evidence`이면 Source/Claim/Decision/Experiment와 `evidence_refs`를 연결한다.

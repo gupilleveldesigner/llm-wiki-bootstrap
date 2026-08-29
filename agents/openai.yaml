@@ -1,4 +1,4 @@
 interface:
   display_name: "LLM Wiki Bootstrap"
-  short_description: "LLM Wiki 구축·전환·GitHub 최신 업그레이드 + standard/evidence profile"
-  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki. For upgrade, resolve and apply the official GitHub repository's latest default-branch commit; never silently fall back to a local bundle."
+  short_description: "Wiki lifecycle + standard/evidence profiles + game project mode"
+  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki. Keep lifecycle, vault profile, and project mode separate. For game projects, install the game overlay and preserve live source; for upgrades, pin and validate the official GitHub repository's latest default-branch commit without silent local fallback."

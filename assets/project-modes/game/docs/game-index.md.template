@@ -1,0 +1,52 @@
+---
+type: game_project_index
+project_mode: game
+project: "{{PROJECT_NAME}}"
+updated: "{{TODAY}}"
+---
+
+# {{GAME_TITLE}} — Game Project Index
+
+- 엔진: {{GAME_ENGINE}}
+- 장르: {{GAME_GENRE}}
+- 대상 플랫폼: {{TARGET_PLATFORMS}}
+- 현재 단계: {{PROJECT_PHASE}}
+- live source roots: {{SOURCE_ROOTS}}
+
+## 먼저 읽기
+
+- [프로젝트 개요](overview.md)
+- [게임 비전](vision.md)
+- [설계 기둥](pillars.md)
+- [게임 프로젝트 운영 모델](model.md)
+- [로드맵](roadmap.md)
+- [운영 절차](../../instructions/game-project.md)
+
+## 설계
+
+- [기능](features/)
+- [시스템](systems/)
+- [레벨](levels/)
+- [콘텐츠](content/)
+- [내러티브](narrative/)
+- [UI/UX](ui-ux/)
+- [기술](technical/)
+- [에셋](assets/)
+
+## 구현과 검증
+
+- [구현 확인](implementation/)
+- [플레이테스트](playtests/)
+- [빌드](builds/)
+- [버그](bugs/)
+
+## 의사결정과 제작
+
+- [결정](decisions/)
+- [제안](proposals/)
+- [마일스톤](milestones/)
+- [릴리스](releases/)
+
+## 현재 핵심 문서
+
+아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 이 섹션에 링크와 한 줄 상태를 추가한다.
