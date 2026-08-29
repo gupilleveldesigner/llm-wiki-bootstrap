@@ -1,4 +1,4 @@
-name: Diagnose Game ingest v5 payload
+name: Validate Game ingest v5 candidate
 
 on:
   push:
@@ -11,91 +11,159 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/game-project-mode
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Inspect binary and text payloads without applying changes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Decode reviewed payload and apply it without pushing
         shell: bash
         run: |
-          set -u
-
-          echo "== binary Git blobs =="
-          find .github/game-ingest-v5-bin -maxdepth 1 -type f -name 'part*' -print0 \
-            | sort -z \
-            | xargs -0 -r wc -c
-          find .github/game-ingest-v5-bin -maxdepth 1 -type f -name 'part*' -print0 \
-            | sort -z \
-            | xargs -0 -r sha256sum
-          cat .github/game-ingest-v5-bin/part* > /tmp/from-binary.tar.xz
-          wc -c /tmp/from-binary.tar.xz
-          sha256sum /tmp/from-binary.tar.xz
-          file /tmp/from-binary.tar.xz
-          xxd -l 16 /tmp/from-binary.tar.xz
-          tail -c 16 /tmp/from-binary.tar.xz | xxd
-          if xz -t /tmp/from-binary.tar.xz; then
-            echo "binary_xz_status=valid"
-            tar -tJf /tmp/from-binary.tar.xz | sed -n '1,40p'
-          else
-            echo "binary_xz_status=invalid"
-          fi
-
-          echo "== original base64 text payload =="
-          find .github/game-ingest-v5-payload -maxdepth 1 -type f -name 'part*' -print0 \
-            | sort -z \
-            | xargs -0 -r wc -c
-          cat .github/game-ingest-v5-payload/part* > /tmp/from-text.b64
-          wc -c /tmp/from-text.b64
-          sha256sum /tmp/from-text.b64
-
+          set -euo pipefail
           python - <<'PY'
           import base64
           import hashlib
-          import pathlib
-          import string
+          from pathlib import Path
 
-          source = pathlib.Path('/tmp/from-text.b64').read_bytes()
-          compact = b''.join(source.split())
-          alphabet = set((string.ascii_letters + string.digits + '+/=').encode('ascii'))
-          invalid = [(index, byte) for index, byte in enumerate(compact) if byte not in alphabet]
-          padding = [index for index, byte in enumerate(compact) if byte == ord('=')]
+          root = Path('.github/game-ingest-v5-payload')
+          parts = sorted(root.glob('part*'), key=lambda path: int(path.name.removeprefix('part')))
+          if not parts:
+              raise SystemExit('no Game ingest v5 payload parts were found')
+          encoded = b''.join(path.read_bytes() for path in parts)
+          compact = b''.join(encoded.split())
+          if len(compact) % 4:
+              raise SystemExit(f'base64 length is not divisible by four: {len(compact)}')
+          decoded = base64.b64decode(compact, validate=True)
+          digest = hashlib.sha256(decoded).hexdigest()
+          expected = 'bed689fe1b2b7ab63d9e9e13971f4ee2f5e70be33c1033e1a6f820d235b7e401'
+          if digest != expected:
+              raise SystemExit(f'payload sha256 mismatch: {digest} != {expected}')
+          Path('/tmp/game-ingest-v5.tar.xz').write_bytes(decoded)
+          print(f'payload_parts={len(parts)}')
+          print(f'base64_bytes={len(compact)}')
+          print(f'archive_bytes={len(decoded)}')
+          print(f'archive_sha256={digest}')
+          PY
+          xz -t /tmp/game-ingest-v5.tar.xz
+          mkdir -p /tmp/game-ingest-v5
+          tar -xJf /tmp/game-ingest-v5.tar.xz -C /tmp/game-ingest-v5
+          python /tmp/game-ingest-v5/apply.py "$PWD" /tmp/game-ingest-v5/new
+          rm -rf .github/game-ingest-v5-payload .github/game-ingest-v5-bin
+          rm -f .github/workflows/apply-game-ingest-v5.yml
 
-          print(f'text_source_bytes={len(source)}')
-          print(f'text_compact_bytes={len(compact)}')
-          print(f'text_compact_mod4={len(compact) % 4}')
-          print(f'text_invalid_count={len(invalid)}')
-          print(f'text_invalid_first={invalid[:20]}')
-          print(f'text_padding_count={len(padding)}')
-          print(f'text_padding_positions={padding[:20]}')
-          print(f'text_prefix={compact[:32]!r}')
-          print(f'text_suffix={compact[-32:]!r}')
+      - name: Validate Python and JSON contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q \
+            scripts \
+            assets/project-modes/game/runtime \
+            assets/project-modes/game/ingest \
+            assets/skills-bundle/agents-skills/ingest/scripts
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-          try:
-              decoded = base64.b64decode(compact, validate=True)
-          except Exception as exc:
-              print(f'text_decode_status=invalid:{type(exc).__name__}:{exc}')
-          else:
-              target = pathlib.Path('/tmp/from-text.tar.xz')
-              target.write_bytes(decoded)
-              print('text_decode_status=valid')
-              print(f'text_decoded_bytes={len(decoded)}')
-              print(f'text_decoded_sha256={hashlib.sha256(decoded).hexdigest()}')
+          for path in Path('assets').rglob('*.json.template'):
+              json.loads(path.read_text(encoding='utf-8'))
+          for path in Path('assets/project-modes/game/ingest').rglob('*.json'):
+              json.loads(path.read_text(encoding='utf-8'))
+          PY
+          git diff --check a556875623bb2a960a613711c2febf4dc5778e61 -- .
+
+      - name: Run complete repository regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover scripts/tests -p 'test_*.py' -v 2>&1 | tee /tmp/game-ingest-v5-tests.log
+
+      - name: Package only the reviewed v4-to-v5 tree delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          base = 'a556875623bb2a960a613711c2febf4dc5778e61'
+          destination = Path('/tmp/game-ingest-v5-candidate')
+          files_root = destination / 'files'
+          files_root.mkdir(parents=True, exist_ok=True)
+
+          completed = subprocess.run(
+              ['git', 'diff', '--name-status', '-z', base, '--', '.'],
+              check=True,
+              stdout=subprocess.PIPE,
+          )
+          fields = completed.stdout.split(b'\0')
+          if fields and fields[-1] == b'':
+              fields.pop()
+          index = 0
+          entries = []
+          deleted = []
+          while index < len(fields):
+              status = fields[index].decode('utf-8', errors='strict')
+              index += 1
+              code = status[:1]
+              if code in {'R', 'C'}:
+                  old = fields[index].decode('utf-8', errors='strict')
+                  new = fields[index + 1].decode('utf-8', errors='strict')
+                  index += 2
+                  path = new
+                  previous = old
+              else:
+                  path = fields[index].decode('utf-8', errors='strict')
+                  index += 1
+                  previous = None
+              if code == 'D':
+                  deleted.append(path)
+                  entries.append({'status': status, 'path': path})
+                  continue
+              source = Path(path)
+              if not source.is_file():
+                  raise SystemExit(f'changed path is not a regular file: {path}')
+              target = files_root / path
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(source, target)
+              digest = hashlib.sha256(source.read_bytes()).hexdigest()
+              item = {'status': status, 'path': path, 'sha256': digest, 'size': source.stat().st_size}
+              if previous is not None:
+                  item['previous_path'] = previous
+              entries.append(item)
+
+          manifest = {
+              'schema': 'llm-wiki-game-ingest-v5-candidate-v1',
+              'base_commit': base,
+              'validated_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'entries': entries,
+              'deleted': deleted,
+              'temporary_transport_removed': [
+                  '.github/workflows/apply-game-ingest-v5.yml',
+                  '.github/game-ingest-v5-payload/',
+                  '.github/game-ingest-v5-bin/',
+              ],
+          }
+          (destination / 'manifest.json').write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          shutil.copy2('/tmp/game-ingest-v5-tests.log', destination / 'tests.log')
+          print(json.dumps({'changed_files': len(entries), 'deleted': deleted}, indent=2))
           PY
 
-          if test -f /tmp/from-text.tar.xz; then
-            file /tmp/from-text.tar.xz
-            xxd -l 16 /tmp/from-text.tar.xz
-            tail -c 16 /tmp/from-text.tar.xz | xxd
-            if xz -t /tmp/from-text.tar.xz; then
-              echo "text_xz_status=valid"
-              tar -tJf /tmp/from-text.tar.xz | sed -n '1,40p'
-            else
-              echo "text_xz_status=invalid"
-            fi
-          fi
-
-          echo "diagnostic_only=true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-ingest-v5-candidate
+          path: /tmp/game-ingest-v5-candidate
+          if-no-files-found: error
+          retention-days: 7
