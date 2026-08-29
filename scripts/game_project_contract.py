@@ -10,9 +10,14 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
 PROJECT_MODE = "game"
-PROJECT_MODE_VERSION = 1
+PROJECT_MODE_VERSION = 2
+TRACEABILITY_SCHEMA_VERSION = 1
 GAME_SKILL = "game-project"
 GAME_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROJECT-MODE -->"
+GAME_TRACE_RUNTIME_SOURCE = "project-modes/game/runtime/game_trace.py"
+GAME_TRACE_RUNTIME_DESTINATION = "tools/game_trace.py"
+GAME_TRACE_INDEX_SOURCE = "project-modes/game/docs/traceability.json.template"
+GAME_TRACE_INDEX_DESTINATION = "wiki/game/traceability.json"
 
 GAME_DIRECTORIES = (
     "raw/game/design",
@@ -37,6 +42,7 @@ GAME_DIRECTORIES = (
     "wiki/game/proposals",
     "wiki/game/releases",
     "Output/game",
+    "tools",
 )
 
 # managed=True means a changed existing file is proposed instead of silently replaced.
@@ -57,7 +63,10 @@ GAME_CONTRACT_FILES = (
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md"),
     ("project-modes/game/docs/game-index.md.template", "wiki/game/index.md"),
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md"),
+    ("project-modes/game/docs/traceability.json.template", "wiki/game/traceability.json"),
+    ("project-modes/game/runtime/game_trace.py", "tools/game_trace.py"),
     ("project-modes/game/templates/feature-spec.md", "templates/game/feature-spec.md"),
+    ("project-modes/game/templates/implementation-check.md", "templates/game/implementation-check.md"),
     ("project-modes/game/templates/playtest-report.md", "templates/game/playtest-report.md"),
     ("skills-bundle/agents-skills/game-project/SKILL.md.bundled", ".agents/skills/game-project/SKILL.md"),
     ("skills-bundle/claude-adapters/game-project/SKILL.md.bundled", ".claude/skills/game-project/SKILL.md"),
@@ -70,7 +79,10 @@ GAME_CONTRACT_MARKERS = {
     "project-modes/game/docs/game-operations.md.template": "live game source tree",
     "project-modes/game/docs/game-index.md.template": "project_mode: game",
     "project-modes/game/docs/game-CLAUDE.md.template": "game-project",
+    "project-modes/game/docs/traceability.json.template": '"source_of_truth"',
+    "project-modes/game/runtime/game_trace.py": "TRACEABILITY_SCHEMA_VERSION = 1",
     "project-modes/game/templates/feature-spec.md": "implementation_status: unknown",
+    "project-modes/game/templates/implementation-check.md": "checked_paths: []",
     "project-modes/game/templates/playtest-report.md": "## 관찰 — 해석을 섞지 않음",
     "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "design_status",
     "skills-bundle/claude-adapters/game-project/SKILL.md.bundled": "../../../.agents/skills/game-project/SKILL.md",
@@ -82,7 +94,10 @@ REQUIRED_GAME_REMOTE_PATHS = (
     "scripts/game_project_install.py",
     "assets/project-modes/game/docs/game-model.md.template",
     "assets/project-modes/game/docs/game-operations.md.template",
+    "assets/project-modes/game/docs/traceability.json.template",
+    "assets/project-modes/game/runtime/game_trace.py",
     "assets/project-modes/game/templates/feature-spec.md",
+    "assets/project-modes/game/templates/implementation-check.md",
     "assets/project-modes/game/templates/playtest-report.md",
     "assets/skills-bundle/agents-skills/game-project/SKILL.md.bundled",
     "assets/skills-bundle/claude-adapters/game-project/SKILL.md.bundled",
@@ -226,6 +241,12 @@ def write_game_manifest(target: Path, metadata: dict[str, Any]) -> None:
     manifest["project_mode"] = PROJECT_MODE
     manifest["project_mode_version"] = PROJECT_MODE_VERSION
     manifest["game_project"] = metadata
+    manifest["game_traceability"] = {
+        "schema_version": TRACEABILITY_SCHEMA_VERSION,
+        "index": GAME_TRACE_INDEX_DESTINATION,
+        "runtime": GAME_TRACE_RUNTIME_DESTINATION,
+        "source_of_truth": "game specs, implementation checks, builds, playtests, and decisions",
+    }
     manifest["updated_at"] = now
     write_text(path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 
@@ -249,5 +270,3 @@ def write_upgrade_provenance(
         "at": datetime.now().astimezone().isoformat(),
     }
     write_text(path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-
-

@@ -12,6 +12,11 @@ owners: []
 usage_refs: []
 source_assets: []
 runtime_paths: []
+live_paths: []
+implementation_check_refs: []
+build_refs: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 updated: "YYYY-MM-DD"
 ---
@@ -56,6 +61,12 @@ updated: "YYYY-MM-DD"
 - 자동 검사:
 - 게임 내 확인:
 - 승인 담당/조건:
+
+## 기획 ↔ runtime 추적
+
+- `live_paths`: 실제 import된 에셋·메타·로더·사용 코드의 `path#symbol@locator`
+- 구현 확인 문서:
+- 마지막 확인 revision/build:
 
 ## 실제 상태
 

@@ -11,7 +11,10 @@ owners: []
 depends_on: []
 supersedes: []
 live_paths: []
+implementation_check_refs: []
 build_refs: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 updated: "YYYY-MM-DD"
 ---
@@ -49,6 +52,12 @@ updated: "YYYY-MM-DD"
 | 구간 | 플레이어 목표 | 위협/문제 | 공간 지원 | 성공 신호 |
 |---|---|---|---|---|
 | | | | | |
+
+## 기획 ↔ 구현 추적
+
+- `live_paths`: 맵/씬/월드/스크립트/데이터의 `path#symbol@locator`
+- 구현 확인 문서:
+- 마지막 확인 revision/build:
 
 ## 실제 구현 상태
 

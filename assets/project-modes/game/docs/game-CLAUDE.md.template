@@ -17,4 +17,8 @@
 - 플레이테스트의 관찰과 해석을 분리한다.
 - 새 문서를 만들면 `index.md`에 연결한다.
 - 실행 중인 게임 코드와 에셋을 `raw/`로 이동하지 않는다.
+- 기획·코드·빌드·테스트·결정 연결은 canonical game 문서에 기록한다.
+- `traceability.json`은 직접 편집하지 않고 `python tools/game_trace.py rebuild`로 재생성한다.
+- game 문서 또는 live path가 바뀌면 `rebuild`와 `verify`를 실행한다.
+- code diff 영향은 `affected`, 기획→코드는 `spec`, 코드→기획은 `path`로 조회한다.
 - `profile: evidence`이면 Source/Claim/Decision/Experiment와 `evidence_refs`를 연결한다.

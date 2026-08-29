@@ -26,14 +26,10 @@ Game project mode adds a production-aware trace:
 Design Intent → Implementation State → Validation Evidence → Project Decision
 ```
 
-It installs game-specific specifications, implementation checks, playtest/build/decision templates, and a project-local `game-project` skill. It never treats the live game source tree as Raw or conflates “designed”, “implemented”, “validated”, and “done”. `standard + game` and `evidence + game` are both supported.
+Game mode v2 keeps live code and design specifications as separate sources of truth, derives `wiki/game/traceability.json`, and installs `tools/game_trace.py` for `spec→code`, `code→spec`, build/test/decision links, Git-diff impact analysis, and stale implementation checks.
 
 ```bash
-python scripts/game_project.py \
-  --target ./MyGame \
-  --config ./config.json \
-  --mode new \
-  --profile evidence
+python scripts/game_project.py --target ./MyGame --config ./config.json --mode new --profile evidence
 ```
 
-**Upgrade means GitHub latest by default.** The updater resolves the official repository's current default-branch HEAD, pins the exact commit SHA, validates the downloaded checkout before touching the target, backs up managed skills, and applies that commit's logic. Game-mode Wikis must use `scripts/game_project.py --mode upgrade` so the base Wiki and game overlay advance together. No updater silently falls back to a stale local bundle.
+**Upgrade means GitHub latest by default.** The updater pins and validates the official repository's exact default-branch HEAD before touching the target. Game-mode Wikis use `scripts/game_project.py --mode upgrade` so the base Wiki, game overlay, and traceability runtime advance together. No updater silently falls back to a stale local bundle.

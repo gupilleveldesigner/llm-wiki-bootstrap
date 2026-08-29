@@ -1,6 +1,7 @@
 ---
 type: game_build_report
 build_id: "BUILD-000"
+subject_refs: []
 source_revision: "UNKNOWN"
 branch: "UNKNOWN"
 platform: "UNKNOWN"
@@ -25,6 +26,7 @@ built_at: "YYYY-MM-DD"
 
 ## 범위
 
+- `subject_refs`: 이 빌드가 포함·검증하는 기획 ID
 - 포함 기능·콘텐츠:
 - 제외 기능·콘텐츠:
 - 관련 마일스톤/릴리스:

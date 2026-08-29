@@ -1,13 +1,17 @@
 ---
 type: game_implementation_check
+check_id: "IMPL-000"
 subject_id: ""
 subject_type: "feature|system|level|content|ui|asset|technical"
+relation: implements
 expected_spec: ""
 source_revision: "UNKNOWN"
 build_id: "UNKNOWN"
 implementation_status: unknown
 validation_status: untested
 checked_paths: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 checked_at: "YYYY-MM-DD"
 ---
@@ -21,6 +25,12 @@ checked_at: "YYYY-MM-DD"
 - revision/branch:
 - build/platform/configuration:
 - 제외 범위:
+
+## 추적 입력
+
+- `subject_id`는 기준 기획 문서의 안정된 ID다.
+- `checked_paths`는 `project/relative/path#symbol@locator` 형식으로 적는다.
+- 동일 기획·코드 관계를 다시 확인할 때는 새 확인 문서를 남겨 이력을 보존한다.
 
 ## 기대 동작
 

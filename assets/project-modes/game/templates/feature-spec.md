@@ -11,7 +11,10 @@ owners: []
 depends_on: []
 supersedes: []
 live_paths: []
+implementation_check_refs: []
 build_refs: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 updated: "YYYY-MM-DD"
 ---
@@ -46,6 +49,12 @@ updated: "YYYY-MM-DD"
 - 영향받는 콘텐츠:
 - UI/피드백:
 - 저장·네트워크·플랫폼 제약:
+
+## 기획 ↔ 코드 추적
+
+- `live_paths`에는 `project/relative/path#symbol@locator` 형식으로 현재 구현 후보를 적는다.
+- 실제 확인 결과는 `implementation_check_refs`의 구현 확인 문서에 기록한다.
+- `live_paths`가 있다고 해서 자동으로 `implemented`가 되지는 않는다.
 
 ## 실제 구현 상태
 

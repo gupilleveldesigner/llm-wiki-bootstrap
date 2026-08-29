@@ -11,7 +11,6 @@ from typing import Any
 import bootstrap as wiki_bootstrap
 import upgrade as wiki_upgrade
 from game_project_contract import (
-    GAME_ROUTER_MARKER,
     PROJECT_MODE,
     read_json_object,
     read_manifest,
@@ -21,7 +20,7 @@ from game_project_contract import (
     write_upgrade_provenance,
 )
 from game_project_install import (
-    backup_game_skills,
+    backup_game_managed_assets,
     ensure_backup_dir,
     install_game_overlay,
     install_game_router,
@@ -40,7 +39,7 @@ def apply_local_game_project(target: Path, config_path: Path, mode: str, profile
     if mode == "upgrade":
         base_result = wiki_bootstrap.upgrade(target, config_path, profile)
         backup_dir = ensure_backup_dir(target, base_result)
-        base_result["game_skill_backup"] = backup_game_skills(target, backup_dir)
+        base_result["game_managed_backup"] = backup_game_managed_assets(target, backup_dir)
     else:
         base_result = wiki_bootstrap.bootstrap(target, config_path, mode, profile)
 

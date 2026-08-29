@@ -11,7 +11,10 @@ owners: []
 depends_on: []
 supersedes: []
 live_paths: []
+implementation_check_refs: []
 build_refs: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 updated: "YYYY-MM-DD"
 ---
@@ -51,6 +54,12 @@ updated: "YYYY-MM-DD"
 - UI/피드백:
 - AI/레벨/콘텐츠:
 - 저장/네트워크/플랫폼:
+
+## 기획 ↔ 코드 추적
+
+- `live_paths`: `project/relative/path#symbol@locator`
+- 구현 확인 문서:
+- 마지막 확인 revision:
 
 ## 실제 구현 상태
 

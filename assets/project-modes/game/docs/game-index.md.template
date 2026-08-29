@@ -21,6 +21,18 @@ updated: "{{TODAY}}"
 - [게임 프로젝트 운영 모델](model.md)
 - [로드맵](roadmap.md)
 - [운영 절차](../../instructions/game-project.md)
+- [기획·코드 Traceability Index](traceability.json) — 파생 파일, 직접 편집 금지
+
+## Traceability 명령
+
+```bash
+python tools/game_trace.py rebuild
+python tools/game_trace.py verify
+python tools/game_trace.py spec <SPEC_ID>
+python tools/game_trace.py path <PATH[#SYMBOL]>
+python tools/game_trace.py affected --base <BASE> --head <HEAD>
+python tools/game_trace.py matrix
+```
 
 ## 설계
 

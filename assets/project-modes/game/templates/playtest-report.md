@@ -7,6 +7,7 @@ source_revision: "UNKNOWN"
 platform: "UNKNOWN"
 validation_status: untested
 participants: "UNKNOWN"
+decision_refs: []
 raw_refs: []
 evidence_refs: []
 conducted_at: "YYYY-MM-DD"
@@ -20,6 +21,7 @@ conducted_at: "YYYY-MM-DD"
 
 ## 조건
 
+- `subject_refs`: 이 테스트가 검증하는 기획 ID
 - build ID / revision:
 - 플랫폼·입력 장치:
 - 설정·세이브 상태:

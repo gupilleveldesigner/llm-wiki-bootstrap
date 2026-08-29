@@ -40,13 +40,19 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(result["profile"], "evidence")
             self.assertEqual(result["project_mode"], "game")
+            self.assertEqual(result["project_mode_version"], 2)
             self.assertEqual(result["project_mode_verification"]["status"], "ok")
+            self.assertTrue(result["traceability"]["verification"]["ok"])
             self.assertFalse(result["project_mode_activation_pending"])
             manifest = json.loads((target / ".llm-wiki.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["profile"], "evidence")
             self.assertEqual(manifest["project_mode"], "game")
+            self.assertEqual(manifest["project_mode_version"], 2)
             self.assertEqual(manifest["game_project"]["game_engine"], "Godot 4")
             self.assertEqual(manifest["game_project"]["source_roots"], ["game/", "addons/"])
+            self.assertEqual(manifest["game_traceability"]["schema_version"], 1)
+            self.assertEqual(manifest["game_traceability"]["index"], "wiki/game/traceability.json")
+            self.assertEqual(manifest["game_traceability"]["runtime"], "tools/game_trace.py")
             for relative in (
                 "wiki/game/features",
                 "wiki/game/systems",
@@ -56,13 +62,20 @@ class GameProjectModeTests(unittest.TestCase):
                 "wiki/game/decisions",
                 "raw/game/builds",
                 "Output/game",
+                "tools",
             ):
                 self.assertTrue((target / relative).is_dir(), relative)
             self.assertTrue((target / "templates/game/feature-spec.md").is_file())
+            self.assertTrue((target / "templates/game/implementation-check.md").is_file())
             self.assertTrue((target / "templates/game/playtest-report.md").is_file())
             self.assertTrue((target / ".agents/skills/game-project/SKILL.md").is_file())
             self.assertTrue((target / ".claude/skills/game-project/SKILL.md").is_file())
             self.assertTrue((target / ".agents/skills/canon-review/SKILL.md").is_file())
+            self.assertTrue((target / "tools/game_trace.py").is_file())
+            trace_index = json.loads((target / "wiki/game/traceability.json").read_text(encoding="utf-8"))
+            self.assertEqual(trace_index["schema_version"], 1)
+            self.assertEqual(trace_index["nodes"], [])
+            self.assertEqual(trace_index["edges"], [])
             self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", (target / "CLAUDE.md").read_text(encoding="utf-8"))
             self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", (target / "AGENTS.md").read_text(encoding="utf-8"))
 
@@ -87,6 +100,8 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertEqual(result["project_mode"], "game")
             self.assertFalse(result["project_mode_activation_pending"])
             self.assertFalse((target / "CLAUDE.md.wiki-proposed").exists())
+            self.assertTrue((target / "tools/game_trace.py").is_file())
+            self.assertTrue(result["traceability"]["verification"]["ok"])
             self.assertIn(
                 "LLM-WIKI:GAME-PROJECT-MODE",
                 (target / "CLAUDE.md").read_text(encoding="utf-8"),
@@ -114,8 +129,9 @@ class GameProjectModeTests(unittest.TestCase):
                 self.assertNotIn("LLM-WIKI:GAME-PROJECT-MODE", current)
                 self.assertIn("LLM-WIKI:EVIDENCE-PROFILE", proposal)
                 self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", proposal)
+                self.assertIn("tools/game_trace.py", proposal)
 
-    def test_local_upgrade_preserves_user_game_docs_and_backs_up_game_skill(self) -> None:
+    def test_local_upgrade_preserves_user_game_docs_and_backs_up_managed_assets(self) -> None:
         with tempfile.TemporaryDirectory(prefix="game-mode-upgrade-") as temporary:
             root = Path(temporary)
             target = root / "vault"
@@ -123,8 +139,10 @@ class GameProjectModeTests(unittest.TestCase):
             game_project.apply_local_game_project(target, config, "new", "standard")
             model = target / "wiki/game/model.md"
             agent_skill = target / ".agents/skills/game-project/SKILL.md"
+            trace_runtime = target / "tools/game_trace.py"
             model.write_text("# user-owned game model\n", encoding="utf-8")
             agent_skill.write_text("# user-modified game skill\n", encoding="utf-8")
+            trace_runtime.write_text("# user-modified trace runtime\n", encoding="utf-8")
 
             result = game_project.upgrade_game_from_local(target, config)
 
@@ -138,9 +156,19 @@ class GameProjectModeTests(unittest.TestCase):
                 "Design Intent → Implementation State → Validation Evidence → Project Decision",
                 proposal.read_text(encoding="utf-8"),
             )
-            backup = Path(result["backup_dir"]) / ".agents/skills/game-project/SKILL.md"
-            self.assertEqual(backup.read_text(encoding="utf-8"), "# user-modified game skill\n")
+            backup_root = Path(result["backup_dir"])
+            self.assertEqual(
+                (backup_root / ".agents/skills/game-project/SKILL.md").read_text(encoding="utf-8"),
+                "# user-modified game skill\n",
+            )
+            self.assertEqual(
+                (backup_root / "tools/game_trace.py").read_text(encoding="utf-8"),
+                "# user-modified trace runtime\n",
+            )
             self.assertIn("design_status", agent_skill.read_text(encoding="utf-8"))
+            self.assertIn("TRACEABILITY_SCHEMA_VERSION = 1", trace_runtime.read_text(encoding="utf-8"))
+            self.assertIn("tools/game_trace.py", result["game_managed_backup"])
+            self.assertTrue(result["traceability"]["verification"]["ok"])
 
     def test_remote_checkout_requires_game_overlay_before_target_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="game-mode-checkout-") as temporary:

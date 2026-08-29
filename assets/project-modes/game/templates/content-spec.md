@@ -12,7 +12,10 @@ owners: []
 depends_on: []
 supersedes: []
 live_paths: []
+implementation_check_refs: []
 build_refs: []
+playtest_refs: []
+decision_refs: []
 evidence_refs: []
 updated: "YYYY-MM-DD"
 ---
@@ -47,6 +50,12 @@ updated: "YYYY-MM-DD"
 - 핵심 수치:
 - 금지 조합/예외:
 - 성능·메모리·플랫폼 제약:
+
+## 기획 ↔ 코드·데이터 추적
+
+- `live_paths`: `project/relative/path#symbol@locator`
+- 구현 확인 문서:
+- 마지막 확인 revision/build:
 
 ## 실제 구현 상태
 
