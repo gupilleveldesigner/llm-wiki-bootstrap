@@ -27,12 +27,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/game-ingest-v5-payload/part* > /tmp/game-ingest-v5.tar.xz.b64
-          base64 --decode --ignore-garbage /tmp/game-ingest-v5.tar.xz.b64 > /tmp/game-ingest-v5.tar.xz
+          cat .github/game-ingest-v5-bin/part* > /tmp/game-ingest-v5.tar.xz
           echo "bed689fe1b2b7ab63d9e9e13971f4ee2f5e70be33c1033e1a6f820d235b7e401  /tmp/game-ingest-v5.tar.xz" | sha256sum --check --strict
           mkdir -p /tmp/game-ingest-v5
           tar -xJf /tmp/game-ingest-v5.tar.xz -C /tmp/game-ingest-v5
           python /tmp/game-ingest-v5/apply.py "$PWD" /tmp/game-ingest-v5/new
+          rm -rf .github/game-ingest-v5-payload .github/game-ingest-v5-bin
 
       - name: Validate Python and JSON templates
         shell: bash
