@@ -1,0 +1,219 @@
+name: Publish validated Game ingest v5
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'feature/game-project-mode' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/game-project-mode
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the complete candidate validated in run 33244325837
+        uses: actions/download-artifact@v4
+        with:
+          name: game-ingest-v5-candidate-complete
+          path: /tmp/game-ingest-v5-candidate
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 33244325837
+
+      - name: Re-verify every candidate file and its regression log
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('/tmp/game-ingest-v5-candidate')
+          manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+          if manifest.get('schema') != 'llm-wiki-game-ingest-v5-candidate-v2':
+              raise SystemExit(f'unexpected candidate schema: {manifest.get("schema")}')
+          if manifest.get('base_commit') != 'a556875623bb2a960a613711c2febf4dc5778e61':
+              raise SystemExit(f'unexpected candidate base: {manifest.get("base_commit")}')
+          entries = manifest.get('entries', [])
+          if len(entries) != 29:
+              raise SystemExit(f'expected 29 candidate entries, found {len(entries)}')
+          if sum(str(item.get('status', '')).startswith('A') for item in entries) != 10:
+              raise SystemExit('candidate does not contain the required ten new files')
+          if manifest.get('deleted'):
+              raise SystemExit(f'candidate unexpectedly deletes v4 files: {manifest.get("deleted")}')
+
+          expected_paths = set()
+          for item in entries:
+              path = str(item['path'])
+              expected_paths.add(path)
+              file_path = root / 'files' / path
+              if not file_path.is_file():
+                  raise SystemExit(f'candidate file is missing: {path}')
+              raw = file_path.read_bytes()
+              digest = hashlib.sha256(raw).hexdigest()
+              if digest != item.get('sha256'):
+                  raise SystemExit(f'candidate SHA mismatch for {path}: {digest}')
+              if len(raw) != item.get('size'):
+                  raise SystemExit(f'candidate size mismatch for {path}: {len(raw)}')
+
+          actual_paths = {
+              path.relative_to(root / 'files').as_posix()
+              for path in (root / 'files').rglob('*')
+              if path.is_file()
+          }
+          if actual_paths != expected_paths:
+              raise SystemExit(
+                  f'candidate file set differs from manifest: '
+                  f'missing={sorted(expected_paths - actual_paths)}, '
+                  f'extra={sorted(actual_paths - expected_paths)}'
+              )
+
+          tests = (root / 'tests.log').read_text(encoding='utf-8')
+          if 'Ran 71 tests' not in tests or '\nOK\n' not in tests:
+              raise SystemExit('candidate regression log does not prove 71 passing tests')
+          print(json.dumps({
+              'candidate_files': len(entries),
+              'new_files': 10,
+              'modified_files': 19,
+              'validated_tests': 71,
+          }, indent=2))
+          PY
+
+      - name: Apply the validated non-workflow files and re-run the full suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --exclude='.github/' /tmp/game-ingest-v5-candidate/files/ ./
+          rm -rf \
+            .github/game-ingest-v5-payload \
+            .github/game-ingest-v5-bin \
+            .github/game-ingest-v5-payload-v2
+          python -m compileall -q \
+            scripts \
+            assets/project-modes/game/runtime \
+            assets/project-modes/game/ingest \
+            assets/skills-bundle/agents-skills/ingest/scripts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for path in Path('assets').rglob('*.json.template'):
+              json.loads(path.read_text(encoding='utf-8'))
+          for path in Path('assets/project-modes/game/ingest').rglob('*.json'):
+              json.loads(path.read_text(encoding='utf-8'))
+          PY
+          python -m unittest discover scripts/tests -p 'test_*.py' -v
+
+      - name: Commit the validated Game ingest implementation with its rationale
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          git config user.name "gupilleveldesigner"
+          git config user.email "gupilleveldesigner@gmail.com"
+          git add -A
+          git reset -- .github/workflows
+          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
+            echo 'workflow files must not be included in the GITHUB_TOKEN commit' >&2
+            exit 1
+          fi
+          git diff --cached --check
+          cat > /tmp/game-ingest-v5-commit.txt <<'EOF'
+          Add adapter-based Game ingest without forking the Raw engine
+
+          Game mode v4 made design/code synchronization bidirectional, but ingest still
+          understood only the generic knowledge-vault document contract. It could scan
+          raw/game/** and create Source records, yet it could not safely finish an ingest
+          that also changed Game documents because the generic validator required
+          topics/tags and sources/source. It also could not discover a sibling sidecar
+          vault when invoked from project_root, did not refresh the Game trace graph after
+          reflection, and recorded no Game IDs or synchronization result in the ledger.
+
+          Keep one shared implementation of Raw immutability, pending-file discovery,
+          one-to-one Source records, SHA-256, semantic coverage, locator validation,
+          Graphify, recovery, and generic ledger behavior. Add a versioned adapter
+          contract so project modes own only domain validation, routing, and post-finalize
+          behavior instead of cloning the mature ingest engine or filling it with
+          Game-specific conditionals.
+
+          Add a Game adapter and two UX entry points:
+
+          - generic ingest reads .llm-wiki.json and dispatches to the configured
+            vault-local adapter
+          - game-ingest is installed as an explicit Game workflow but calls the same
+            shared runtime
+          - adapter loading is manifest-driven, versioned, vault-relative, path-safe,
+            and fail-closed
+          - the installed skill directory is a trusted vault anchor, so an invocation
+            launched from project_root can resolve a sibling sidecar without scanning
+            arbitrary siblings or writing a pointer into the engine project
+
+          Validate typed Game reflections instead of forcing generic fields onto them:
+
+          - require stable feature/system/level/content/asset/playtest/build/decision IDs
+          - resolve subject_refs and affected_refs against real Game specifications
+          - recognize raw_refs, log_refs, and resolvable Source IDs in evidence_refs
+          - require RAW-/SOURCE- IDs to resolve to one-to-one Source records; Evidence
+            Game vaults additionally require reviewed Source records
+          - preserve Claim and Experiment IDs but never count them as direct Raw/Source
+            provenance
+          - reject implementation checks from ingest completion because inspect and
+            accept-sync remain explicit Game-project operations
+
+          Add deterministic, versioned routing for raw/game categories. Design originals
+          are proposal-first; playtests require Source plus Game playtest reflection;
+          build logs require Source plus build reflection; telemetry and references may
+          produce Claims, Experiments, bugs, decisions, or proposals. Missing or malformed
+          routing fails closed rather than marking a partial reflection complete.
+
+          Run Game trace scan/status/verify only after the shared ingest gates succeed.
+          Report in_sync, design_changed, code_changed, both_changed, unverified, or
+          missing separately from ingest completion. Never call game_trace.py accept from
+          ingest: a synchronization baseline still requires a real implementation
+          inspection and explicit operator approval.
+
+          Upgrade the Game ingest ledger to version 3 while preserving the generic Raw
+          and Source coverage fields. Add reflected Game document IDs, subject links,
+          resolved Source provenance, route fulfillment, trace counts, and non-mutating
+          synchronization proposals.
+
+          Bump Game mode to 5 and install/verify the adapter, routing table, instructions,
+          Codex skill, Claude adapter, managed ownership, backup paths, and exact-SHA
+          remote-upgrade preflight. Contract-marker validation now fails when a required
+          marker source file is absent instead of silently skipping the check.
+
+          Preserve the engine-safe vault-only write policy throughout: neither generic
+          nor Game ingest writes to project_root or reclassifies live code, scenes, data,
+          or original assets as Raw.
+
+          Validation and transport diagnosis:
+
+          - the first two workflow attempts failed on invalid Base64 input
+          - the third failed archive SHA-256 verification; no patch/test step had run
+          - later diagnostics proved the stored stream was corrupted and not recoverable
+            by a unique one-character edit
+          - a clean deterministic payload was regenerated and verified as
+            f3244efb5d32d6c125d145df69e60eb616e20fc6947570684a58b1f6f069b45e
+          - candidate run 33244325837 verified all 29 files, including 10 new files
+          - Python/JSON validation and the complete repository suite passed
+          - 71 tests passed, including sidecar dispatch, typed validation, mixed
+            Source/Claim evidence, missing Source rejection, fail-closed routing,
+            route fulfillment, ledger v3, trace postprocessing, and no automatic
+            baseline acceptance
+          EOF
+          sed -i 's/^          //' /tmp/game-ingest-v5-commit.txt
+          git commit -F /tmp/game-ingest-v5-commit.txt
+          git push origin HEAD:feature/game-project-mode
