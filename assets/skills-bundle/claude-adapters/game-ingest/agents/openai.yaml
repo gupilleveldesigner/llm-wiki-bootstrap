@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Ingest"
+  short_description: "Claude adapter for the canonical game-ingest skill"
+  default_prompt: "Use /game-ingest and follow the project-local shared-ingest Game adapter workflow."

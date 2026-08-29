@@ -1,0 +1,12 @@
+---
+name: game-ingest
+description: Game vault의 raw/game 자료를 공용 ingest 엔진과 Game adapter로 Source 및 typed Game 문서에 반영한다.
+---
+
+# game-ingest 인스톨 어댑터
+
+다음 Codex 정본 스킬을 끝까지 읽고 동일하게 따른다.
+
+- [`../../../.agents/skills/game-ingest/SKILL.md`](../../../.agents/skills/game-ingest/SKILL.md)
+
+Raw/Source 엔진을 별도로 재구현하지 말고, manifest의 `ingest.adapter: game` 자동 라우팅과 `instructions/game-ingest.md`를 사용한다.

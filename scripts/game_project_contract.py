@@ -15,16 +15,25 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
 PROJECT_MODE = "game"
-PROJECT_MODE_VERSION = 4
+PROJECT_MODE_VERSION = 5
 TRACEABILITY_SCHEMA_VERSION = 2
 SYNC_BASELINE_VERSION = 1
+INGEST_SCHEMA_VERSION = 3
+GAME_INGEST_ADAPTER_VERSION = 1
+GAME_INGEST_LEDGER_VERSION = 3
 GAME_SKILL = "game-project"
+GAME_INGEST_SKILL = "game-ingest"
 GAME_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROJECT-MODE -->"
 GAME_TRACE_RUNTIME_SOURCE = "project-modes/game/runtime/game_trace.py"
 GAME_TRACE_RUNTIME_DESTINATION = "tools/game_trace.py"
 GAME_TRACE_INDEX_SOURCE = "project-modes/game/docs/traceability.json.template"
 GAME_TRACE_INDEX_DESTINATION = "wiki/game/traceability.json"
 GAME_ENGINE_LAYOUT_DOC = "instructions/game-engine-layouts.md"
+GAME_INGEST_DOC = "instructions/game-ingest.md"
+GAME_INGEST_ADAPTER_SOURCE = "project-modes/game/ingest/game_adapter.py"
+GAME_INGEST_ADAPTER_DESTINATION = "tools/ingest-adapters/game_adapter.py"
+GAME_INGEST_ROUTING_SOURCE = "project-modes/game/ingest/routing.json"
+GAME_INGEST_ROUTING_DESTINATION = "tools/ingest-adapters/game-routing.json"
 
 GAME_DIRECTORIES = (
     "raw/game/design",
@@ -50,6 +59,7 @@ GAME_DIRECTORIES = (
     "wiki/game/releases",
     "Output/game",
     "tools",
+    "tools/ingest-adapters",
 )
 
 # managed=True means a changed existing file is proposed rather than silently replaced.
@@ -63,6 +73,7 @@ GAME_DOCS = (
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md", True, True),
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md", True, True),
     ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC, True, True),
+    ("project-modes/game/docs/game-ingest.md.template", GAME_INGEST_DOC, True, True),
     ("project-modes/game/docs/game-taxonomy.json.template", "wiki/game/taxonomy.json", True, True),
 )
 
@@ -70,30 +81,46 @@ GAME_CONTRACT_FILES = (
     ("project-modes/game/docs/game-model.md.template", "wiki/game/model.md"),
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md"),
     ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC),
+    ("project-modes/game/docs/game-ingest.md.template", GAME_INGEST_DOC),
     ("project-modes/game/docs/game-index.md.template", "wiki/game/index.md"),
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md"),
     ("project-modes/game/docs/traceability.json.template", GAME_TRACE_INDEX_DESTINATION),
     (GAME_TRACE_RUNTIME_SOURCE, GAME_TRACE_RUNTIME_DESTINATION),
+    (GAME_INGEST_ADAPTER_SOURCE, GAME_INGEST_ADAPTER_DESTINATION),
+    (GAME_INGEST_ROUTING_SOURCE, GAME_INGEST_ROUTING_DESTINATION),
+    ("skills-bundle/agents-skills/ingest/scripts/ingest_runtime.py", ".agents/skills/ingest/scripts/ingest_runtime.py"),
+    ("skills-bundle/agents-skills/ingest/scripts/find_uningested.py", ".agents/skills/ingest/scripts/find_uningested.py"),
+    ("skills-bundle/agents-skills/ingest/scripts/ingest_core/adapter_contract.py", ".agents/skills/ingest/scripts/ingest_core/adapter_contract.py"),
     ("project-modes/game/templates/feature-spec.md", "templates/game/feature-spec.md"),
     ("project-modes/game/templates/implementation-check.md", "templates/game/implementation-check.md"),
     ("project-modes/game/templates/playtest-report.md", "templates/game/playtest-report.md"),
     ("skills-bundle/agents-skills/game-project/SKILL.md.bundled", ".agents/skills/game-project/SKILL.md"),
     ("skills-bundle/claude-adapters/game-project/SKILL.md.bundled", ".claude/skills/game-project/SKILL.md"),
+    ("skills-bundle/agents-skills/game-ingest/SKILL.md.bundled", ".agents/skills/game-ingest/SKILL.md"),
+    ("skills-bundle/claude-adapters/game-ingest/SKILL.md.bundled", ".claude/skills/game-ingest/SKILL.md"),
 )
 
 GAME_CONTRACT_MARKERS = {
     "project-modes/game/docs/game-model.md.template": "Design Intent → Implementation State → Validation Evidence → Project Decision",
     "project-modes/game/docs/game-operations.md.template": "vault-only write policy",
     "project-modes/game/docs/game-engine-layouts.md.template": "sidecar",
+    "project-modes/game/docs/game-ingest.md.template": "shared ingest runtime",
     "project-modes/game/docs/game-index.md.template": "project_mode: game",
     "project-modes/game/docs/game-CLAUDE.md.template": "game-project",
     "project-modes/game/docs/traceability.json.template": '"sync_baseline_version"',
     GAME_TRACE_RUNTIME_SOURCE: "TRACEABILITY_SCHEMA_VERSION = 2",
+    GAME_INGEST_ADAPTER_SOURCE: "GAME_INGEST_ADAPTER_VERSION = 1",
+    GAME_INGEST_ROUTING_SOURCE: '"adapter": "game"',
+    "skills-bundle/agents-skills/ingest/scripts/ingest_runtime.py": "dispatch_configured_adapter",
+    "skills-bundle/agents-skills/ingest/scripts/find_uningested.py": "skill_root: Path | None = None",
+    "skills-bundle/agents-skills/ingest/scripts/ingest_core/adapter_contract.py": "configured_adapter",
     "project-modes/game/templates/feature-spec.md": "GAME-SYNC:DESIGN-START",
     "project-modes/game/templates/implementation-check.md": "checked_spec_digest",
     "project-modes/game/templates/playtest-report.md": "## 관찰 — 해석을 섞지 않음",
     "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "sync_baseline_status",
     "skills-bundle/claude-adapters/game-project/SKILL.md.bundled": "../../../.agents/skills/game-project/SKILL.md",
+    "skills-bundle/agents-skills/game-ingest/SKILL.md.bundled": "game_reflection_status",
+    "skills-bundle/claude-adapters/game-ingest/SKILL.md.bundled": "../../../.agents/skills/game-ingest/SKILL.md",
 }
 
 REQUIRED_GAME_REMOTE_PATHS = (
@@ -104,13 +131,22 @@ REQUIRED_GAME_REMOTE_PATHS = (
     "assets/project-modes/game/docs/game-model.md.template",
     "assets/project-modes/game/docs/game-operations.md.template",
     "assets/project-modes/game/docs/game-engine-layouts.md.template",
+    "assets/project-modes/game/docs/game-ingest.md.template",
     "assets/project-modes/game/docs/traceability.json.template",
     "assets/project-modes/game/runtime/game_trace.py",
+    "assets/project-modes/game/ingest/game_adapter.py",
+    "assets/project-modes/game/ingest/routing.json",
+    "assets/skills-bundle/agents-skills/ingest/scripts/ingest_runtime.py",
+    "assets/skills-bundle/agents-skills/ingest/scripts/find_uningested.py",
+    "assets/skills-bundle/agents-skills/ingest/scripts/ingest_core/__init__.py",
+    "assets/skills-bundle/agents-skills/ingest/scripts/ingest_core/adapter_contract.py",
     "assets/project-modes/game/templates/feature-spec.md",
     "assets/project-modes/game/templates/implementation-check.md",
     "assets/project-modes/game/templates/playtest-report.md",
     "assets/skills-bundle/agents-skills/game-project/SKILL.md.bundled",
     "assets/skills-bundle/claude-adapters/game-project/SKILL.md.bundled",
+    "assets/skills-bundle/agents-skills/game-ingest/SKILL.md.bundled",
+    "assets/skills-bundle/claude-adapters/game-ingest/SKILL.md.bundled",
 )
 
 GAME_DEFAULTS: dict[str, Any] = {
@@ -251,7 +287,9 @@ def validate_game_bundle(root: Path = REPOSITORY_ROOT) -> None:
     marker_errors: list[str] = []
     for source_name, marker in GAME_CONTRACT_MARKERS.items():
         source = root / "assets" / source_name
-        if source.is_file() and marker not in source.read_text(encoding="utf-8"):
+        if not source.is_file():
+            marker_errors.append(f"missing contract source: {source_name}")
+        elif marker not in source.read_text(encoding="utf-8"):
             marker_errors.append(f"{source_name} missing marker {marker!r}")
     if missing or marker_errors:
         details = [*(f"missing {path}" for path in missing), *marker_errors]
@@ -291,6 +329,19 @@ def write_game_manifest(target: Path, metadata: dict[str, Any]) -> None:
             "missing",
         ],
         "source_of_truth": "vault specs/checks/builds/playtests/decisions plus live project paths, fingerprints, and Git revisions",
+    }
+    manifest["ingest"] = {
+        "schema_version": INGEST_SCHEMA_VERSION,
+        "adapter": "game",
+        "adapter_version": GAME_INGEST_ADAPTER_VERSION,
+        "adapter_path": GAME_INGEST_ADAPTER_DESTINATION,
+        "routing": GAME_INGEST_ROUTING_DESTINATION,
+        "ledger_version": GAME_INGEST_LEDGER_VERSION,
+        "auto_route": True,
+        "shared_runtime": ".agents/skills/ingest/scripts/ingest_runtime.py",
+        "source_engine": "shared Raw/Source ingest runtime",
+        "completion_states": ["ingest_status", "game_reflection_status", "game_sync_status"],
+        "baseline_acceptance": "manual game-project inspect/accept-sync only",
     }
     manifest["managed_files"] = {
         "schema_version": MANAGED_MANIFEST_SCHEMA_VERSION,

@@ -359,68 +359,70 @@ Game mode Wiki에 base `upgrade.py`만 사용하지 않는다. `game_project.py 
 
 실패 시 local fallback하지 않는다.
 
-# 9. Game traceability
+# 9. Game traceability와 dual baseline
 
-기획 정본은 vault, 구현 정본은 project root다.
-
-```text
-vault/wiki/game/features/
-vault/wiki/game/systems/
-vault/wiki/game/levels/
-...
-
-project_root/<actual code, scenes, data, assets>
-```
-
-기획 문서:
-
-```yaml
-feature_id: FEATURE-LOCKON-001
-live_paths:
-  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
-implementation_check_refs:
-  - wiki/game/implementation/IMPL-LOCKON-004.md
-```
-
-구현 확인:
-
-```yaml
-check_id: IMPL-LOCKON-004
-subject_id: FEATURE-LOCKON-001
-source_revision: abc123def456
-checked_paths:
-  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
-```
-
-파생 관계:
-
-```text
-spec --implemented_by--> code
-spec --built_in--------> build
-spec --validated_by----> test
-spec --governed_by-----> decision
-```
-
-Vault root에서 실행한다. Runtime은 manifest의 project root reference를 해석한다.
+기획 정본은 vault, 구현 정본은 project root다. 구현 확인 문서에서 실제 대조가 끝난 뒤 다음 명령으로 양쪽 기준점을 확정한다.
 
 ```bash
-python tools/game_trace.py rebuild
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
+```
+
+기준점:
+
+```text
+canonical spec digest
+checked path별 code fingerprint
+project revision
+독립 vault revision(있는 경우)
+```
+
+상태:
+
+```text
+in_sync
+design_changed
+code_changed
+both_changed
+unverified
+missing
+```
+
+```bash
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
 python tools/game_trace.py verify
-python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py verify --strict-sync
 python tools/game_trace.py spec <SPEC-ID>
 python tools/game_trace.py path <path#symbol>
 python tools/game_trace.py affected --base <REV> --head <REV>
 python tools/game_trace.py matrix
 ```
 
-상태:
+변경 감지는 자동으로 어느 한쪽을 정본으로 승격하지 않는다. inspect, proposal/decision, 새 implementation check, 명시적 accept가 필요하다.
 
-- `current`: 확인 revision 이후 경로 미변경
-- `stale`: 경로 변경, 재검사 필요
-- `unverified`: 비교 가능한 check/revision 없음
-- `missing`: live path 없음
+## Game-aware ingest
 
-stale은 의미 오류 확정이 아니라 재검사 신호다.
+Game mode v5는 공용 ingest engine과 vault-local Game adapter를 결합한다.
+
+```text
+shared ingest: Raw scan → Source/SHA/semantic review → Graphify → ledger
+Game adapter:  sidecar context → typed Game validation → trace scan/status/verify
+```
+
+- 일반 `/ingest`는 manifest의 `ingest.adapter: game`을 읽어 자동 라우팅한다.
+- `/game-ingest`는 같은 engine의 명시적 UX다.
+- `raw/game/design|playtests|builds|telemetry|references`를 유형별로 라우팅한다.
+- Game 문서는 `topics/tags` 대신 안정된 Game ID와 `raw_refs/evidence_refs`를 검증한다.
+- ledger v3는 Source ID, 반영된 Game ID, subject refs, sync counts를 기록한다.
+- ingest는 `game_trace accept`를 자동 실행하지 않는다.
+
+필독:
+
+```text
+instructions/game-ingest.md
+.agents/skills/game-ingest/SKILL.md
+```
 
 # 10. Game 운영 계약
 
@@ -431,7 +433,9 @@ wiki/game/index.md
 wiki/game/model.md
 instructions/game-project.md
 instructions/game-engine-layouts.md
+instructions/game-ingest.md
 .agents/skills/game-project/SKILL.md
+.agents/skills/game-ingest/SKILL.md
 ```
 
 독립 상태:
@@ -452,13 +456,14 @@ Operations:
 - `inspect`
 - `trace`
 - `impact`
+- `game-ingest` — 공용 ingest engine + Game adapter
 - `playtest`
 - `build`
 - `decide`
 - `bug`
 - `release`
 
-기획·implementation check·build·playtest·decision 변경 뒤 `game_trace.py rebuild`와 `verify`를 실행한다. 완료·릴리스에는 `verify --strict-stale`를 사용한다.
+기획·implementation check·build·playtest·decision 변경 뒤 `game_trace.py scan`, `status`, `verify`를 실행한다. 완료·릴리스에는 `verify --strict-sync`를 사용한다. Raw 게임 자료 반영은 `/ingest` 자동 라우팅 또는 `/game-ingest`를 사용한다.
 
 # 11. Evidence 운영 계약
 

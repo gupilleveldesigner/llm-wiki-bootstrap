@@ -263,3 +263,14 @@ Traceability answers which design is linked to which code, build, test, and deci
 ## Non-goals
 
 Game mode does not install an engine, fully interpret every proprietary binary format, guarantee a successful build, approve design automatically, infer semantic change from a code diff alone, promote Canon automatically, replace an issue tracker, or reorganize live source.
+
+## Game-aware ingest v5
+
+Game mode installs a policy adapter instead of duplicating the shared Raw-to-Source engine.
+
+```text
+/ingest      → automatic manifest routing
+/game-ingest → explicit entry point to the same adapter
+```
+
+The adapter routes `raw/game/design`, `playtests`, `builds`, `telemetry`, and `references`; validates stable Game IDs plus `raw_refs`, `evidence_refs`, and subject links; runs trace scan/status/verify after a successful finalize; and enriches ledger v3 with Source IDs, Game documents, and sync counts. Ingest never overwrites design/code or accepts a trace baseline automatically.

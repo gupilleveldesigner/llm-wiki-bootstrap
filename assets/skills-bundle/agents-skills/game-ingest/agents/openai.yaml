@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Ingest"
+  short_description: "Ingest game evidence and reflect it into typed Game documents"
+  default_prompt: "Use $game-ingest to process raw/game evidence through the shared ingest engine, validate typed Game reflections, and report trace drift without accepting a new design-code baseline automatically."

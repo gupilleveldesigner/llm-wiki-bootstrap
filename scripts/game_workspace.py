@@ -578,7 +578,7 @@ def _managed_policy(relative: str) -> str:
         return "metadata"
     if relative.startswith((".agents/", ".claude/", ".session-memory/scripts/")):
         return "system-managed"
-    if relative in ("tools/game_trace.py", "tools/kb.py"):
+    if relative in ("tools/game_trace.py", "tools/kb.py") or relative.startswith("tools/ingest-adapters/"):
         return "system-managed"
     if relative.startswith(("templates/", "instructions/")):
         return "managed-proposal"

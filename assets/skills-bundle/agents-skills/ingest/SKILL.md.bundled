@@ -7,6 +7,14 @@ description: Codex·Claude에서 명령이 실행된 프로젝트 또는 사용�
 
 Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르는 Wiki에 적용한다. 현재 볼트에서는 전체 스키마가 [AGENTS.md](../../../AGENTS.md)에 있지만, 다른 Wiki를 대상으로 할 때는 **그 대상 루트의** `AGENTS.md`·`CLAUDE.md`와 `raw/`·`wiki/` 규칙을 먼저 읽고 그 규칙을 우선한다.
 
+## Project mode adapter routing
+
+- 공용 runtime은 Raw 스캔, Source SHA/semantic review, Graphify, ledger를 단일 구현으로 유지한다.
+- root `.llm-wiki.json`에 `ingest.adapter`가 있으면 vault-local adapter에 같은 CLI 요청을 전달한다.
+- `project_mode: game`은 `tools/ingest-adapters/game_adapter.py`로 자동 라우팅한다. `/game-ingest`는 같은 경로를 명시적으로 호출하는 별도 UX이며 Raw/Source 엔진을 복제하지 않는다.
+- adapter가 선언됐는데 파일이 없거나 vault 밖을 가리키면 generic ingest로 조용히 fallback하지 않고 실패한다.
+- Game adapter는 typed Game 문서, `raw_refs/evidence_refs`, game taxonomy, trace 후처리를 담당하지만 `game_trace accept`를 자동 실행하지 않는다.
+
 ## 대상 Wiki와 호스트
 
 - `WIKI_ROOT`는 `raw/`와 `wiki/`가 함께 있는 디렉터리다. 사용자가 경로를 지정하면 그 경로를 최우선한다. 경로가 없으면 **명령을 실행한 현재 작업 디렉터리**에서 가장 가까운 상위 `raw/`+`wiki/`를 찾는다. 현재 위치가 linked Git worktree이고 그 안에 Wiki가 없으면 같은 저장소의 primary worktree(메인 체크아웃)에 있는 `raw/`+`wiki/`를 사용한다. 다른 형제 worktree나 스킬 설치 원본을 임의로 선택하지 않는다.

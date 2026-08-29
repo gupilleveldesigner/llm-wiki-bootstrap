@@ -206,6 +206,15 @@ python tools/game_trace.py verify --strict-sync
 
 `--strict-sync`는 `in_sync`가 아닌 구현 관계를 차단한다. 기존 `--strict-stale`은 변경된 관계만 차단하는 호환 옵션이다.
 
+## Game ingest coordination
+
+- `raw/game/**` 자료 반영은 설치된 `game-ingest` 스킬 또는 일반 `/ingest` 자동 라우팅을 사용한다.
+- 공용 ingest runtime이 Raw/Source/SHA/semantic coverage/Graphify/ledger를 담당하고 Game adapter가 typed Game 문서와 trace 후처리를 담당한다.
+- ingest 결과의 `ingest_status`, `game_reflection_status`, `game_sync_status`를 분리한다.
+- `game_sync_status: actions_required`는 정상적인 후속 신호일 수 있으며 ingest 실패로 축약하지 않는다.
+- ingest가 `game_trace accept`를 자동 실행하거나 기획·코드를 서로 덮어쓰게 하지 않는다.
+- Source 반영으로 설계 의미가 바뀌면 `design_changed`를 보존하고 inspect/decision/accept-sync로 넘긴다.
+
 ## Evidence profile
 
 - 원본 플레이테스트·로그·텔레메트리·외부 분석은 Raw/Source

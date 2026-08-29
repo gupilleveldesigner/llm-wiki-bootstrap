@@ -1,0 +1,152 @@
+# Game Ingest Operations
+
+이 문서는 `project_mode: game`인 {{PROJECT_NAME}} vault에서 Raw 자료를 Source와 Game 제작 문서로 반영하는 정본 절차다.
+
+## 구조
+
+```text
+shared ingest runtime
+  Raw scan / immutable Raw / Source SHA / semantic coverage / Graphify / ledger
+
+Game ingest adapter
+  sidecar context / raw-game routing / typed Game validation / trace post-finalize
+```
+
+`/ingest`는 `.llm-wiki.json.ingest.adapter: game`을 읽어 자동으로 Game adapter에 라우팅된다. `/game-ingest`는 같은 실행 엔진을 명시적으로 호출하는 진입점이다. 두 스킬은 Raw/Source 구현을 복제하지 않는다.
+
+## 두 정본
+
+```text
+vault_root: .
+project_root: {{PROJECT_ROOT_REFERENCE}}
+```
+
+- `raw/game/**`는 외부 원문, 로그, export, 플레이테스트 원본 같은 불변 증거다.
+- live project의 코드·씬·데이터·원본 에셋은 Raw가 아니다.
+- ingest adapter는 project_root를 읽거나 trace할 수 있지만 쓰지 않는다.
+- project_root 변경은 별도의 `game-project implement` 작업에서만 수행한다.
+
+## Raw 라우팅
+
+| Raw 경로 | 필수 결과 | 기본/선택 반영 |
+|---|---|---|
+| `raw/game/design/` | Source | proposal, feature/system/level/content 후보 |
+| `raw/game/playtests/` | Source + playtest report | Claim, bug, decision proposal, Experiment |
+| `raw/game/builds/` | Source + build report | bug, regression record |
+| `raw/game/telemetry/` | Source | Claim, Experiment, spec evidence |
+| `raw/game/references/` | Source | concept, Claim, game proposal |
+
+외부 기획 원문을 accepted spec에 자동 덮어쓰지 않는다. 먼저 Source와 proposal을 만들고, 검토·결정 후 spec을 변경한다.
+
+## Game 문서 provenance
+
+Game ingest가 변경하는 문서는 일반 `topics/tags` 대신 자기 타입의 안정된 ID를 사용한다.
+
+```yaml
+type: game_playtest_report
+playtest_id: PLAYTEST-LOCKON-003
+subject_refs:
+  - FEATURE-LOCKON-001
+raw_refs:
+  - raw/game/playtests/lockon-003.md
+evidence_refs:
+  - RAW-PLAYTEST-20260829-0001
+```
+
+- `raw_refs`는 실제 vault 내부 Raw 경로여야 한다.
+- `evidence_refs`에는 Source·Claim·Experiment 등이 함께 있을 수 있다. `RAW-`/`SOURCE-` Source ID는 실제 `wiki/sources/**/*.md`에서 해석되어야 하며, Claim·Experiment ID는 보존하되 직접 ingest provenance를 대신하지 않는다.
+- Evidence profile에서는 반영에 사용한 Source가 `semantic_status: reviewed`여야 한다.
+- Source의 `Wiki에 반영된 문서`와 Game 문서의 `evidence_refs/raw_refs`는 양방향 provenance를 이룬다.
+
+## 실행
+
+상태 확인:
+
+```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py status
+```
+
+Game Raw 스캔과 라우팅 확인:
+
+```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py scan --json
+```
+
+긴 원문 coverage 계획:
+
+```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py semantic-plan \
+  --source raw/game/playtests/session-003.md
+```
+
+완료 게이트:
+
+```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py finalize \
+  --changed-file wiki/sources/session-003.md \
+  --changed-file wiki/game/playtests/PLAYTEST-003.md \
+  --changed-file wiki/game/features/FEATURE-LOCKON-001.md
+```
+
+Source/general 문서가 최소 하나 포함되어야 한다. Game 문서는 Source를 대신하지 않고 Source 반영 결과다.
+
+## 완료 상태 분리
+
+```text
+ingest_status          Raw → Source의 구조·의미 검토 완료 여부
+game_reflection_status Source → Game 문서 반영 계약 완료 여부
+game_sync_status       반영 후 기획↔구현 재검사 필요 여부
+```
+
+다음 조합은 정상이다.
+
+```text
+ingest_status: complete
+game_reflection_status: complete
+game_sync_status: actions_required
+```
+
+새 근거가 기획 의미를 바꾸면 `design_changed`가 발생할 수 있다. 이는 ingest 실패가 아니라 구현 재검사 또는 결정이 필요하다는 뜻이다.
+
+## Trace 후처리
+
+성공한 Game finalize는 다음을 실행한다.
+
+```text
+game_trace scan
+→ game_trace status
+→ game_trace verify
+```
+
+그러나 다음은 자동 실행하지 않는다.
+
+```text
+game_trace accept
+기획 자동 덮어쓰기
+코드 자동 덮어쓰기
+Project Decision 자동 승인
+Canon 자동 승격
+```
+
+`accept`는 사람이 실제 기획과 구현을 다시 대조한 뒤 별도 `game-project inspect/accept-sync` 단계에서만 수행한다.
+
+## Ledger v3
+
+`wiki/ingest-ledger.json`에는 기존 Raw/Source 상태와 함께 다음이 추가된다.
+
+- adapter ID/version
+- Source ID
+- 반영된 Game 문서 path/type/ID
+- subject spec IDs
+- trace sync counts
+- `in_sync` 또는 `actions_required`
+
+## 완료 보고
+
+1. 처리한 Raw와 Source ID
+2. 생성·갱신한 Game 문서와 안정된 ID
+3. `raw_refs/evidence_refs/subject_refs`
+4. semantic review와 Graphify 결과
+5. ingest/reflection/sync 세 상태
+6. `design_changed/code_changed/both_changed/unverified/missing` 후속
+7. project_root가 변경되지 않았는지

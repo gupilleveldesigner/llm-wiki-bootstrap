@@ -17,6 +17,12 @@
 4. `../../instructions/game-engine-layouts.md`
 5. 설치된 `game-project` 스킬
 
+## Game ingest
+
+- `raw/game/**` 반영은 설치된 `game-ingest` 스킬 또는 `/ingest` 자동 라우팅을 사용한다.
+- `instructions/game-ingest.md`를 읽고 Source ID와 Game ID의 양방향 provenance를 유지한다.
+- ingest가 trace baseline을 자동 승인하게 하지 않는다.
+
 ## 핵심 규칙
 
 - 설치·업그레이드는 vault-only다. project root에 Wiki 파일을 만들지 않는다.

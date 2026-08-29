@@ -15,6 +15,11 @@ from game_project_contract import (
     GAME_DIRECTORIES,
     GAME_DOCS,
     GAME_ENGINE_LAYOUT_DOC,
+    GAME_INGEST_ADAPTER_DESTINATION,
+    GAME_INGEST_ADAPTER_SOURCE,
+    GAME_INGEST_ROUTING_DESTINATION,
+    GAME_INGEST_ROUTING_SOURCE,
+    GAME_INGEST_SKILL,
     GAME_ROUTER_MARKER,
     GAME_SKILL,
     GAME_TRACE_INDEX_DESTINATION,
@@ -91,6 +96,8 @@ def install_game_skills(target: Path, *, propose_existing: bool) -> list[str]:
     roots = (
         (ASSETS / "skills-bundle/agents-skills/game-project", target / ".agents/skills/game-project"),
         (ASSETS / "skills-bundle/claude-adapters/game-project", target / ".claude/skills/game-project"),
+        (ASSETS / "skills-bundle/agents-skills/game-ingest", target / ".agents/skills/game-ingest"),
+        (ASSETS / "skills-bundle/claude-adapters/game-ingest", target / ".claude/skills/game-ingest"),
     )
     for source_root, destination_root in roots:
         if not source_root.is_dir():
@@ -117,24 +124,31 @@ def install_game_skills(target: Path, *, propose_existing: bool) -> list[str]:
 
 
 def install_game_runtime(target: Path, *, propose_existing: bool) -> tuple[list[str], list[str]]:
-    source = ASSETS / GAME_TRACE_RUNTIME_SOURCE
-    if not source.is_file():
-        raise FileNotFoundError(f"game traceability runtime is missing: {source}")
-    destination = target / GAME_TRACE_RUNTIME_DESTINATION
+    managed = (
+        (GAME_TRACE_RUNTIME_SOURCE, GAME_TRACE_RUNTIME_DESTINATION, "game traceability runtime"),
+        (GAME_INGEST_ADAPTER_SOURCE, GAME_INGEST_ADAPTER_DESTINATION, "Game ingest adapter"),
+        (GAME_INGEST_ROUTING_SOURCE, GAME_INGEST_ROUTING_DESTINATION, "Game ingest routing"),
+    )
     installed: list[str] = []
     proposals: list[str] = []
-    if destination.exists():
-        if destination.read_bytes() == source.read_bytes():
-            return [GAME_TRACE_RUNTIME_DESTINATION], []
-        if propose_existing:
-            proposal = _proposal_path(destination)
-            proposal.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, proposal)
-            proposals.append(proposal.relative_to(target).as_posix())
-            return [], proposals
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    installed.append(GAME_TRACE_RUNTIME_DESTINATION)
+    for source_name, destination_name, label in managed:
+        source = ASSETS / source_name
+        if not source.is_file():
+            raise FileNotFoundError(f"{label} is missing: {source}")
+        destination = target / destination_name
+        if destination.exists():
+            if destination.read_bytes() == source.read_bytes():
+                installed.append(destination_name)
+                continue
+            if propose_existing:
+                proposal = _proposal_path(destination)
+                proposal.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, proposal)
+                proposals.append(proposal.relative_to(target).as_posix())
+                continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        installed.append(destination_name)
     return installed, proposals
 
 
@@ -164,7 +178,12 @@ def ensure_backup_dir(target: Path, base_result: dict[str, Any]) -> Path:
 
 def backup_game_managed_assets(target: Path, backup_dir: Path) -> list[str]:
     backed_up: list[str] = []
-    for relative in (".agents/skills/game-project", ".claude/skills/game-project"):
+    for relative in (
+        ".agents/skills/game-project",
+        ".claude/skills/game-project",
+        ".agents/skills/game-ingest",
+        ".claude/skills/game-ingest",
+    ):
         source = target / relative
         if not source.is_dir():
             continue
@@ -174,14 +193,20 @@ def backup_game_managed_assets(target: Path, backup_dir: Path) -> list[str]:
             shutil.rmtree(destination)
         shutil.move(str(source), str(destination))
         backed_up.append(relative)
-    source = target / GAME_TRACE_RUNTIME_DESTINATION
-    if source.is_file():
-        destination = backup_dir / GAME_TRACE_RUNTIME_DESTINATION
+    for relative in (
+        GAME_TRACE_RUNTIME_DESTINATION,
+        GAME_INGEST_ADAPTER_DESTINATION,
+        GAME_INGEST_ROUTING_DESTINATION,
+    ):
+        source = target / relative
+        if not source.is_file():
+            continue
+        destination = backup_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             destination.unlink()
         shutil.move(str(source), str(destination))
-        backed_up.append(GAME_TRACE_RUNTIME_DESTINATION)
+        backed_up.append(relative)
     return backed_up
 
 
@@ -197,11 +222,13 @@ def game_router_block() -> str:
         "- `.llm-wiki.json`의 `project_mode: game`과 `game_project.project_root`를 먼저 확인한다.\n"
         "- 게임 작업에는 설치된 `game-project` 스킬을 읽고 `wiki/game/model.md`, "
         f"`instructions/game-project.md`, `{GAME_ENGINE_LAYOUT_DOC}`를 따른다.\n"
+        "- Raw 게임 자료 인제스트는 `/ingest`가 manifest를 통해 `game-ingest` adapter로 자동 라우팅하며, "
+        "명시적 작업에는 설치된 `game-ingest` 스킬과 `instructions/game-ingest.md`를 사용한다.\n"
         "- 설치기와 업그레이더는 vault-only write policy를 지킨다. live project는 읽기·검사 대상이며 "
         "명시적인 implement 작업 외에는 수정하지 않는다.\n"
         "- 설계 의도, 실제 구현, 검증 결과, 채택 결정, production 상태를 분리한다.\n"
         "- 기획·코드·빌드·테스트·결정 연결은 `wiki/game/traceability.json`에서 조회하며, "
-        "game 문서를 바꾼 뒤 `python tools/game_trace.py rebuild`와 `verify`를 실행한다.\n"
+        "game 문서를 바꾼 뒤 `python tools/game_trace.py scan`, `status`, `verify`를 실행한다.\n"
     )
 
 
@@ -371,6 +398,7 @@ def install_game_overlay(
         "project_mode_docs": docs,
         "project_mode_templates_copied": template_count,
         "project_mode_skill": GAME_SKILL,
+        "project_mode_ingest_skill": GAME_INGEST_SKILL,
         "project_mode_runtime": runtime_files,
         "engine_isolation_files": isolation_files,
         "project_mode_verification": verification,
@@ -380,6 +408,12 @@ def install_game_overlay(
             "runtime": GAME_TRACE_RUNTIME_DESTINATION,
             "rebuild": trace_rebuild,
             "verification": trace_verification,
+        },
+        "game_ingest": {
+            "skill": GAME_INGEST_SKILL,
+            "adapter": GAME_INGEST_ADAPTER_DESTINATION,
+            "routing": GAME_INGEST_ROUTING_DESTINATION,
+            "auto_route": True,
         },
         "game_project": metadata,
         "game_proposals": sorted(set(proposals)),

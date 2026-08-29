@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "adapter": "game",
+  "adapter_version": 1,
+  "routes": [
+    {
+      "prefix": "raw/game/design/",
+      "kind": "design",
+      "required_outputs": ["source_record"],
+      "default_reflection": "game_proposal",
+      "optional_outputs": ["feature_spec", "system_spec", "level_spec", "content_spec", "decision_proposal"],
+      "rule": "External or historical design material never overwrites an accepted specification automatically."
+    },
+    {
+      "prefix": "raw/game/playtests/",
+      "kind": "playtest",
+      "required_outputs": ["source_record", "game_playtest_report"],
+      "optional_outputs": ["claim", "bug_report", "decision_proposal", "experiment"],
+      "rule": "Separate direct observation from interpretation and link subject_refs to stable Game spec IDs."
+    },
+    {
+      "prefix": "raw/game/builds/",
+      "kind": "build",
+      "required_outputs": ["source_record", "game_build_report"],
+      "optional_outputs": ["bug_report", "regression_record"],
+      "rule": "Preserve exact build, revision, platform, configuration, and log provenance."
+    },
+    {
+      "prefix": "raw/game/telemetry/",
+      "kind": "telemetry",
+      "required_outputs": ["source_record"],
+      "optional_outputs": ["claim", "experiment", "spec_evidence"],
+      "rule": "Telemetry-derived generalizations remain Claims until their scope and counterexamples are reviewed."
+    },
+    {
+      "prefix": "raw/game/references/",
+      "kind": "reference",
+      "required_outputs": ["source_record"],
+      "optional_outputs": ["concept", "claim", "game_proposal"],
+      "rule": "External references inform proposals and Claims but do not become accepted design by ingestion alone."
+    }
+  ]
+}

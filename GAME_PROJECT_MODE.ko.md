@@ -544,3 +544,20 @@ Game mode는 다음을 자동으로 보장하지 않는다.
 - live source의 자동 재배치
 
 Game mode v3의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.
+
+## Game-aware ingest v5
+
+Game 모드는 공용 Raw→Source 엔진을 복제하지 않고 Game adapter를 설치한다.
+
+```text
+/ingest → manifest adapter 자동 라우팅
+/game-ingest → 동일 adapter의 명시적 진입점
+```
+
+- `raw/game/design`, `playtests`, `builds`, `telemetry`, `references`를 유형별로 라우팅한다.
+- Game 문서는 일반 `topics/tags` 대신 타입별 안정된 ID, `raw_refs`, `evidence_refs`, `subject_refs`를 검증한다.
+- 성공한 finalize는 `game_trace scan/status/verify`를 수행하고 ledger v3에 Source ID, Game ID, sync counts를 기록한다.
+- `ingest_status`, `game_reflection_status`, `game_sync_status`를 분리한다.
+- ingest는 기획·코드를 자동 덮어쓰거나 `game_trace accept`를 자동 실행하지 않는다.
+
+정본 절차는 `instructions/game-ingest.md`와 설치된 `game-ingest` 스킬에 있다.

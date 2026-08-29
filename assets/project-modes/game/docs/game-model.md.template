@@ -154,6 +154,10 @@ python tools/game_trace.py verify --strict-sync
 - vault가 별도 Git 저장소가 아니어도 spec digest로 기획 변경을 감지한다.
 - project가 Git 저장소가 아니어도 code fingerprint로 구현 변경을 감지한다. revision은 `UNKNOWN`으로 남는다.
 
+## Game-aware ingest
+
+`raw/game/**`는 공용 ingest runtime이 Source로 처리하고 Game adapter가 typed Game 문서 반영을 검증한다. `ingest_status`, `game_reflection_status`, `game_sync_status`는 서로 독립이다. Source 반영으로 spec digest가 바뀌면 `design_changed`가 정상적으로 발생할 수 있으며, ingest는 새 baseline을 자동 승인하지 않는다.
+
 ## 문서 계층
 
 - `vision.md`, `pillars.md`, `roadmap.md`

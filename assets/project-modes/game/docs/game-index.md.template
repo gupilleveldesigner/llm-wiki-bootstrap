@@ -25,6 +25,7 @@ updated: "{{TODAY}}"
 - [로드맵](roadmap.md)
 - [Game operations](../../instructions/game-project.md)
 - [Engine layout safety](../../instructions/game-engine-layouts.md)
+- [Game ingest](../../instructions/game-ingest.md)
 - [Traceability index](traceability.json)
 
 ## 설계
@@ -55,6 +56,8 @@ updated: "{{TODAY}}"
 ## Sync and trace commands
 
 ```bash
+python .agents/skills/ingest/scripts/ingest_runtime.py status
+python .agents/skills/ingest/scripts/ingest_runtime.py scan --json
 python tools/game_trace.py scan
 python tools/game_trace.py status
 python tools/game_trace.py proposals
