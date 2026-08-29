@@ -13,14 +13,13 @@ import game_project  # noqa: E402
 
 def write_config(root: Path, **overrides: object) -> Path:
     config: dict[str, object] = {
-        "project_name": "Test Game",
+        "project_name": "Test Game Wiki",
         "domain_summary": "A test game project",
         "game_title": "Test Game",
-        "game_engine": "Godot 4",
+        "game_engine": "UNKNOWN",
         "game_genre": "Action Puzzle",
         "target_platforms": "Windows, Web",
         "project_phase": "prototype",
-        "source_roots": ["game/", "addons/"],
     }
     config.update(overrides)
     path = root / "config.json"
@@ -28,188 +27,194 @@ def write_config(root: Path, **overrides: object) -> Path:
     return path
 
 
+def write(path: Path, content: str = "x") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def make_unity_project(root: Path) -> None:
+    write(root / "Assets/Scripts/Player.cs", "class Player {}\n")
+    write(root / "Packages/manifest.json", "{}\n")
+    write(root / "ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000\n")
+
+
 class GameProjectModeTests(unittest.TestCase):
-    def test_new_evidence_game_scaffolds_orthogonal_project_mode(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-new-") as temporary:
+    def test_migrate_existing_unity_project_creates_sidecar_without_touching_engine_tree(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-sidecar-") as temporary:
             root = Path(temporary)
-            target = root / "vault"
-            config = write_config(root)
+            project = root / "UnityGame"
+            make_unity_project(project)
+            config = write_config(root, source_roots=["Assets"])
+            before = (project / "Assets/Scripts/Player.cs").read_bytes()
 
-            result = game_project.apply_local_game_project(target, config, "new", "evidence")
-
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["profile"], "evidence")
-            self.assertEqual(result["project_mode"], "game")
-            self.assertEqual(result["project_mode_version"], 2)
-            self.assertEqual(result["project_mode_verification"]["status"], "ok")
-            self.assertTrue(result["traceability"]["verification"]["ok"])
-            self.assertFalse(result["project_mode_activation_pending"])
-            manifest = json.loads((target / ".llm-wiki.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["profile"], "evidence")
-            self.assertEqual(manifest["project_mode"], "game")
-            self.assertEqual(manifest["project_mode_version"], 2)
-            self.assertEqual(manifest["game_project"]["game_engine"], "Godot 4")
-            self.assertEqual(manifest["game_project"]["source_roots"], ["game/", "addons/"])
-            self.assertEqual(manifest["game_traceability"]["schema_version"], 1)
-            self.assertEqual(manifest["game_traceability"]["index"], "wiki/game/traceability.json")
-            self.assertEqual(manifest["game_traceability"]["runtime"], "tools/game_trace.py")
-            for relative in (
-                "wiki/game/features",
-                "wiki/game/systems",
-                "wiki/game/levels",
-                "wiki/game/implementation",
-                "wiki/game/playtests",
-                "wiki/game/decisions",
-                "raw/game/builds",
-                "Output/game",
-                "tools",
-            ):
-                self.assertTrue((target / relative).is_dir(), relative)
-            self.assertTrue((target / "templates/game/feature-spec.md").is_file())
-            self.assertTrue((target / "templates/game/implementation-check.md").is_file())
-            self.assertTrue((target / "templates/game/playtest-report.md").is_file())
-            self.assertTrue((target / ".agents/skills/game-project/SKILL.md").is_file())
-            self.assertTrue((target / ".claude/skills/game-project/SKILL.md").is_file())
-            self.assertTrue((target / ".agents/skills/canon-review/SKILL.md").is_file())
-            self.assertTrue((target / "tools/game_trace.py").is_file())
-            trace_index = json.loads((target / "wiki/game/traceability.json").read_text(encoding="utf-8"))
-            self.assertEqual(trace_index["schema_version"], 1)
-            self.assertEqual(trace_index["nodes"], [])
-            self.assertEqual(trace_index["edges"], [])
-            self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", (target / "CLAUDE.md").read_text(encoding="utf-8"))
-            self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", (target / "AGENTS.md").read_text(encoding="utf-8"))
-
-    def test_migrate_preserves_live_game_source_tree(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-migrate-") as temporary:
-            root = Path(temporary)
-            target = root / "project"
-            source = target / "Source/player.gd"
-            asset = target / "Assets/hero.png"
-            source.parent.mkdir(parents=True)
-            asset.parent.mkdir(parents=True)
-            source.write_text("extends CharacterBody2D\n", encoding="utf-8")
-            asset.write_bytes(b"not-a-real-png-but-user-owned")
-            config = write_config(root, source_roots=["Source/", "Assets/"])
-
-            result = game_project.apply_local_game_project(target, config, "migrate", "standard")
-
-            self.assertEqual(source.read_text(encoding="utf-8"), "extends CharacterBody2D\n")
-            self.assertEqual(asset.read_bytes(), b"not-a-real-png-but-user-owned")
-            self.assertFalse((target / "raw/Source/player.gd").exists())
-            self.assertFalse((target / "raw/Assets/hero.png").exists())
-            self.assertEqual(result["project_mode"], "game")
-            self.assertFalse(result["project_mode_activation_pending"])
-            self.assertFalse((target / "CLAUDE.md.wiki-proposed").exists())
-            self.assertTrue((target / "tools/game_trace.py").is_file())
-            self.assertTrue(result["traceability"]["verification"]["ok"])
-            self.assertIn(
-                "LLM-WIKI:GAME-PROJECT-MODE",
-                (target / "CLAUDE.md").read_text(encoding="utf-8"),
+            result = game_project.run_local_game_project(
+                project,
+                config,
+                "migrate",
+                "evidence",
+                integrity_mode="full",
             )
 
-    def test_game_router_composes_with_existing_evidence_proposal(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-router-") as temporary:
-            target = Path(temporary)
-            for relative in ("CLAUDE.md", "AGENTS.md", "wiki/CLAUDE.md"):
-                path = target / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("# user router\n", encoding="utf-8")
-                path.with_name(path.name + ".wiki-proposed").write_text(
-                    "# user router\n\n<!-- LLM-WIKI:EVIDENCE-PROFILE -->\n",
-                    encoding="utf-8",
-                )
+            vault = root / "UnityGame.wiki"
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["base_mode"], "new")
+            self.assertEqual(result["layout"], "sidecar")
+            self.assertEqual(result["engine"]["id"], "unity")
+            self.assertEqual((project / "Assets/Scripts/Player.cs").read_bytes(), before)
+            self.assertTrue(result["post_apply_verification"]["project_integrity"]["ok"])
+            self.assertTrue((vault / ".llm-wiki-managed.json").is_file())
+            self.assertTrue((vault / "tools/game_trace.py").is_file())
+            self.assertTrue((vault / "wiki/game/traceability.json").is_file())
+            manifest = json.loads((vault / ".llm-wiki.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["project_mode_version"], 3)
+            self.assertEqual(manifest["game_project"]["layout"], "sidecar")
+            self.assertEqual(manifest["game_project"]["project_root"], "../UnityGame")
+            self.assertEqual(manifest["game_project"]["engine_adapter"], "unity")
+            self.assertEqual(manifest["game_project"]["write_policy"], "vault-only")
 
-            proposals = game_project.install_game_router(target, propose_existing=True)
-
-            self.assertEqual(len(proposals), 3)
-            for relative in ("CLAUDE.md", "AGENTS.md", "wiki/CLAUDE.md"):
-                current = (target / relative).read_text(encoding="utf-8")
-                proposal_path = (target / relative).with_name(Path(relative).name + ".wiki-proposed")
-                proposal = proposal_path.read_text(encoding="utf-8")
-                self.assertNotIn("LLM-WIKI:GAME-PROJECT-MODE", current)
-                self.assertIn("LLM-WIKI:EVIDENCE-PROFILE", proposal)
-                self.assertIn("LLM-WIKI:GAME-PROJECT-MODE", proposal)
-                self.assertIn("tools/game_trace.py", proposal)
-
-    def test_local_upgrade_preserves_user_game_docs_and_backs_up_managed_assets(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-upgrade-") as temporary:
+    def test_dry_run_reports_exact_plan_without_final_mutation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-dry-run-") as temporary:
             root = Path(temporary)
-            target = root / "vault"
+            project = root / "UnityGame"
+            make_unity_project(project)
+            config = write_config(root, source_roots=["Assets"])
+
+            result = game_project.run_local_game_project(project, config, "migrate", dry_run=True)
+
+            self.assertTrue(result["ok"])
+            self.assertTrue(result["dry_run"])
+            self.assertFalse(result["mutation_started"])
+            self.assertFalse((root / "UnityGame.wiki").exists())
+            self.assertFalse((root / ".llm-wiki-transactions").exists())
+            self.assertEqual(result["write_plan"]["protected_path_writes"], [])
+            self.assertEqual(result["write_plan"]["write_policy"], "vault-only")
+
+    def test_embedded_godot_vault_is_isolated_with_gdignore(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-godot-") as temporary:
+            root = Path(temporary)
+            project = root / "GodotGame"
+            write(project / "project.godot", "[application]\n")
+            write(project / "scenes/main.tscn", "[gd_scene]\n")
             config = write_config(root)
-            game_project.apply_local_game_project(target, config, "new", "standard")
-            model = target / "wiki/game/model.md"
-            agent_skill = target / ".agents/skills/game-project/SKILL.md"
-            trace_runtime = target / "tools/game_trace.py"
+
+            result = game_project.run_local_game_project(
+                project,
+                config,
+                "migrate",
+                layout="embedded",
+                integrity_mode="full",
+            )
+
+            vault = project / ".llm-wiki"
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["engine"]["id"], "godot")
+            self.assertTrue((vault / ".gdignore").is_file())
+            self.assertTrue((project / "project.godot").is_file())
+            self.assertTrue((project / "scenes/main.tscn").is_file())
+
+    def test_local_upgrade_preserves_user_docs_and_backs_up_managed_runtime(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-upgrade-") as temporary:
+            root = Path(temporary)
+            project = root / "UnityGame"
+            make_unity_project(project)
+            config = write_config(root, source_roots=["Assets"])
+            first = game_project.run_local_game_project(project, config, "migrate")
+            vault = Path(first["vault_root"])
+            model = vault / "wiki/game/model.md"
+            runtime = vault / "tools/game_trace.py"
             model.write_text("# user-owned game model\n", encoding="utf-8")
-            agent_skill.write_text("# user-modified game skill\n", encoding="utf-8")
-            trace_runtime.write_text("# user-modified trace runtime\n", encoding="utf-8")
+            runtime.write_text("# user-modified trace runtime\n", encoding="utf-8")
 
-            result = game_project.upgrade_game_from_local(target, config)
+            result = game_project.upgrade_game_from_local(
+                project,
+                vault,
+                config,
+                layout="sidecar",
+                engine_name="unity",
+                dry_run=False,
+                integrity_mode="metadata",
+                keep_rollback_backup=True,
+                allow_legacy_in_place=False,
+                adopt_existing_vault=False,
+            )
 
             self.assertTrue(result["ok"])
-            self.assertEqual(result["project_mode_verification"]["status"], "pending")
-            self.assertTrue(result["project_mode_activation_pending"])
             self.assertEqual(model.read_text(encoding="utf-8"), "# user-owned game model\n")
-            proposal = model.with_name("model.md.wiki-proposed")
-            self.assertTrue(proposal.is_file())
-            self.assertIn(
-                "Design Intent → Implementation State → Validation Evidence → Project Decision",
-                proposal.read_text(encoding="utf-8"),
-            )
-            backup_root = Path(result["backup_dir"])
+            self.assertTrue(model.with_name("model.md.wiki-proposed").is_file())
+            self.assertIn("TRACEABILITY_SCHEMA_VERSION = 1", runtime.read_text(encoding="utf-8"))
+            base_backup = Path(result["backup_dir"])
             self.assertEqual(
-                (backup_root / ".agents/skills/game-project/SKILL.md").read_text(encoding="utf-8"),
-                "# user-modified game skill\n",
-            )
-            self.assertEqual(
-                (backup_root / "tools/game_trace.py").read_text(encoding="utf-8"),
+                (base_backup / "tools/game_trace.py").read_text(encoding="utf-8"),
                 "# user-modified trace runtime\n",
             )
-            self.assertIn("design_status", agent_skill.read_text(encoding="utf-8"))
-            self.assertIn("TRACEABILITY_SCHEMA_VERSION = 1", trace_runtime.read_text(encoding="utf-8"))
-            self.assertIn("tools/game_trace.py", result["game_managed_backup"])
-            self.assertTrue(result["traceability"]["verification"]["ok"])
+            self.assertIsNotNone(result["rollback_backup"])
 
-    def test_remote_checkout_requires_game_overlay_before_target_mutation(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-checkout-") as temporary:
+    def test_foreign_default_sidecar_requires_explicit_adoption(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-foreign-vault-") as temporary:
+            root = Path(temporary)
+            project = root / "UnityGame"
+            make_unity_project(project)
+            write(root / "UnityGame.wiki/user.txt", "unrelated\n")
+            config = write_config(root, source_roots=["Assets"])
+
+            result = game_project.run_local_game_project(project, config, "migrate", dry_run=True)
+
+            self.assertFalse(result["ok"])
+            self.assertTrue(result["write_plan"]["collisions"])
+            self.assertEqual((root / "UnityGame.wiki/user.txt").read_text(encoding="utf-8"), "unrelated\n")
+
+    def test_nested_workspace_is_unsafe_until_project_root_is_selected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-workspace-") as temporary:
+            root = Path(temporary) / "Workspace"
+            make_unity_project(root / "Unity")
+            write(root / "Godot/project.godot")
+            config = write_config(root.parent)
+
+            result = game_project.run_local_game_project(root, config, "migrate", dry_run=True)
+
+            self.assertFalse(result["ok"])
+            self.assertTrue(result["engine"]["ambiguous"])
+            self.assertIn("ambiguous", " ".join(result["write_plan"]["layout_errors"]))
+
+    def test_remote_checkout_requires_workspace_safe_contract_before_mutation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-remote-contract-") as temporary:
             checkout = Path(temporary) / "checkout"
             checkout.mkdir()
             with self.assertRaisesRegex(RuntimeError, "lacks game project mode"):
                 game_project.validate_game_checkout(checkout)
 
-    def test_github_game_upgrade_rejects_legacy_checkout_before_target_mutation(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="game-mode-remote-legacy-") as temporary:
+    def test_github_failure_occurs_before_local_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-remote-failure-") as temporary:
             root = Path(temporary)
-            checkout = root / "legacy-checkout"
-            checkout.mkdir()
-            target = root / "target"
-            config = root / "config.json"
-            config.write_text("{}", encoding="utf-8")
+            project = root / "Game"
+            project.mkdir()
+            config = write_config(root)
             with mock.patch.object(
                 game_project.wiki_upgrade,
                 "resolve_latest_commit",
-                return_value=("master", "a" * 40),
+                side_effect=RuntimeError("offline"),
             ):
-                with mock.patch.object(
-                    game_project.wiki_upgrade,
-                    "download_commit_archive",
-                    return_value=b"archive",
-                ):
-                    with mock.patch.object(
-                        game_project.wiki_upgrade,
-                        "extract_checkout",
-                        return_value=checkout,
-                    ):
-                        with mock.patch.object(game_project, "run_checkout_game_upgrade") as run_upgrade:
-                            with self.assertRaisesRegex(RuntimeError, "lacks game project mode"):
-                                game_project.upgrade_game_from_github(target, config)
-                            run_upgrade.assert_not_called()
-            self.assertFalse(target.exists())
+                with mock.patch.object(game_project, "run_checkout_game_upgrade") as run_upgrade:
+                    with self.assertRaisesRegex(RuntimeError, "offline"):
+                        game_project.upgrade_game_from_github(
+                            project,
+                            root / "Game.wiki",
+                            config,
+                            layout="sidecar",
+                            engine_name="generic",
+                            dry_run=False,
+                            integrity_mode="metadata",
+                            keep_rollback_backup=True,
+                            allow_legacy_in_place=False,
+                            adopt_existing_vault=False,
+                        )
+                    run_upgrade.assert_not_called()
+            self.assertFalse((root / "Game.wiki").exists())
 
     def test_config_rejects_non_string_source_roots(self) -> None:
         with self.assertRaisesRegex(ValueError, "source_roots"):
             game_project.validate_config(
-                {"project_name": "X", "domain_summary": "Y", "source_roots": ["Game/", 3]},
+                {"project_name": "X", "domain_summary": "Y", "source_roots": ["Assets", 3]},
                 require_base=True,
             )
 

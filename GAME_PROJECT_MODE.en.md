@@ -1,6 +1,6 @@
 # Game Project Mode
 
-The `game` project mode is an operational overlay for using an LLM Wiki with a live game project. It does not replace the `standard` or `evidence` vault profile. It adds game-specific design, implementation, validation, decision, and **design-to-code traceability** layers.
+`game` project mode is a non-destructive operational overlay for an existing live game project. It does not replace the `standard` or `evidence` vault profile. It adds production state separation, design-to-code traceability, and an engine-aware installation boundary.
 
 ```text
 lifecycle:     new | migrate | upgrade
@@ -8,88 +8,220 @@ vault profile: standard | evidence
 project mode:  knowledge | game
 ```
 
-## Independent states
-
-Game mode keeps these states separate:
-
-```text
-design_status:
-  idea | proposed | accepted | superseded | rejected
-
-implementation_status:
-  unknown | not_started | in_progress | implemented | blocked
-
-validation_status:
-  untested | partial | passed | failed
-
-decision_status:
-  proposed | accepted | rejected | superseded
-
-production_status:
-  backlog | ready | in_progress | blocked | done
-```
-
-Its core trace is:
+Its core contracts are:
 
 ```text
 Design Intent → Implementation State → Validation Evidence → Project Decision
+
+canonical design ↔ canonical live code/scenes/data/assets
 ```
 
-A document does not prove implementation, code does not prove player-experience validation, and a `done` ticket does not mean `passed`.
-
-## Live-source boundary
-
-The live engine project, source code, scenes, original assets, and data remain in place. Migration and mode activation never move them under `raw/`.
-
-`raw/game/` is reserved for immutable evidence such as external design originals, raw playtest notes, recording metadata, build logs, crash reports, telemetry exports, external analyses, and approved snapshots.
-
-## Separate design and code sources of truth
-
-Design specifications live under:
+## Separate project and vault roots
 
 ```text
-wiki/game/features/
-wiki/game/systems/
-wiki/game/levels/
-wiki/game/content/
-wiki/game/narrative/
-wiki/game/ui-ux/
-wiki/game/technical/
-wiki/game/assets/
+project_root
+  The live engine project and implementation source of truth.
+
+vault_root
+  The LLM Wiki, specifications, implementation checks, builds, playtests,
+  decisions, skills, and derived traceability index.
 ```
 
-Each specification has a stable ID and independent statuses. Live code remains the implementation source of truth. Specifications refer to code with project-relative references:
+The installer and upgrader use a **vault-only final write policy** and a **transaction-root-only temporary write policy**. They read `project_root` for engine detection, source inspection, Git revisions, and integrity checks, but never place Wiki files in engine-owned directories. Modifying the game itself is a separate, explicitly requested `game-project implement` operation.
+
+## Default layout: sidecar
+
+When `--vault-root` is omitted, Game mode creates a sibling `<project-name>.wiki` directory.
 
 ```text
-project/relative/path
-project/relative/path#Symbol
-project/relative/path#Symbol@locator
+Workspace/
+├─ MyGame/                 # project_root
+│  └─ <engine-owned files>
+└─ MyGame.wiki/            # vault_root
+   ├─ raw/
+   ├─ wiki/
+   ├─ Output/
+   ├─ templates/
+   ├─ instructions/
+   ├─ tools/
+   ├─ .agents/
+   ├─ .claude/
+   ├─ .llm-wiki.json
+   └─ .llm-wiki-managed.json
 ```
 
-Implementation checks under `wiki/game/implementation/` bind a specification ID to exact paths and a checked Git revision:
+Sidecar is the default because engine importers, build globs, and package rules do not encounter the Wiki files.
+
+## Other layouts
+
+### Embedded
+
+```text
+MyGame/
+├─ <engine-owned files>
+└─ .llm-wiki/
+```
+
+Use `--layout embedded` explicitly. All managed files remain under `.llm-wiki/`. The Godot adapter adds `.llm-wiki/.gdignore` so the embedded vault is excluded from `res://` import.
+
+### Custom
+
+Pass a separate path with `--vault-root` and `--layout custom`.
+
+### Legacy in-place
+
+A legacy layout where `project_root == vault_root` is rejected by default. It requires both `--layout legacy-in-place` and `--allow-legacy-in-place`. New installations should not use it.
+
+## Engine adapters
+
+The installer detects and protects common engine structures.
+
+- **Unity:** `Assets/`, `Packages/`, and `ProjectSettings/` are protected. `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`, and build folders are classified as generated.
+- **Unreal Engine:** the `.uproject` file plus `Content/`, `Config/`, `Source/`, and `Plugins/` are protected. `Binaries/`, `DerivedDataCache/`, `Intermediate/`, `Saved/`, and `.vs/` are generated.
+- **Godot:** `project.godot` identifies the project. `.godot/` and `.import/` are generated; existing top-level project entries are protected. Embedded layout requires `.gdignore`.
+- **Web / Phaser / Vite / Next.js:** `package.json` and source roots such as `src/`, `app/`, `pages/`, and `public/` are protected. Dependencies provide an environment hint. Build and dependency caches are generated.
+- **Generic:** unknown projects still use sidecar and vault-only writes. Configure `source_roots` for precise trace coverage.
+
+Selecting a workspace that merely contains nested engine projects is treated as ambiguous and is rejected. Select one exact game root instead.
+
+## Dry-run write plan
+
+Run a dry-run before applying:
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --dry-run
+```
+
+Dry-run performs the real build and verification inside a transaction staging directory, reports the exact plan, deletes staging, and leaves the final vault and live project untouched.
+
+The plan includes:
+
+```text
+project_root / vault_root / transaction_root
+layout and engine-detection evidence
+protected_roots / generated_roots / source_roots
+creates / updates / deletes
+collisions
+protected_path_writes
+symlink_violations
+layout_errors
+safe_to_apply
+mutation_started: false
+```
+
+Apply is refused when the project root is ambiguous, a protected path would be written, an unmanaged file would be overwritten, an existing file would be deleted, an existing vault symlink is present or a symlink escapes the vault, or project/vault roots overlap unsafely. Staging never follows vault symlinks.
+
+A non-empty non-Wiki vault is not adopted unless the user reviews dry-run and explicitly passes `--adopt-existing-vault`.
+
+## Staging, atomic apply, and rollback
+
+1. Resolve engine, project, vault, and transaction roots.
+2. Copy an existing vault into staging.
+3. Build or upgrade the base Wiki and Game overlay only in staging.
+4. Rebuild and verify traceability in staging.
+5. Write `.llm-wiki-managed.json` and the exact write plan.
+6. Apply only when `safe_to_apply` is true.
+7. Replace the final vault using a same-filesystem rename.
+8. Verify managed files, traceability, Game contracts, and project integrity.
+9. Automatically restore the old vault when post-apply verification fails.
+
+The old vault remains as a rollback backup by default. Use `--discard-rollback-backup` only when it is intentionally unnecessary.
+
+## Project integrity
+
+`--integrity metadata` compares protected files by size, modification time, and type before and after apply. `--integrity full` additionally compares SHA-256 content hashes. Any engine-owned path change fails the apply and restores the previous vault.
+
+## Managed-file ownership
+
+`vault_root/.llm-wiki-managed.json` records generated files, hashes, and ownership policies:
+
+```text
+system-managed
+metadata
+managed-proposal
+seeded-user-editable
+derived
+```
+
+Upgrades distinguish system files from user-owned documents. A user-edited managed document is proposed or reported as a collision instead of silently overwritten.
+
+## Configuration
+
+```json
+{
+  "project_name": "My Game Wiki",
+  "domain_summary": "Connect game design to live implementation and validation",
+  "project_root": "../MyGame",
+  "layout": "sidecar",
+  "engine": "auto",
+  "game_title": "My Game",
+  "game_engine": "Godot 4",
+  "game_genre": "2D action puzzle",
+  "target_platforms": "Windows, Web",
+  "project_phase": "prototype",
+  "source_roots": ["scenes/", "scripts/", "assets/"]
+}
+```
+
+## Create or migrate
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --profile evidence \
+  --dry-run
+```
+
+Remove `--dry-run` after reviewing a safe plan. If the sidecar does not exist, the command creates a new vault without moving or modifying the game project.
+
+## Upgrade
+
+GitHub exact-SHA upgrade is the default:
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --vault-root ../MyGame.wiki \
+  --config ./config.json \
+  --mode upgrade
+```
+
+Use `--source local` only for an explicit offline/local-bundle upgrade. A Game-mode vault should use `game_project.py --mode upgrade`, not only the base `upgrade.py`, so the base Wiki, Game contracts, engine-layout safety layer, and trace runtime advance together.
+
+## Design-to-code traceability
+
+Design specifications live in the vault. The implementation source of truth remains in `project_root`. Specs use stable IDs and project-relative paths:
+
+```yaml
+feature_id: FEATURE-LOCKON-001
+live_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+```
+
+Implementation checks bind the spec to an exact Git revision:
 
 ```yaml
 check_id: IMPL-LOCKON-004
 subject_id: FEATURE-LOCKON-001
-expected_spec: wiki/game/features/FEATURE-LOCKON-001.md
 source_revision: abc123def456
-build_id: BUILD-2026-08-29-001
 checked_paths:
   - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
-implementation_status: implemented
-validation_status: partial
 ```
 
-## Derived traceability index
-
-Game mode v2 installs:
+Game mode installs:
 
 ```text
-wiki/game/traceability.json
-tools/game_trace.py
+vault_root/wiki/game/traceability.json
+vault_root/tools/game_trace.py
 ```
 
-The JSON index is derived, not manually edited. The runtime scans canonical spec, implementation-check, build, playtest, and decision frontmatter and produces these graph edges:
+The JSON file is derived and must not be edited manually.
 
 ```text
 spec --implemented_by--> code
@@ -98,14 +230,7 @@ spec --validated_by----> test
 spec --governed_by-----> decision
 ```
 
-This supports both directions:
-
-- Which code implements this design?
-- Which designs are affected by this code path?
-- Which builds and playtests validate this specification?
-- Which decisions govern or supersede it?
-
-### Commands
+Run from the vault root; the runtime resolves the sidecar project root from `.llm-wiki.json`:
 
 ```bash
 python tools/game_trace.py rebuild
@@ -117,115 +242,24 @@ python tools/game_trace.py affected --base HEAD~1 --head HEAD
 python tools/game_trace.py matrix
 ```
 
-### Staleness
+Implementation relations are `current`, `stale`, `unverified`, or `missing`. `stale` means the linked path changed after the last implementation-check revision and requires reinspection; it is not an automatic semantic verdict.
 
-For an implementation edge with a checked `source_revision`, the runtime asks Git whether the linked path changed after that revision.
+## Independent states
 
 ```text
-current     the path did not change after the implementation check
-stale       the path changed and the design-code match must be rechecked
-unverified  no comparable implementation check or revision exists
-missing     the tracked live path no longer exists
+design_status:         idea | proposed | accepted | superseded | rejected
+implementation_status: unknown | not_started | in_progress | implemented | blocked
+validation_status:     untested | partial | passed | failed
+decision_status:       proposed | accepted | rejected | superseded
+production_status:     backlog | ready | in_progress | blocked | done
 ```
 
-`stale` is a review signal, not an automatic claim that either the design or implementation is wrong.
-
-## Installed structure
-
-Game mode adds:
-
-- `wiki/game/` sections for vision, features, systems, levels, content, narrative, UI/UX, technical work, implementation checks, assets, playtests, builds, bugs, decisions, proposals, milestones, and releases
-- `wiki/game/traceability.json`
-- `raw/game/` immutable evidence folders
-- `templates/game/`
-- `instructions/game-project.md`
-- `tools/game_trace.py`
-- project-local `game-project` skills for Codex and Claude
-- `project_mode: game`, version, metadata, and traceability paths in `.llm-wiki.json`
-
-## Configuration
-
-```json
-{
-  "project_name": "My Game Wiki",
-  "domain_summary": "Connect game design to actual implementation and validation",
-  "game_title": "My Game",
-  "game_engine": "Godot 4",
-  "game_genre": "2D action puzzle",
-  "target_platforms": "Windows, Web",
-  "project_phase": "prototype",
-  "source_roots": ["game/", "addons/"]
-}
-```
-
-Only `project_name` and `domain_summary` are required for `new` and `migrate`.
-
-## Create, migrate, and upgrade
-
-Standard + Game:
-
-```bash
-python scripts/game_project.py --target ./MyGame --config ./config.json --mode new --profile standard
-```
-
-Evidence + Game:
-
-```bash
-python scripts/game_project.py --target ./MyGameResearch --config ./config.json --mode new --profile evidence
-```
-
-Migrate an existing live game folder without moving source or assets:
-
-```bash
-python scripts/game_project.py --target ./ExistingGame --config ./config.json --mode migrate --profile standard
-```
-
-Upgrade or add game mode from the latest validated GitHub commit:
-
-```bash
-python scripts/game_project.py --target ./ExistingWiki --config ./config.json --mode upgrade
-```
-
-Explicit local/offline bundle:
-
-```bash
-python scripts/game_project.py --target ./ExistingWiki --config ./config.json --mode upgrade --source local
-```
-
-A game-mode Wiki should not use only `scripts/upgrade.py`; `game_project.py --mode upgrade` advances the base Wiki, game overlay, and traceability runtime together.
-
-## Templates and skill operations
-
-The overlay provides templates for features, systems, levels, content, implementation checks, playtests, builds, decisions, asset briefs, bugs, and milestones.
-
-The project-local `game-project` skill routes work into:
-
-- `define`
-- `plan`
-- `implement`
-- `inspect`
-- `trace`
-- `impact`
-- `playtest`
-- `build`
-- `decide`
-- `bug`
-- `release`
-
-Canonical game documents must be followed by `game_trace.py rebuild` and `verify`. Release or completion gates can use `verify --strict-stale`.
+A document does not prove implementation, code does not prove player-experience validation, and a `done` ticket does not mean `passed`.
 
 ## Evidence + Game
 
-With the Evidence profile, raw playtests, logs, telemetry, and external analyses become Sources. Empirical generalizations become Claims; counterexamples remain contradictions or Conflicts; and revalidation can become Experiments.
-
-The traceability graph answers **which design is connected to which code, build, test, and decision**. The Evidence graph answers **which original evidence supports a conclusion**. They complement each other but are not interchangeable.
-
-## Safe GitHub upgrade
-
-Before modifying the target, the game updater validates the repository's current default branch, exact 40-character HEAD SHA, exact-SHA archive, archive path safety, base Wiki contract, game wrapper, templates, skills, traceability template, and runtime. Existing managed game skills and `tools/game_trace.py` are backed up.
-
-Failure leaves the target untouched and never silently falls back to an older local bundle.
+Traceability answers which design is linked to which code, build, test, and decision. Evidence answers which original sources support a conclusion. The two graphs complement each other and do not replace each other. Claims are never promoted to Canon automatically.
 
 ## Non-goals
 
-Game mode does not install a game engine, fully interpret every proprietary binary engine format, guarantee a successful build, approve design choices, promote Canon, replace an issue tracker, reorganize live source, or infer a semantic design change from a code diff alone.
+Game mode does not install an engine, fully interpret every proprietary binary format, guarantee a successful build, approve design automatically, infer semantic change from a code diff alone, promote Canon automatically, replace an issue tracker, or reorganize live source.

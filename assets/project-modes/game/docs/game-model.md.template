@@ -7,123 +7,91 @@ updated: "{{TODAY}}"
 
 # 게임 프로젝트 운영 모델
 
-이 모드는 게임 프로젝트의 문서를 단순히 한곳에 모으는 프리셋이 아니다. **기획이 의도한 것, 현재 프로젝트가 실제로 구현한 것, 테스트에서 확인된 것, 팀이 최종 채택한 것**을 분리해 기록하는 운영 계층이다.
-
-핵심 추적선:
+이 모드는 문서를 한곳에 모으는 프리셋이 아니다. 기획이 의도한 것, live project가 실제로 구현한 것, 테스트에서 확인된 것, 팀이 채택한 결정을 분리하고 서로 추적한다.
 
 > **Design Intent → Implementation State → Validation Evidence → Project Decision**
 
-## 1. 네 상태를 섞지 않는다
+## 두 개의 정본
+
+```text
+project_root: {{PROJECT_ROOT_REFERENCE}}
+vault_root: .
+layout: {{LAYOUT}}
+engine_adapter: {{ENGINE_ADAPTER}}
+```
+
+- 기획 정본은 `vault_root/wiki/game/`에 있다.
+- 구현 정본은 `project_root`의 실제 코드·씬·데이터·원본 에셋이다.
+- `wiki/game/implementation/`은 특정 revision에서 기획과 구현을 대조한 기록이다.
+- `wiki/game/traceability.json`은 양쪽 관계를 재생성한 파생 인덱스다.
+
+설치기와 업그레이더는 **vault-only write policy**를 지킨다. 엔진 프로젝트를 Raw로 옮기거나 설치 파일을 엔진 소유 디렉터리에 넣지 않는다.
+
+## 독립 상태
 
 ### Design Intent
 
-플레이어가 무엇을 경험해야 하는지, 시스템·레벨·콘텐츠가 어떤 규칙과 제약을 가져야 하는지 기록한다.
+```text
+design_status: idea | proposed | accepted | superseded | rejected
+```
 
-- `design_status`: `idea | proposed | accepted | superseded | rejected`
-- 문서가 `accepted`여도 구현 완료를 뜻하지 않는다.
-- 변경 전후의 의도와 `supersedes` 관계를 남긴다.
+문서가 accepted여도 구현 완료를 뜻하지 않는다.
 
 ### Implementation State
 
-현재 코드·씬·데이터·에셋·빌드가 실제로 무엇을 하는지 기록한다.
+```text
+implementation_status: unknown | not_started | in_progress | implemented | blocked
+```
 
-- `implementation_status`: `unknown | not_started | in_progress | implemented | blocked`
-- 반드시 실제 경로, 심볼, 씬, 데이터 테이블, 커밋 또는 빌드 식별자를 적는다.
-- 기획서에 적혀 있다는 이유만으로 `implemented`로 표시하지 않는다.
+실제 path, symbol, scene, data key, commit 또는 build ID가 필요하다.
 
 ### Validation Evidence
 
-플레이테스트, 자동 테스트, 로그, 텔레메트리, 캡처, 재현 절차로 무엇이 확인됐는지 기록한다.
+```text
+validation_status: untested | partial | passed | failed
+```
 
-- `validation_status`: `untested | partial | passed | failed`
-- 관찰과 해석을 분리한다.
-- 실패한 테스트와 예상 밖 플레이도 삭제하지 않는다.
-- `passed`는 검증한 빌드·플랫폼·조건 안에서만 유효하다.
+관찰과 해석을 분리한다. passed는 실행한 build·플랫폼·조건에만 유효하다.
 
 ### Project Decision
 
-대안 중 무엇을 왜 채택했는지, 무엇을 포기했는지, 어떤 결정이 이전 결정을 대체하는지 기록한다.
-
-- `decision_status`: `proposed | accepted | rejected | superseded`
-- 결정은 설계 의도에 영향을 주지만 구현·검증을 자동 완료시키지 않는다.
-- 결정 근거와 부작용, 되돌림 조건을 남긴다.
-
-## 2. Production 상태는 진실 상태가 아니다
-
-백로그·칸반·마일스톤의 상태는 작업 흐름을 나타낼 뿐이다.
-
-- `production_status`: `backlog | ready | in_progress | blocked | done`
-- `done`은 담당 작업이 종료됐다는 뜻이지 `validation_status: passed`를 뜻하지 않는다.
-- 구현이 끝났어도 플레이어 경험이 검증되지 않았다면 `validation_status: untested` 또는 `partial`로 남긴다.
-
-## 3. Live project와 Raw의 경계
-
-실행 중인 게임 프로젝트의 코드·엔진 파일·원본 에셋은 **live project source**다. `migrate`나 game mode 활성화 과정에서 이를 `raw/`로 옮기지 않는다.
-
-`raw/game/`에는 다음처럼 불변 증거로 보존할 가치가 있는 사본·내보내기·기록만 둔다.
-
-- 외부에서 받은 기획 원문과 참고자료
-- 플레이테스트 원본 메모·녹화 메타데이터·설문 export
-- 특정 빌드의 로그·크래시 리포트·텔레메트리 export
-- 외부 LLM·도구 분석 원문
-- 변경하지 않을 스냅샷 또는 승인된 전달 자료
-
-코드나 에셋의 현재 상태를 설명할 때는 가능한 한 live path와 정확한 revision을 직접 참조한다.
-
-## 4. 기획과 코드는 각각 정본을 갖는다
-
-- 기획 정본: `wiki/game/features/`, `systems/`, `levels/`, `content/`, `narrative/`, `ui-ux/`, `technical/`, `assets/`
-- 구현 정본: live project의 실제 코드·씬·데이터·에셋
-- 둘을 비교한 확인 기록: `wiki/game/implementation/`
-- 파생 역색인: `wiki/game/traceability.json`
-
-`traceability.json`은 사람이 직접 편집하는 정본이 아니다. 게임 명세·구현 확인·빌드·플레이테스트·결정 문서의 frontmatter를 `tools/game_trace.py`가 읽어 재생성한다.
-
-### 안정된 ID
-
-각 기획 문서는 `feature_id`, `system_id`, `level_id`, `content_id`, `asset_id` 같은 안정된 ID를 가진다. 파일명이 바뀌더라도 의미상 같은 기획이면 ID를 유지한다. 다른 기획으로 대체할 때는 새 ID와 `supersedes` 관계를 사용한다.
-
-### 코드 참조 형식
-
 ```text
-project/relative/path
-project/relative/path#Symbol
-project/relative/path#Symbol@lines 84-139
+decision_status: proposed | accepted | rejected | superseded
 ```
 
-- 경로는 프로젝트 루트 기준 상대 경로다.
-- `#Symbol`은 함수·클래스·씬 노드·데이터 키처럼 사람이 식별할 수 있는 구현 단위다.
-- `@locator`는 확인 당시의 줄·영역·키를 보조한다.
-- 절대 경로와 `..` 탈출 경로는 허용하지 않는다.
+결정은 설계 방향을 바꾸지만 구현과 검증을 자동 완료시키지 않는다.
 
-### 구현 확인
-
-`templates/game/implementation-check.md`는 다음을 연결한다.
+### Production Status
 
 ```text
-subject_id       → 기획 ID
-expected_spec    → 기획 문서
-checked_paths    → 실제 코드·씬·데이터·에셋
-source_revision  → 확인한 Git revision
-build_id         → 확인한 빌드
-playtest_refs    → 검증 기록
-decision_refs    → 채택·기각 결정
+production_status: backlog | ready | in_progress | blocked | done
 ```
 
-## 5. Traceability graph
+작업 보드의 done은 implemented 또는 passed의 증거가 아니다.
 
-`wiki/game/traceability.json`에는 다음 node와 edge가 파생된다.
+## 기획↔코드 traceability
 
-### Node
+기획 문서는 안정된 ID와 project-relative live path를 가진다.
 
-- `spec` — 기능·시스템·레벨·콘텐츠·에셋 등 기획
-- `code` — live path와 선택적 symbol
-- `implementation_check` — 특정 revision에서 수행한 설계-구현 비교
-- `build` — 정확한 source revision과 환경을 가진 빌드
-- `test` — 플레이테스트 등 검증 기록
-- `decision` — 채택·기각·대체 결정
+```yaml
+feature_id: FEATURE-LOCKON-001
+live_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+implementation_check_refs:
+  - wiki/game/implementation/IMPL-LOCKON-004.md
+```
 
-### Edge
+구현 확인 문서는 정확한 revision에서 비교한 내용을 남긴다.
+
+```yaml
+check_id: IMPL-LOCKON-004
+subject_id: FEATURE-LOCKON-001
+source_revision: abc123
+checked_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+```
+
+파생 그래프:
 
 ```text
 spec --implemented_by--> code
@@ -132,90 +100,36 @@ spec --validated_by----> test
 spec --governed_by-----> decision
 ```
 
-이 구조로 양방향 질문을 할 수 있다.
+코드가 구현 확인 revision 이후 변경되면 관계는 `stale`이 된다. stale은 오류 확정이 아니라 재검사 요청이다.
 
-- 이 기획을 구현하는 코드는 어디인가?
-- 이 코드가 어떤 기획을 구현하는가?
-- 이 기획은 어느 build와 playtest에서 확인됐는가?
-- 어떤 결정이 이 기획을 바꿨는가?
+## 문서 계층
 
-## 6. 현재성·stale 판정
+- `vision.md`, `pillars.md`, `roadmap.md`
+- `features/`, `systems/`, `levels/`, `content/`, `narrative/`, `ui-ux/`, `technical/`, `assets/`
+- `implementation/`, `playtests/`, `builds/`, `bugs/`
+- `decisions/`, `proposals/`, `milestones/`, `releases/`
 
-코드 관계의 마지막 구현 확인이 `source_revision`에 고정되어 있으면, trace runtime은 그 revision 이후 해당 path가 바뀌었는지 Git diff로 확인한다.
+## Standard / Evidence
 
-- `current` — 확인 revision 이후 해당 code path가 변경되지 않음
-- `stale` — 확인 revision 이후 해당 code path가 변경됨
-- `unverified` — 구현 확인 또는 비교 가능한 revision이 없음
-- `missing` — 추적 중인 live path가 현재 존재하지 않음
+### standard + game
 
-`stale`은 구현이 틀렸다는 뜻이 아니라 **기획-코드 일치 여부를 다시 확인해야 한다는 뜻**이다.
+상태와 링크를 Markdown/frontmatter 및 traceability index로 관리한다.
 
-## 7. Traceability 명령
+### evidence + game
 
-```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
-python tools/game_trace.py verify --strict-stale
-python tools/game_trace.py spec FEATURE-LOCKON-001
-python tools/game_trace.py path src/combat/LockOnSystem.ts#selectTarget
-python tools/game_trace.py affected --base HEAD~1 --head HEAD
-python tools/game_trace.py matrix
-```
+플레이테스트 원본·로그·텔레메트리·외부 분석을 Source로, 경험적 결론을 Claim으로, 반례를 Conflict로, 재검증을 Experiment로 추적한다.
 
-- `rebuild`: canonical game 문서에서 index 재생성
-- `verify`: JSON 최신성, ID, 경로, 미해결 참조 검사
-- `spec`: 기획에서 code/build/test/decision으로 조회
-- `path`: code path에서 관련 기획으로 역조회
-- `affected`: Git diff가 영향을 주는 기획과 stale relation 계산
-- `matrix`: 기획별 연결·현재성 요약
+Traceability는 “어떤 기획이 어떤 코드·빌드·테스트·결정과 연결되는가”를 답하고, Evidence는 “그 결론이 어떤 원본 근거에 의해 지지되는가”를 답한다. 두 그래프를 같은 것으로 취급하지 않는다.
 
-## 8. 문서 계층
+## 완료 계약
 
-- `wiki/game/vision.md` — 게임의 장기 방향과 플레이어 약속
-- `wiki/game/pillars.md` — 판단을 걸러내는 소수의 설계 기둥
-- `wiki/game/features/` — 플레이어가 인지하는 기능 단위
-- `wiki/game/systems/` — 규칙·상태·데이터·상호작용 구조
-- `wiki/game/levels/` — 공간 흐름, 조우, 학습, 시야, 페이싱
-- `wiki/game/content/` — 캐릭터·적·아이템·퀘스트·월드 콘텐츠
-- `wiki/game/narrative/` — 서사 구조·대사·연출 의도
-- `wiki/game/ui-ux/` — 정보 구조·입력·피드백·접근성
-- `wiki/game/technical/` — 기술 제약·아키텍처·도구
-- `wiki/game/implementation/` — 설계 대비 실제 구현 확인 기록
-- `wiki/game/assets/` — 에셋 브리프·규격·사용처·승인 상태
-- `wiki/game/playtests/` — 관찰과 해석이 분리된 테스트 기록
-- `wiki/game/builds/` — 빌드 식별자·환경·스모크 결과
-- `wiki/game/bugs/` — 재현 조건·영향·수정·회귀 검증
-- `wiki/game/decisions/` — 채택·기각·대체 이력이 있는 결정 기록
-- `wiki/game/proposals/` — 아직 채택되지 않은 변경안
-- `wiki/game/milestones/`, `releases/` — 범위·출구 조건·출시 기록
+다음 중 하나라도 빠지면 “검증 완료”라고 보고하지 않는다.
 
-## 9. Standard / Evidence와의 조합
+1. 정확한 기획 ID 또는 기대 동작
+2. 확인한 project-relative path와 revision/build
+3. 실제 실행한 테스트·플레이테스트·검사
+4. 실패·미확인·범위 밖 조건
+5. traceability rebuild/verify
+6. 관련 index와 상태 갱신
 
-### `standard + game`
-
-게임 제작 문서를 가볍게 운영한다. 설계·구현·검증·결정 상태는 game 문서의 frontmatter와 traceability graph로 관리한다.
-
-### `evidence + game`
-
-게임 운영 계층에 Evidence의 Source·Claim·Conflict·Experiment·Decision·Canon 추적을 추가한다.
-
-- 플레이테스트 메모, 로그, 빌드 결과, 외부 분석은 Raw/Source가 될 수 있다.
-- 경험적 결론은 Claim과 근거를 통해 추적한다.
-- 게임 문서의 `evidence_refs`에서 관련 Claim/Source/Experiment를 링크한다.
-- 현재 채택된 설계와 경험적 사실을 같은 것으로 취급하지 않는다.
-- Evidence의 Project Decision과 `wiki/game/decisions/`는 상호 링크하되, 하나를 다른 하나의 자동 대체물로 취급하지 않는다.
-
-## 10. 완료 계약
-
-다음 중 하나라도 없으면 “검증 완료”라고 보고하지 않는다.
-
-1. 검증 대상의 정확한 설계 문서 또는 기대 동작
-2. 실제로 확인한 live path, revision, build ID 또는 실행 환경
-3. 실행한 테스트·플레이테스트·검사와 결과
-4. 실패·미확인·범위 밖 조건의 명시
-5. 관련 index와 상태 필드 갱신
-6. `python tools/game_trace.py rebuild` 실행
-7. `python tools/game_trace.py verify` 통과
-8. 릴리스·완료 판정이면 필요한 경우 `verify --strict-stale` 통과
-
-모르면 `UNKNOWN`으로 남긴다. 문서의 빈칸을 그럴듯한 값으로 채우지 않는다.
+모르면 `UNKNOWN`으로 남긴다.

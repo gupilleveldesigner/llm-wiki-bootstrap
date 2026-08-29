@@ -1,0 +1,165 @@
+# Game engine layout and installation safety
+
+이 문서는 `{{PROJECT_NAME}}` Game mode의 프로젝트·볼트 배치와 엔진 보호 규칙을 정의한다.
+
+## 두 개의 정본 루트
+
+```text
+project_root  실제 엔진 프로젝트·코드·씬·데이터·원본 에셋
+vault_root    LLM Wiki 문서·스킬·템플릿·추적 인덱스
+```
+
+Game mode 설치기와 업그레이더는 **vault-only write policy**를 사용한다. `project_root`는 엔진 감지, 코드 조회, Git revision 비교를 위해 읽지만 설치 과정에서는 수정하지 않는다. 실제 코드 변경은 설치가 아니라 사용자가 명시한 `game-project implement` 작업이다.
+
+## 기본 배치: sidecar
+
+```text
+Workspace/
+├─ MyGame/                 # project_root
+│  ├─ Assets/ 또는 Content/ 또는 project.godot 등
+│  └─ ...
+└─ MyGame.wiki/            # vault_root
+   ├─ raw/
+   ├─ wiki/
+   ├─ tools/
+   ├─ templates/
+   └─ .llm-wiki.json
+```
+
+`--vault-root`를 생략하면 `<project_root>.wiki` 형식의 형제 폴더를 사용한다. 엔진의 import, build, package glob이 Wiki 파일을 보지 않게 하는 가장 안전한 기본값이다.
+
+## 선택 배치: embedded
+
+```text
+MyGame/
+├─ <engine-owned files>
+└─ .llm-wiki/              # isolated vault_root
+```
+
+명시적으로 `--layout embedded`를 선택할 때만 사용한다. Godot adapter는 `.llm-wiki/.gdignore`를 생성해 해당 폴더가 `res://` import 대상이 되지 않게 한다. 다른 엔진에서도 Game mode가 쓰는 경로는 `.llm-wiki/` 아래로 제한된다.
+
+## Custom과 legacy
+
+- `custom`: 사용자가 `--vault-root`로 프로젝트 밖의 별도 경로를 지정한다.
+- `legacy-in-place`: project와 vault가 같은 루트인 과거 구조다. 기본 거부하며 `--allow-legacy-in-place`를 명시해야 한다. 새 프로젝트에는 사용하지 않는다.
+
+## Engine adapters
+
+### Unity
+
+감지 표지:
+
+```text
+Assets/
+Packages/
+ProjectSettings/
+```
+
+보호 영역은 위 세 루트다. `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`, `Build/`, `Builds/`는 재생성 가능하거나 빌드 파생 경로로 분류한다. 기본 추적 source root는 `Assets/`다.
+
+### Unreal Engine
+
+감지 표지:
+
+```text
+*.uproject
+Content/
+Config/
+Source/
+Plugins/
+```
+
+`Binaries/`, `DerivedDataCache/`, `Intermediate/`, `Saved/`, `.vs/`는 생성 경로로 분류한다. 기본 추적 source roots는 존재하는 `Source/`, `Content/`, `Plugins/`다.
+
+### Godot
+
+감지 표지:
+
+```text
+project.godot
+```
+
+Godot은 프로젝트 폴더의 파일을 직접 사용하므로, `.godot/`과 `.import/`를 생성 경로로 제외하고 나머지 기존 최상위 항목을 보호한다. embedded 배치에는 `.gdignore`가 필수다.
+
+### Web / Phaser / Vite / Next.js
+
+감지 표지:
+
+```text
+package.json
+src/ 또는 app/ 또는 pages/ 또는 public/
+```
+
+`package.json` dependency에서 Phaser, Vite, Next.js 환경을 보조 판정한다. `node_modules/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `.vite/`, `coverage/`는 생성 경로다.
+
+### Generic
+
+알려진 표지가 없으면 generic adapter를 사용한다. 설치는 여전히 sidecar·vault-only이므로 안전하지만, 코드 추적 범위는 config의 `source_roots`를 명시하는 편이 좋다.
+
+## 잘못된 project root
+
+선택한 폴더 아래에서 Unity, Unreal, Godot 같은 중첩 프로젝트가 발견되면 그 폴더를 workspace로 판정하고 설치를 거부한다. 정확한 하위 게임 폴더를 `--project-root`로 다시 선택해야 한다.
+
+## Dry-run write plan
+
+실제 적용 전 다음 명령을 우선 사용한다.
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --dry-run
+```
+
+결과에는 다음이 포함된다.
+
+```text
+project_root / vault_root / transaction_root
+감지 엔진과 근거
+protected_roots / generated_roots / source_roots
+creates / updates / deletes
+collisions
+protected_path_writes
+symlink_violations
+safe_to_apply
+```
+
+다음 중 하나라도 있으면 적용하지 않는다.
+
+- 엔진 또는 project root가 모호함
+- 보호 경로 쓰기
+- 기존 unmanaged 파일 덮어쓰기
+- 기존 vault의 symlink 또는 symlink를 통한 vault 밖 쓰기. Staging은 symlink를 절대 따라가지 않는다.
+- 기존 파일 삭제
+- project와 vault의 위험한 중첩
+
+## Staging, atomic apply, rollback
+
+1. 기존 vault가 있으면 transaction root의 staging 폴더로 복사한다.
+2. base Wiki와 Game overlay를 staging에서만 구축·업그레이드한다.
+3. 설치된 runtime, profile, traceability를 staging에서 검증한다.
+4. 정확한 write plan과 `.llm-wiki-managed.json`을 생성한다.
+5. 안전한 경우에만 같은 파일시스템의 rename으로 최종 vault를 교체한다.
+6. 기존 vault는 rollback backup으로 보존한다.
+7. 적용 후 검증이나 project integrity 확인이 실패하면 이전 vault를 자동 복구한다.
+
+임시 쓰기는 `transaction_root`에만 허용되며, 최종 관리 파일은 `vault_root`에만 존재한다.
+
+## Managed files manifest
+
+`vault_root/.llm-wiki-managed.json`은 Game mode가 생성·갱신한 파일의 SHA-256과 정책을 기록한다.
+
+```text
+system-managed          runtime과 skills
+metadata                manifest
+managed-proposal        사용자 수정 시 .wiki-proposed 사용
+seeded-user-editable    초기 문서이지만 이후 사용자 소유
+derived                 traceability index
+```
+
+업그레이드는 이 기록과 실제 hash를 비교한다. 사용자 편집 문서를 직접 덮어쓸 상황이면 충돌로 보고하거나 `.wiki-proposed`를 만든다.
+
+## Project integrity
+
+`--integrity metadata`는 보호 경로의 파일 크기·mtime·type을 적용 전후 비교한다. `--integrity full`은 내용 SHA-256까지 비교한다. 차이가 생기면 vault 적용을 실패 처리하고 rollback한다.

@@ -4,9 +4,9 @@ import argparse
 import ast
 import hashlib
 import json
+import os
 import re
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
@@ -15,11 +15,11 @@ TRACEABILITY_SCHEMA_VERSION = 1
 PROJECT_MODE = "game"
 DEFAULT_INDEX = "wiki/game/traceability.json"
 SOURCE_OF_TRUTH = (
-    "wiki/game feature/system/level/content/narrative/ui-ux/technical/asset frontmatter",
-    "wiki/game/implementation frontmatter",
-    "wiki/game/builds, playtests, and decisions frontmatter",
+    "vault game-spec frontmatter",
+    "vault implementation-check frontmatter",
+    "vault build, playtest, and decision frontmatter",
+    "live project paths and Git revisions",
 )
-
 SPEC_FOLDERS = {
     "features": "feature",
     "systems": "system",
@@ -30,7 +30,6 @@ SPEC_FOLDERS = {
     "technical": "technical",
     "assets": "asset",
 }
-
 STATUS_FIELDS = (
     "design_status",
     "implementation_status",
@@ -38,7 +37,6 @@ STATUS_FIELDS = (
     "decision_status",
     "production_status",
 )
-
 KNOWN_CROSS_REFERENCE_IDS = {
     "build_id",
     "playtest_id",
@@ -86,10 +84,9 @@ def _parse_scalar(raw: str) -> Any:
         return None
     if value.startswith("[") and value.endswith("]"):
         try:
-            parsed = json.loads(value)
+            return json.loads(value)
         except json.JSONDecodeError:
-            parsed = [item.strip().strip("\"'") for item in value[1:-1].split(",") if item.strip()]
-        return parsed
+            return [item.strip().strip("\"'") for item in value[1:-1].split(",") if item.strip()]
     if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         try:
             parsed = ast.literal_eval(value)
@@ -97,28 +94,20 @@ def _parse_scalar(raw: str) -> Any:
         except (SyntaxError, ValueError):
             return value[1:-1]
     if re.fullmatch(r"-?\d+", value):
-        try:
-            return int(value)
-        except ValueError:
-            pass
+        return int(value)
     if re.fullmatch(r"-?\d+\.\d+", value):
-        try:
-            return float(value)
-        except ValueError:
-            pass
+        return float(value)
     return value
 
 
 def parse_frontmatter(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
+    lines = path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
     try:
         end = next(index for index in range(1, len(lines)) if lines[index].strip() == "---")
     except StopIteration:
         return {}
-
     result: dict[str, Any] = {}
     list_key: str | None = None
     for line in lines[1:end]:
@@ -126,17 +115,13 @@ def parse_frontmatter(path: Path) -> dict[str, Any]:
             continue
         stripped = line.strip()
         if line[:1].isspace() and list_key and stripped.startswith("-"):
-            item = stripped[1:].strip()
-            result.setdefault(list_key, []).append(_parse_scalar(item))
+            result.setdefault(list_key, []).append(_parse_scalar(stripped[1:].strip()))
             continue
         if ":" not in line or line[:1].isspace():
             list_key = None
             continue
         key, raw = line.split(":", 1)
         key = key.strip()
-        if not key:
-            list_key = None
-            continue
         if raw.strip() == "":
             result[key] = []
             list_key = key
@@ -161,12 +146,12 @@ def relative_to_root(root: Path, path: Path) -> str:
 
 
 def issue(severity: str, code: str, message: str, *, path: str | None = None, subject: str | None = None) -> dict[str, Any]:
-    item: dict[str, Any] = {"severity": severity, "code": code, "message": message}
+    value: dict[str, Any] = {"severity": severity, "code": code, "message": message}
     if path:
-        item["path"] = path
+        value["path"] = path
     if subject:
-        item["subject"] = subject
-    return item
+        value["subject"] = subject
+    return value
 
 
 def first_document_id(metadata: dict[str, Any], *, preferred: Iterable[str] = ()) -> str | None:
@@ -175,9 +160,7 @@ def first_document_id(metadata: dict[str, Any], *, preferred: Iterable[str] = ()
         if isinstance(value, str) and value.strip():
             return value.strip()
     for key, value in metadata.items():
-        if not key.endswith("_id") or key in KNOWN_CROSS_REFERENCE_IDS:
-            continue
-        if isinstance(value, str) and value.strip():
+        if key.endswith("_id") and key not in KNOWN_CROSS_REFERENCE_IDS and isinstance(value, str) and value.strip():
             return value.strip()
     return None
 
@@ -196,57 +179,55 @@ def parse_code_ref(raw: str) -> dict[str, str | None]:
 
 
 def code_node_id(ref: dict[str, str | None]) -> str:
-    identity = f"{ref['path']}#{ref.get('symbol') or ''}"
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{ref['path']}#{ref.get('symbol') or ''}".encode("utf-8")).hexdigest()[:16]
     return f"CODE-{digest.upper()}"
 
 
 def edge_id(source: str, relation: str, target: str) -> str:
-    identity = f"{source}|{relation}|{target}"
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{source}|{relation}|{target}".encode("utf-8")).hexdigest()[:16]
     return f"TRACE-{digest.upper()}"
 
 
-def run_git(root: Path, arguments: list[str], *, allow_failure: bool = False) -> subprocess.CompletedProcess[str]:
+def run_git(project_root: Path, arguments: list[str], *, allow_failure: bool = False) -> subprocess.CompletedProcess[str]:
     completed = subprocess.run(
-        ["git", "-C", str(root), *arguments],
+        ["git", "-C", str(project_root), *arguments],
         capture_output=True,
         text=True,
         check=False,
     )
     if completed.returncode != 0 and not allow_failure:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "git command failed"
-        raise TraceError(detail)
+        raise TraceError(completed.stderr.strip() or completed.stdout.strip() or "git command failed")
     return completed
 
 
-def current_revision(root: Path) -> str:
-    completed = run_git(root, ["rev-parse", "HEAD"], allow_failure=True)
+def current_revision(project_root: Path) -> str:
+    completed = run_git(project_root, ["rev-parse", "HEAD"], allow_failure=True)
     return completed.stdout.strip() if completed.returncode == 0 else "UNKNOWN"
 
 
-def changed_paths(root: Path, base: str, head: str) -> list[str]:
-    completed = run_git(root, ["diff", "--name-only", f"{base}..{head}", "--"])
-    paths: list[str] = []
+def changed_paths(project_root: Path, base: str, head: str) -> list[str]:
+    completed = run_git(project_root, ["diff", "--name-only", f"{base}..{head}", "--"])
+    values: list[str] = []
     for line in completed.stdout.splitlines():
-        if not line.strip():
-            continue
-        try:
-            paths.append(normalize_rel_path(line))
-        except ValueError:
-            continue
-    return sorted(set(paths))
+        if line.strip():
+            try:
+                values.append(normalize_rel_path(line))
+            except ValueError:
+                continue
+    return sorted(set(values))
 
 
-def path_changed_since(root: Path, revision: str, head: str, path: str) -> tuple[bool | None, str | None]:
+def path_changed_since(project_root: Path, revision: str, head: str, path: str) -> tuple[bool | None, str | None]:
     if not revision or revision == "UNKNOWN" or head == "UNKNOWN":
         return None, "checked revision or current revision is unknown"
-    completed = run_git(root, ["diff", "--name-only", f"{revision}..{head}", "--", path], allow_failure=True)
+    completed = run_git(
+        project_root,
+        ["diff", "--name-only", f"{revision}..{head}", "--", path],
+        allow_failure=True,
+    )
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or "cannot compare checked revision"
-        return None, detail
-    changed = any(line.strip() for line in completed.stdout.splitlines())
-    return changed, None
+        return None, completed.stderr.strip() or "cannot compare checked revision"
+    return any(line.strip() for line in completed.stdout.splitlines()), None
 
 
 def _add_node(nodes: dict[str, dict[str, Any]], candidate: dict[str, Any], issues: list[dict[str, Any]]) -> None:
@@ -254,13 +235,12 @@ def _add_node(nodes: dict[str, dict[str, Any]], candidate: dict[str, Any], issue
     existing = nodes.get(node_id)
     if existing is None:
         nodes[node_id] = candidate
-        return
-    if existing != candidate:
+    elif existing != candidate:
         issues.append(
             issue(
                 "error",
                 "duplicate_node_id",
-                f"node id {node_id} is defined by multiple incompatible documents",
+                f"node id {node_id} is defined by incompatible documents",
                 path=str(candidate.get("path") or ""),
                 subject=node_id,
             )
@@ -276,27 +256,13 @@ def _ref_node(nodes: dict[str, dict[str, Any]], ref_id: str, kind: str, path: st
     nodes[ref_id] = node
 
 
-def _add_simple_edge(
-    edges: dict[str, dict[str, Any]],
-    source: str,
-    target: str,
-    relation: str,
-    source_path: str,
-) -> None:
+def _add_simple_edge(edges: dict[str, dict[str, Any]], source: str, target: str, relation: str, source_path: str) -> None:
     identity = edge_id(source, relation, target)
-    existing = edges.get(identity)
-    if existing is None:
-        edges[identity] = {
-            "id": identity,
-            "from": source,
-            "to": target,
-            "relation": relation,
-            "sources": [source_path],
-        }
-        return
-    sources = set(as_string_list(existing.get("sources")))
-    sources.add(source_path)
-    existing["sources"] = sorted(sources)
+    edge = edges.setdefault(
+        identity,
+        {"id": identity, "from": source, "to": target, "relation": relation, "sources": []},
+    )
+    edge["sources"] = sorted(set(as_string_list(edge.get("sources"))) | {source_path})
 
 
 def _record_implementation_edge(
@@ -304,7 +270,7 @@ def _record_implementation_edge(
     nodes: dict[str, dict[str, Any]],
     issues: list[dict[str, Any]],
     *,
-    root: Path,
+    project_root: Path,
     head: str,
     spec_id: str,
     spec_path: str,
@@ -318,16 +284,18 @@ def _record_implementation_edge(
         return
     code_id = code_node_id(ref)
     code_path = str(ref["path"])
-    code_file = root / code_path
-    code_node: dict[str, Any] = {
-        "id": code_id,
-        "kind": "code",
-        "path": code_path,
-        "symbol": ref.get("symbol"),
-        "exists": code_file.is_file(),
-    }
-    _add_node(nodes, code_node, issues)
-
+    code_file = project_root / code_path
+    _add_node(
+        nodes,
+        {
+            "id": code_id,
+            "kind": "code",
+            "path": code_path,
+            "symbol": ref.get("symbol"),
+            "exists": code_file.is_file(),
+        },
+        issues,
+    )
     identity = edge_id(spec_id, "implemented_by", code_id)
     edge = edges.setdefault(
         identity,
@@ -343,16 +311,12 @@ def _record_implementation_edge(
             "stale_reasons": [],
         },
     )
-    sources = set(as_string_list(edge.get("sources")))
-    sources.add(spec_path)
-    locators = set(as_string_list(edge.get("locators")))
+    edge["sources"] = sorted(set(as_string_list(edge.get("sources"))) | {spec_path})
     if ref.get("locator"):
-        locators.add(str(ref["locator"]))
+        edge["locators"] = sorted(set(as_string_list(edge.get("locators"))) | {str(ref["locator"])})
     if check:
-        check_path = str(check["path"])
-        sources.add(check_path)
         check_record = {
-            "path": check_path,
+            "path": str(check["path"]),
             "check_id": check.get("check_id"),
             "checked_revision": check.get("source_revision") or "UNKNOWN",
             "checked_at": check.get("checked_at") or "UNKNOWN",
@@ -361,50 +325,33 @@ def _record_implementation_edge(
             "build_id": check.get("build_id") or "UNKNOWN",
             "evidence_refs": sorted(as_string_list(check.get("evidence_refs"))),
         }
-        existing_checks = {json.dumps(item, sort_keys=True, ensure_ascii=False) for item in edge["checks"]}
-        encoded = json.dumps(check_record, sort_keys=True, ensure_ascii=False)
-        if encoded not in existing_checks:
+        edge["sources"] = sorted(set(edge["sources"]) | {str(check["path"])})
+        encoded = {json.dumps(item, sort_keys=True, ensure_ascii=False) for item in edge["checks"]}
+        if json.dumps(check_record, sort_keys=True, ensure_ascii=False) not in encoded:
             edge["checks"].append(check_record)
-    edge["sources"] = sorted(sources)
-    edge["locators"] = sorted(locators)
 
     if not code_file.is_file():
         edge["trace_status"] = "missing"
         edge["stale_reasons"] = [f"tracked live path does not exist: {code_path}"]
-        issues.append(
-            issue(
-                "error",
-                "missing_live_path",
-                f"tracked live path does not exist: {code_path}",
-                path=spec_path,
-                subject=spec_id,
-            )
-        )
+        issues.append(issue("error", "missing_live_path", edge["stale_reasons"][0], path=spec_path, subject=spec_id))
         return
-
-    checks = sorted(
-        edge["checks"],
-        key=lambda item: (str(item.get("checked_at") or ""), str(item.get("path") or "")),
-    )
+    checks = sorted(edge["checks"], key=lambda item: (str(item.get("checked_at") or ""), str(item.get("path") or "")))
     edge["checks"] = checks
     if not checks:
         edge["trace_status"] = "unverified"
         edge["stale_reasons"] = ["no implementation check records this code relation"]
         return
-
     latest = checks[-1]
     edge["current_check"] = latest
     changed, comparison_error = path_changed_since(
-        root,
+        project_root,
         str(latest.get("checked_revision") or "UNKNOWN"),
         head,
         code_path,
     )
     if changed is True:
         edge["trace_status"] = "stale"
-        edge["stale_reasons"] = [
-            f"{code_path} changed after implementation check {latest.get('checked_revision') or 'UNKNOWN'}"
-        ]
+        edge["stale_reasons"] = [f"{code_path} changed after implementation check {latest.get('checked_revision') or 'UNKNOWN'}"]
     elif changed is False:
         edge["trace_status"] = "current"
         edge["stale_reasons"] = []
@@ -413,40 +360,63 @@ def _record_implementation_edge(
         edge["stale_reasons"] = [comparison_error or "revision comparison unavailable"]
 
 
-def _scan_documents(root: Path, relative_dir: str) -> list[tuple[Path, dict[str, Any]]]:
-    directory = root / relative_dir
+def _scan_documents(vault_root: Path, relative_dir: str) -> list[tuple[Path, dict[str, Any]]]:
+    directory = vault_root / relative_dir
     if not directory.is_dir():
         return []
-    documents: list[tuple[Path, dict[str, Any]]] = []
+    values: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted(directory.rglob("*.md")):
         if path.name.endswith(".wiki-proposed") or path.name.lower() in ("readme.md", "index.md", "claude.md"):
             continue
-        documents.append((path, parse_frontmatter(path)))
-    return documents
+        values.append((path, parse_frontmatter(path)))
+    return values
 
 
-def build_index(root: Path) -> dict[str, Any]:
-    root = root.resolve()
-    head = current_revision(root)
+def _project_reference(vault_root: Path, project_root: Path) -> dict[str, str]:
+    """Return the stable project reference declared by the vault layout.
+
+    The vault is built under a temporary staging path and then atomically renamed
+    into its final sidecar or embedded location. Recomputing a relative project
+    path from the staging directory would change after that rename and make the
+    newly generated traceability index stale immediately. The manifest stores the
+    reference calculated for the final layout, so preserve that exact value.
+    """
+    manifest_path = vault_root / ".llm-wiki.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = None
+        game = manifest.get("game_project") if isinstance(manifest, dict) else None
+        if isinstance(game, dict):
+            value = game.get("project_root")
+            kind = game.get("project_root_kind", "relative")
+            if isinstance(value, str) and value and kind in ("relative", "absolute"):
+                return {"kind": kind, "value": value}
+
+    try:
+        return {"kind": "relative", "value": os.path.relpath(project_root, vault_root).replace("\\", "/")}
+    except ValueError:
+        return {"kind": "absolute", "value": str(project_root)}
+
+
+def build_index(vault_root: Path, project_root: Path | None = None) -> dict[str, Any]:
+    vault = vault_root.resolve()
+    project = (project_root or vault_root).resolve()
+    head = current_revision(project)
     nodes: dict[str, dict[str, Any]] = {}
     edges: dict[str, dict[str, Any]] = {}
     issues: list[dict[str, Any]] = []
     specs: dict[str, dict[str, Any]] = {}
 
     for folder, subtype in SPEC_FOLDERS.items():
-        for path, metadata in _scan_documents(root, f"wiki/game/{folder}"):
-            relative = relative_to_root(root, path)
+        for path, metadata in _scan_documents(vault, f"wiki/game/{folder}"):
+            relative = relative_to_root(vault, path)
             spec_id = first_document_id(metadata, preferred=(f"{subtype}_id", "id"))
             if not spec_id:
                 issues.append(issue("error", "missing_spec_id", "game spec has no stable *_id", path=relative))
                 continue
-            node: dict[str, Any] = {
-                "id": spec_id,
-                "kind": "spec",
-                "subtype": subtype,
-                "path": relative,
-                "resolved": True,
-            }
+            node: dict[str, Any] = {"id": spec_id, "kind": "spec", "subtype": subtype, "path": relative, "resolved": True}
             for field in STATUS_FIELDS:
                 if field in metadata:
                     node[field] = metadata[field]
@@ -462,16 +432,16 @@ def build_index(root: Path) -> dict[str, Any]:
             _add_node(nodes, node, issues)
             specs[spec_id] = {"node": node, "metadata": metadata}
 
-    implementation_checks: dict[str, list[dict[str, Any]]] = {}
-    for path, metadata in _scan_documents(root, "wiki/game/implementation"):
-        relative = relative_to_root(root, path)
+    checks_by_subject: dict[str, list[dict[str, Any]]] = {}
+    for path, metadata in _scan_documents(vault, "wiki/game/implementation"):
+        relative = relative_to_root(vault, path)
         subject_id = str(metadata.get("subject_id") or "").strip()
         if not subject_id:
             issues.append(issue("error", "missing_subject_id", "implementation check has no subject_id", path=relative))
             continue
         check = dict(metadata)
         check["path"] = relative
-        implementation_checks.setdefault(subject_id, []).append(check)
+        checks_by_subject.setdefault(subject_id, []).append(check)
         check_id = str(metadata.get("check_id") or f"CHECK:{relative}")
         _add_node(
             nodes,
@@ -489,197 +459,128 @@ def build_index(root: Path) -> dict[str, Any]:
             issues,
         )
         if subject_id not in specs:
-            issues.append(
-                issue(
-                    "warning",
-                    "unresolved_check_subject",
-                    f"implementation check references unknown spec {subject_id}",
-                    path=relative,
-                    subject=subject_id,
-                )
-            )
+            issues.append(issue("warning", "unresolved_check_subject", f"implementation check references unknown spec {subject_id}", path=relative, subject=subject_id))
 
     for spec_id, spec in sorted(specs.items()):
-        node = spec["node"]
         metadata = spec["metadata"]
-        checks = implementation_checks.get(spec_id, [])
-        by_path: dict[str, list[dict[str, Any]]] = {}
-        for check in checks:
+        spec_path = str(spec["node"]["path"])
+        by_ref: dict[str, list[dict[str, Any]]] = {}
+        for check in checks_by_subject.get(spec_id, []):
             for raw in as_string_list(check.get("checked_paths")):
                 try:
                     parsed = parse_code_ref(raw)
-                    key = f"{parsed['path']}#{parsed.get('symbol') or ''}"
                 except ValueError as error:
                     issues.append(issue("error", "invalid_checked_path", str(error), path=str(check["path"]), subject=spec_id))
                     continue
-                by_path.setdefault(key, []).append(check)
-
-        seen_keys: set[str] = set()
+                key = f"{parsed['path']}#{parsed.get('symbol') or ''}"
+                by_ref.setdefault(key, []).append(check)
+        seen: set[str] = set()
         for raw in as_string_list(metadata.get("live_paths")):
             try:
                 parsed = parse_code_ref(raw)
                 key = f"{parsed['path']}#{parsed.get('symbol') or ''}"
             except ValueError as error:
-                issues.append(issue("error", "invalid_live_path", str(error), path=str(node["path"]), subject=spec_id))
+                issues.append(issue("error", "invalid_live_path", str(error), path=spec_path, subject=spec_id))
                 continue
-            seen_keys.add(key)
-            matched_checks = by_path.get(key) or [None]
-            for check in matched_checks:
+            seen.add(key)
+            for check in by_ref.get(key) or [None]:
                 _record_implementation_edge(
                     edges,
                     nodes,
                     issues,
-                    root=root,
+                    project_root=project,
                     head=head,
                     spec_id=spec_id,
-                    spec_path=str(node["path"]),
+                    spec_path=spec_path,
                     code_raw=raw,
                     check=check,
                 )
-        for key, matching_checks in by_path.items():
-            if key in seen_keys:
+        for key, matching in by_ref.items():
+            if key in seen:
                 continue
-            parsed_path, _, parsed_symbol = key.partition("#")
-            raw = parsed_path + (f"#{parsed_symbol}" if parsed_symbol else "")
-            for check in matching_checks:
+            path_part, _, symbol = key.partition("#")
+            raw = path_part + (f"#{symbol}" if symbol else "")
+            for check in matching:
                 _record_implementation_edge(
                     edges,
                     nodes,
                     issues,
-                    root=root,
+                    project_root=project,
                     head=head,
                     spec_id=spec_id,
-                    spec_path=str(node["path"]),
+                    spec_path=spec_path,
                     code_raw=raw,
                     check=check,
                 )
 
-    for path, metadata in _scan_documents(root, "wiki/game/builds"):
-        relative = relative_to_root(root, path)
-        build_id = first_document_id(metadata, preferred=("build_id",))
-        if not build_id:
-            issues.append(issue("error", "missing_build_id", "build report has no build_id", path=relative))
-            continue
-        _add_node(
-            nodes,
-            {
-                "id": build_id,
-                "kind": "build",
-                "path": relative,
-                "source_revision": metadata.get("source_revision") or "UNKNOWN",
-                "platform": metadata.get("platform") or "UNKNOWN",
-                "validation_status": metadata.get("validation_status") or "untested",
-                "resolved": True,
-            },
-            issues,
-        )
-        for spec_id in as_string_list(metadata.get("subject_refs")):
-            if spec_id not in specs:
-                issues.append(issue("warning", "unresolved_build_subject", f"build references unknown spec {spec_id}", path=relative, subject=spec_id))
-            _ref_node(nodes, spec_id, "spec")
-            _add_simple_edge(edges, spec_id, build_id, "built_in", relative)
+    def scan_reference_documents(relative_dir: str, id_field: str, kind: str, relation: str, subject_field: str) -> None:
+        for path, metadata in _scan_documents(vault, relative_dir):
+            relative = relative_to_root(vault, path)
+            node_id = first_document_id(metadata, preferred=(id_field,))
+            if not node_id:
+                issues.append(issue("error", f"missing_{id_field}", f"document has no {id_field}", path=relative))
+                continue
+            node: dict[str, Any] = {"id": node_id, "kind": kind, "path": relative, "resolved": True}
+            for key in ("source_revision", "platform", "build_id", "validation_status", "decision_status"):
+                if key in metadata:
+                    node[key] = metadata[key]
+            _add_node(nodes, node, issues)
+            for spec_id in as_string_list(metadata.get(subject_field)):
+                if spec_id not in specs:
+                    issues.append(issue("warning", f"unresolved_{kind}_subject", f"{kind} references unknown spec {spec_id}", path=relative, subject=spec_id))
+                _ref_node(nodes, spec_id, "spec")
+                _add_simple_edge(edges, spec_id, node_id, relation, relative)
 
-    for path, metadata in _scan_documents(root, "wiki/game/playtests"):
-        relative = relative_to_root(root, path)
-        playtest_id = first_document_id(metadata, preferred=("playtest_id",))
-        if not playtest_id:
-            issues.append(issue("error", "missing_playtest_id", "playtest report has no playtest_id", path=relative))
-            continue
-        _add_node(
-            nodes,
-            {
-                "id": playtest_id,
-                "kind": "test",
-                "subtype": "playtest",
-                "path": relative,
-                "build_id": metadata.get("build_id") or "UNKNOWN",
-                "validation_status": metadata.get("validation_status") or "untested",
-                "resolved": True,
-            },
-            issues,
-        )
-        for spec_id in as_string_list(metadata.get("subject_refs")):
-            if spec_id not in specs:
-                issues.append(issue("warning", "unresolved_playtest_subject", f"playtest references unknown spec {spec_id}", path=relative, subject=spec_id))
-            _ref_node(nodes, spec_id, "spec")
-            _add_simple_edge(edges, spec_id, playtest_id, "validated_by", relative)
+    scan_reference_documents("wiki/game/builds", "build_id", "build", "built_in", "subject_refs")
+    scan_reference_documents("wiki/game/playtests", "playtest_id", "test", "validated_by", "subject_refs")
+    scan_reference_documents("wiki/game/decisions", "decision_id", "decision", "governed_by", "affected_refs")
 
-    for path, metadata in _scan_documents(root, "wiki/game/decisions"):
-        relative = relative_to_root(root, path)
-        decision_id = first_document_id(metadata, preferred=("decision_id",))
-        if not decision_id:
-            issues.append(issue("error", "missing_decision_id", "decision record has no decision_id", path=relative))
-            continue
-        _add_node(
-            nodes,
-            {
-                "id": decision_id,
-                "kind": "decision",
-                "path": relative,
-                "decision_status": metadata.get("decision_status") or "proposed",
-                "resolved": True,
-            },
-            issues,
-        )
-        for spec_id in as_string_list(metadata.get("affected_refs")):
-            if spec_id not in specs:
-                issues.append(issue("warning", "unresolved_decision_subject", f"decision references unknown spec {spec_id}", path=relative, subject=spec_id))
-            _ref_node(nodes, spec_id, "spec")
-            _add_simple_edge(edges, spec_id, decision_id, "governed_by", relative)
-
-    collection_fields = (
-        ("build_refs", "build", "built_in"),
-        ("playtest_refs", "test", "validated_by"),
-        ("decision_refs", "decision", "governed_by"),
-    )
     for spec_id, spec in sorted(specs.items()):
-        node = spec["node"]
         metadata = spec["metadata"]
-        for field, kind, relation in collection_fields:
+        source_path = str(spec["node"]["path"])
+        for field, kind, relation in (
+            ("build_refs", "build", "built_in"),
+            ("playtest_refs", "test", "validated_by"),
+            ("decision_refs", "decision", "governed_by"),
+        ):
             for ref_id in as_string_list(metadata.get(field)):
                 _ref_node(nodes, ref_id, kind)
-                _add_simple_edge(edges, spec_id, ref_id, relation, str(node["path"]))
-        for check in implementation_checks.get(spec_id, []):
+                _add_simple_edge(edges, spec_id, ref_id, relation, source_path)
+        for check in checks_by_subject.get(spec_id, []):
             build_id = str(check.get("build_id") or "").strip()
             if build_id and build_id != "UNKNOWN":
                 _ref_node(nodes, build_id, "build")
                 _add_simple_edge(edges, spec_id, build_id, "built_in", str(check["path"]))
-            for field, kind, relation in (("playtest_refs", "test", "validated_by"), ("decision_refs", "decision", "governed_by")):
+            for field, kind, relation in (
+                ("playtest_refs", "test", "validated_by"),
+                ("decision_refs", "decision", "governed_by"),
+            ):
                 for ref_id in as_string_list(check.get(field)):
                     _ref_node(nodes, ref_id, kind)
                     _add_simple_edge(edges, spec_id, ref_id, relation, str(check["path"]))
 
     for node in nodes.values():
         if node.get("kind") in ("spec", "build", "test", "decision") and node.get("resolved") is False:
-            issues.append(
-                issue(
-                    "warning",
-                    "unresolved_reference",
-                    f"referenced {node['kind']} node {node['id']} has no matching document",
-                    subject=str(node["id"]),
-                )
-            )
+            issues.append(issue("warning", "unresolved_reference", f"referenced {node['kind']} node {node['id']} has no matching document", subject=str(node["id"])))
 
-    ordered_nodes = sorted(nodes.values(), key=lambda item: (str(item.get("kind")), str(item.get("id"))))
-    ordered_edges = sorted(edges.values(), key=lambda item: str(item.get("id")))
-    ordered_issues = sorted(
-        issues,
-        key=lambda item: (
-            0 if item.get("severity") == "error" else 1,
-            str(item.get("code")),
-            str(item.get("path") or ""),
-            str(item.get("subject") or ""),
-        ),
-    )
     return {
         "schema_version": TRACEABILITY_SCHEMA_VERSION,
         "project_mode": PROJECT_MODE,
         "generated_at": utc_now(),
+        "project_root": _project_reference(vault, project),
         "source_revision": head,
         "source_of_truth": list(SOURCE_OF_TRUTH),
-        "nodes": ordered_nodes,
-        "edges": ordered_edges,
-        "issues": ordered_issues,
+        "nodes": sorted(nodes.values(), key=lambda item: (str(item.get("kind")), str(item.get("id")))),
+        "edges": sorted(edges.values(), key=lambda item: str(item.get("id"))),
+        "issues": sorted(
+            issues,
+            key=lambda item: (
+                0 if item.get("severity") == "error" else 1,
+                str(item.get("code")),
+                str(item.get("path") or ""),
+                str(item.get("subject") or ""),
+            ),
+        ),
     }
 
 
@@ -698,45 +599,49 @@ def load_index(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TraceError("traceability index root must be an object")
     if value.get("schema_version") != TRACEABILITY_SCHEMA_VERSION:
-        raise TraceError(
-            f"unsupported traceability schema: {value.get('schema_version')}; expected {TRACEABILITY_SCHEMA_VERSION}"
-        )
+        raise TraceError(f"unsupported traceability schema: {value.get('schema_version')}")
     return value
 
 
 def comparable_index(index: dict[str, Any]) -> dict[str, Any]:
-    return {key: index.get(key) for key in ("schema_version", "project_mode", "source_revision", "source_of_truth", "nodes", "edges", "issues")}
+    fields = ("schema_version", "project_mode", "project_root", "source_revision", "source_of_truth", "nodes", "edges", "issues")
+    return {key: index.get(key) for key in fields}
 
 
-def verification_summary(root: Path, index_path: Path, *, strict_stale: bool = False, strict_warnings: bool = False) -> dict[str, Any]:
+def verification_summary(
+    vault_root: Path,
+    index_path: Path,
+    project_root: Path | None = None,
+    *,
+    strict_stale: bool = False,
+    strict_warnings: bool = False,
+) -> dict[str, Any]:
+    vault = vault_root.resolve()
+    project = (project_root or vault_root).resolve()
     stored = load_index(index_path)
-    current = build_index(root)
+    current = build_index(vault, project)
     errors: list[str] = []
     warnings: list[str] = []
     if comparable_index(stored) != comparable_index(current):
         errors.append("traceability index is out of date; run rebuild")
     for item in current.get("issues", []):
         message = f"{item.get('code')}: {item.get('message')}"
-        if item.get("severity") == "error":
-            errors.append(message)
-        else:
-            warnings.append(message)
-    stale_edges = [edge for edge in current.get("edges", []) if edge.get("trace_status") == "stale"]
-    unverified_edges = [edge for edge in current.get("edges", []) if edge.get("trace_status") in ("unverified", "missing")]
-    if strict_stale and stale_edges:
-        errors.append(f"{len(stale_edges)} implementation relation(s) are stale")
-    elif stale_edges:
-        warnings.append(f"{len(stale_edges)} implementation relation(s) are stale")
+        (errors if item.get("severity") == "error" else warnings).append(message)
+    stale = [edge for edge in current.get("edges", []) if edge.get("trace_status") == "stale"]
+    unverified = [edge for edge in current.get("edges", []) if edge.get("trace_status") in ("unverified", "missing")]
+    if stale:
+        (errors if strict_stale else warnings).append(f"{len(stale)} implementation relation(s) are stale")
     if strict_warnings and warnings:
         errors.extend(warnings)
     return {
         "ok": not errors,
-        "index": relative_to_root(root, index_path),
+        "index": relative_to_root(vault, index_path),
+        "project_root": str(project),
         "source_revision": current.get("source_revision"),
         "node_count": len(current.get("nodes", [])),
         "edge_count": len(current.get("edges", [])),
-        "stale_edge_count": len(stale_edges),
-        "unverified_edge_count": len(unverified_edges),
+        "stale_edge_count": len(stale),
+        "unverified_edge_count": len(unverified),
         "errors": errors,
         "warnings": warnings,
     }
@@ -751,25 +656,23 @@ def query_spec(index: dict[str, Any], spec_id: str) -> dict[str, Any]:
     spec = nodes.get(spec_id)
     if not spec or spec.get("kind") != "spec":
         raise TraceError(f"spec not found: {spec_id}")
-    outbound = [edge for edge in index.get("edges", []) if edge.get("from") == spec_id]
-    linked = [nodes.get(str(edge.get("to")), {"id": edge.get("to"), "resolved": False}) for edge in outbound]
-    return {"spec": spec, "edges": outbound, "linked_nodes": linked}
+    edges = [edge for edge in index.get("edges", []) if edge.get("from") == spec_id]
+    return {"spec": spec, "edges": edges, "linked_nodes": [nodes.get(str(edge.get("to")), {"id": edge.get("to"), "resolved": False}) for edge in edges]}
 
 
 def query_path(index: dict[str, Any], raw_path: str) -> dict[str, Any]:
     query = parse_code_ref(raw_path)
     nodes = _node_map(index)
-    matches = []
-    for node in nodes.values():
-        if node.get("kind") != "code" or node.get("path") != query["path"]:
-            continue
-        if query.get("symbol") and node.get("symbol") != query.get("symbol"):
-            continue
-        matches.append(node)
+    matches = [
+        node
+        for node in nodes.values()
+        if node.get("kind") == "code"
+        and node.get("path") == query["path"]
+        and (not query.get("symbol") or node.get("symbol") == query.get("symbol"))
+    ]
     code_ids = {str(node["id"]) for node in matches}
-    incoming = [edge for edge in index.get("edges", []) if edge.get("to") in code_ids]
-    specs = [nodes.get(str(edge.get("from")), {"id": edge.get("from"), "resolved": False}) for edge in incoming]
-    return {"query": query, "code_nodes": matches, "edges": incoming, "specs": specs}
+    edges = [edge for edge in index.get("edges", []) if edge.get("to") in code_ids]
+    return {"query": query, "code_nodes": matches, "edges": edges, "specs": [nodes.get(str(edge.get("from")), {"id": edge.get("from"), "resolved": False}) for edge in edges]}
 
 
 def traceability_matrix(index: dict[str, Any]) -> list[dict[str, Any]]:
@@ -798,8 +701,8 @@ def traceability_matrix(index: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def affected_by_diff(root: Path, index: dict[str, Any], base: str, head: str) -> dict[str, Any]:
-    changed = set(changed_paths(root, base, head))
+def affected_by_diff(project_root: Path, index: dict[str, Any], base: str, head: str) -> dict[str, Any]:
+    changed = set(changed_paths(project_root, base, head))
     nodes = _node_map(index)
     reasons: dict[str, set[str]] = {}
     stale_edges: list[dict[str, Any]] = []
@@ -819,63 +722,86 @@ def affected_by_diff(root: Path, index: dict[str, Any], base: str, head: str) ->
         "base": base,
         "head": head,
         "changed_paths": sorted(changed),
-        "affected_specs": [
-            {"spec_id": spec_id, "reasons": sorted(values)} for spec_id, values in sorted(reasons.items())
-        ],
+        "affected_specs": [{"spec_id": spec_id, "reasons": sorted(values)} for spec_id, values in sorted(reasons.items())],
         "stale_edges": sorted(stale_edges, key=lambda item: str(item.get("id"))),
     }
 
 
-def resolve_root(value: Path) -> Path:
-    root = value.resolve()
-    if not root.is_dir():
-        raise TraceError(f"project root does not exist: {root}")
-    return root
+def resolve_directory(value: Path, label: str) -> Path:
+    path = value.expanduser().resolve()
+    if not path.is_dir():
+        raise TraceError(f"{label} does not exist: {path}")
+    return path
+
+
+def project_root_from_manifest(vault_root: Path) -> Path | None:
+    manifest_path = vault_root / ".llm-wiki.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    game = manifest.get("game_project") if isinstance(manifest, dict) else None
+    if not isinstance(game, dict):
+        return None
+    value = game.get("project_root")
+    kind = game.get("project_root_kind", "relative")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if kind == "relative" or not path.is_absolute():
+        path = vault_root / path
+    return path.resolve()
+
+
+def resolve_cli_roots(args: argparse.Namespace) -> tuple[Path, Path]:
+    if args.root is not None:
+        legacy = resolve_directory(args.root, "legacy root")
+        return legacy, legacy
+    vault = resolve_directory(args.vault_root, "vault root")
+    project_value = args.project_root or project_root_from_manifest(vault)
+    if project_value is None:
+        raise TraceError("project root was not supplied and is missing from .llm-wiki.json")
+    return vault, resolve_directory(project_value, "project root")
 
 
 def print_json(value: Any, *, compact: bool) -> None:
-    if compact:
-        print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
-    else:
-        print(json.dumps(value, ensure_ascii=False, indent=2))
+    print(json.dumps(value, ensure_ascii=False, separators=(",", ":")) if compact else json.dumps(value, ensure_ascii=False, indent=2))
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build and query game design-to-code traceability.")
-    parser.add_argument("--root", type=Path, default=Path.cwd(), help="Game project root. Defaults to the current directory.")
-    parser.add_argument("--index", default=DEFAULT_INDEX, help="Project-relative traceability index path.")
-    parser.add_argument("--compact", action="store_true", help="Emit compact JSON.")
+    parser = argparse.ArgumentParser(description="Build and query sidecar-safe game design-to-code traceability.")
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd(), help="LLM Wiki vault root. Defaults to cwd.")
+    parser.add_argument("--project-root", type=Path, default=None, help="Live game project root. Defaults to the manifest reference.")
+    parser.add_argument("--root", type=Path, default=None, help="Legacy alias that treats one root as both vault and project.")
+    parser.add_argument("--index", default=DEFAULT_INDEX, help="Vault-relative traceability index path.")
+    parser.add_argument("--compact", action="store_true")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    subparsers.add_parser("rebuild", help="Rebuild the derived traceability index from canonical game documents.")
-
-    verify_parser = subparsers.add_parser("verify", help="Verify the stored index, references, and staleness.")
-    verify_parser.add_argument("--strict-stale", action="store_true", help="Treat stale implementation relations as errors.")
-    verify_parser.add_argument("--strict-warnings", action="store_true", help="Treat warnings as errors.")
-
-    spec_parser = subparsers.add_parser("spec", help="Show code, build, test, and decision links for one spec ID.")
-    spec_parser.add_argument("spec_id")
-
-    path_parser = subparsers.add_parser("path", help="Reverse-query specs linked to a live code path or path#symbol.")
-    path_parser.add_argument("path")
-
-    affected_parser = subparsers.add_parser("affected", help="Map a Git diff to affected specs and stale code relations.")
-    affected_parser.add_argument("--base", required=True)
-    affected_parser.add_argument("--head", default="HEAD")
-
-    subparsers.add_parser("matrix", help="Emit one traceability summary row per spec.")
-
+    subparsers.add_parser("rebuild")
+    verify = subparsers.add_parser("verify")
+    verify.add_argument("--strict-stale", action="store_true")
+    verify.add_argument("--strict-warnings", action="store_true")
+    spec = subparsers.add_parser("spec")
+    spec.add_argument("spec_id")
+    path = subparsers.add_parser("path")
+    path.add_argument("path")
+    affected = subparsers.add_parser("affected")
+    affected.add_argument("--base", required=True)
+    affected.add_argument("--head", default="HEAD")
+    subparsers.add_parser("matrix")
     args = parser.parse_args()
     try:
-        root = resolve_root(args.root)
+        vault_root, project_root = resolve_cli_roots(args)
         index_relative = normalize_rel_path(args.index)
-        index_path = root / index_relative
+        index_path = vault_root / index_relative
         if args.command == "rebuild":
-            index = build_index(root)
+            index = build_index(vault_root, project_root)
             write_index(index_path, index)
             result = {
                 "ok": not any(item.get("severity") == "error" for item in index.get("issues", [])),
                 "index": index_relative,
+                "project_root": str(project_root),
                 "source_revision": index.get("source_revision"),
                 "node_count": len(index.get("nodes", [])),
                 "edge_count": len(index.get("edges", [])),
@@ -886,24 +812,24 @@ def main() -> int:
             return 0
         if args.command == "verify":
             result = verification_summary(
-                root,
+                vault_root,
                 index_path,
+                project_root,
                 strict_stale=args.strict_stale,
                 strict_warnings=args.strict_warnings,
             )
             print_json(result, compact=args.compact)
             return 0 if result["ok"] else 1
-
         index = load_index(index_path)
         if args.command == "spec":
-            print_json(query_spec(index, args.spec_id), compact=args.compact)
+            result = query_spec(index, args.spec_id)
         elif args.command == "path":
-            print_json(query_path(index, args.path), compact=args.compact)
+            result = query_path(index, args.path)
         elif args.command == "affected":
-            current = build_index(root)
-            print_json(affected_by_diff(root, current, args.base, args.head), compact=args.compact)
-        elif args.command == "matrix":
-            print_json({"rows": traceability_matrix(index)}, compact=args.compact)
+            result = affected_by_diff(project_root, build_index(vault_root, project_root), args.base, args.head)
+        else:
+            result = {"rows": traceability_matrix(index)}
+        print_json(result, compact=args.compact)
         return 0
     except (OSError, ValueError, TraceError) as error:
         print_json({"ok": False, "error": str(error)}, compact=getattr(args, "compact", False))

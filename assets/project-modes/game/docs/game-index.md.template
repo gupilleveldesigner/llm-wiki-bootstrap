@@ -7,32 +7,25 @@ updated: "{{TODAY}}"
 
 # {{GAME_TITLE}} — Game Project Index
 
-- 엔진: {{GAME_ENGINE}}
+- layout: {{LAYOUT}}
+- project root: {{PROJECT_ROOT_REFERENCE}}
+- engine adapter: {{ENGINE_ADAPTER}}
+- 엔진 표기: {{GAME_ENGINE}}
 - 장르: {{GAME_GENRE}}
 - 대상 플랫폼: {{TARGET_PLATFORMS}}
 - 현재 단계: {{PROJECT_PHASE}}
-- live source roots: {{SOURCE_ROOTS}}
+- source roots: {{SOURCE_ROOTS}}
 
 ## 먼저 읽기
 
 - [프로젝트 개요](overview.md)
 - [게임 비전](vision.md)
 - [설계 기둥](pillars.md)
-- [게임 프로젝트 운영 모델](model.md)
+- [운영 모델](model.md)
 - [로드맵](roadmap.md)
-- [운영 절차](../../instructions/game-project.md)
-- [기획·코드 Traceability Index](traceability.json) — 파생 파일, 직접 편집 금지
-
-## Traceability 명령
-
-```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
-python tools/game_trace.py spec <SPEC_ID>
-python tools/game_trace.py path <PATH[#SYMBOL]>
-python tools/game_trace.py affected --base <BASE> --head <HEAD>
-python tools/game_trace.py matrix
-```
+- [Game operations](../../instructions/game-project.md)
+- [Engine layout safety](../../instructions/game-engine-layouts.md)
+- [Traceability index](traceability.json)
 
 ## 설계
 
@@ -52,13 +45,21 @@ python tools/game_trace.py matrix
 - [빌드](builds/)
 - [버그](bugs/)
 
-## 의사결정과 제작
+## 결정과 제작
 
 - [결정](decisions/)
 - [제안](proposals/)
 - [마일스톤](milestones/)
 - [릴리스](releases/)
 
+## Trace commands
+
+```bash
+python tools/game_trace.py rebuild
+python tools/game_trace.py verify
+python tools/game_trace.py matrix
+```
+
 ## 현재 핵심 문서
 
-아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 이 섹션에 링크와 한 줄 상태를 추가한다.
+아직 등록된 핵심 문서가 없다. 새 문서를 만들 때 ID, 상태, 링크를 이 섹션에 추가한다.

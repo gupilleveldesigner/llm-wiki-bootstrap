@@ -1,12 +1,12 @@
 ---
 name: game-project
-description: `project_mode: game` 볼트에서 게임 기능·시스템·레벨·콘텐츠·에셋·구현 확인·플레이테스트·빌드·결정·마일스톤 기록을 운영한다. 게임 제작 문서 또는 실제 프로젝트 검증 요청에 사용한다.
+description: `project_mode: game` 볼트에서 설계, live 구현, 기획↔코드 추적, 플레이테스트, 빌드, 결정과 릴리스를 운영한다.
 ---
 
 # game-project 인스톨 어댑터
 
-이 파일은 Claude와 Codex의 게임 프로젝트 운영 규칙이 갈라지는 것을 막는 어댑터다. 작업 전에 다음 정본을 끝까지 읽고 그대로 따른다.
+작업 전에 다음 정본을 끝까지 읽고 그대로 따른다.
 
 - [`../../../.agents/skills/game-project/SKILL.md`](../../../.agents/skills/game-project/SKILL.md)
 
-특히 설계·구현·검증·결정·production 상태 분리, live project를 `raw/`로 이동하지 않는 경계, 실제로 실행한 검증만 보고하는 계약을 생략할 수 없다.
+특히 project root와 vault root 분리, vault-only 설치 경계, 설계·구현·검증·결정 상태 분리, trace rebuild/verify, 실제로 실행한 검증만 보고하는 계약을 생략할 수 없다.

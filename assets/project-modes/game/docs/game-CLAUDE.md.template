@@ -1,24 +1,29 @@
 # wiki/game/ — 게임 프로젝트 운영 계층
 
-이 폴더는 {{PROJECT_NAME}}의 설계 의도, 실제 구현, 검증 결과, 채택 결정을 연결한다.
+이 폴더는 {{PROJECT_NAME}}의 설계 의도, live 구현, 검증 결과, 결정을 연결한다.
+
+## Roots
+
+- vault root: 이 문서의 `../../`
+- project root: `{{PROJECT_ROOT_REFERENCE}}`
+- layout: `{{LAYOUT}}`
+- engine adapter: `{{ENGINE_ADAPTER}}`
 
 ## 먼저 읽기
 
 1. `index.md`
 2. `model.md`
 3. `../../instructions/game-project.md`
-4. 관련 기능·시스템·레벨·플레이테스트·결정 문서
+4. `../../instructions/game-engine-layouts.md`
 5. 설치된 `game-project` 스킬
 
 ## 핵심 규칙
 
-- `design_status`, `implementation_status`, `validation_status`, `decision_status`, `production_status`를 합치지 않는다.
-- 구현을 말할 때는 live source path와 revision/build를 확인한다.
-- 플레이테스트의 관찰과 해석을 분리한다.
-- 새 문서를 만들면 `index.md`에 연결한다.
-- 실행 중인 게임 코드와 에셋을 `raw/`로 이동하지 않는다.
-- 기획·코드·빌드·테스트·결정 연결은 canonical game 문서에 기록한다.
-- `traceability.json`은 직접 편집하지 않고 `python tools/game_trace.py rebuild`로 재생성한다.
-- game 문서 또는 live path가 바뀌면 `rebuild`와 `verify`를 실행한다.
-- code diff 영향은 `affected`, 기획→코드는 `spec`, 코드→기획은 `path`로 조회한다.
-- `profile: evidence`이면 Source/Claim/Decision/Experiment와 `evidence_refs`를 연결한다.
+- 설치·업그레이드는 vault-only다. project root에 Wiki 파일을 만들지 않는다.
+- project root 수정은 명시적 implement 작업에서만 한다.
+- design/implementation/validation/decision/production 상태를 합치지 않는다.
+- 구현은 live path와 revision/build로 확인한다.
+- 플레이테스트 관찰과 해석을 분리한다.
+- 새 문서는 `index.md`에 연결한다.
+- 변경 뒤 `python tools/game_trace.py rebuild`와 `verify`를 실행한다.
+- Evidence profile이면 Source/Claim/Decision/Experiment와 `evidence_refs`를 연결한다.

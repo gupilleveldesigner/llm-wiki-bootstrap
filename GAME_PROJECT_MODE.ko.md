@@ -1,6 +1,18 @@
 # 게임 프로젝트 모드
 
-`game` project mode는 LLM Wiki를 실제 게임 제작 프로젝트와 함께 쓰기 위한 운영 overlay입니다. 기존 `standard`/`evidence` profile을 대체하지 않고, 그 위에 게임 설계·구현·검증·결정과 **기획↔코드 traceability**를 추가합니다.
+`game` project mode는 LLM Wiki를 실제 게임 제작 프로젝트와 함께 운영하기 위한 비파괴 overlay다. 기존 `standard` / `evidence` vault profile을 대체하지 않으며, 그 위에 다음 두 계약을 추가한다.
+
+```text
+Design Intent → Implementation State → Validation Evidence → Project Decision
+
+기획 정본 ↔ live 코드·씬·데이터·에셋 정본
+```
+
+Game mode v3의 기본 원칙은 명확하다.
+
+> **엔진 프로젝트의 기존 구조는 유지하고, Wiki는 기본적으로 별도 sidecar vault에 설치한다.**
+
+## 세 개의 독립 축
 
 ```text
 lifecycle:     new | migrate | upgrade
@@ -8,7 +20,7 @@ vault profile: standard | evidence
 project mode:  knowledge | game
 ```
 
-가능한 조합 예:
+예:
 
 ```text
 new + standard + game
@@ -17,27 +29,463 @@ migrate + standard + game
 upgrade + evidence + game
 ```
 
-## 왜 profile이 아니라 project mode인가
+- lifecycle은 생성·전환·업그레이드 방식을 정한다.
+- vault profile은 지식과 근거를 얼마나 엄격하게 관리할지 정한다.
+- project mode는 일반 지식 Wiki인지 실제 게임 프로젝트 운영 Wiki인지 정한다.
 
-`standard`와 `evidence`는 지식을 얼마나 엄격하게 추적할지 정합니다.
+## 두 개의 정본 루트
 
-- `standard`: Raw 원문을 Wiki 지식과 Output으로 연결
-- `evidence`: Source·Claim·Conflict·Experiment·Decision·reviewed Canon까지 provenance 추적
-
-`game`은 어떤 종류의 프로젝트를 운영할지 정합니다. 게임에는 다음 상태가 동시에 존재할 수 있습니다.
-
-- 기획은 승인됐지만 아직 구현되지 않음
-- 코드는 구현됐지만 플레이테스트하지 않음
-- 테스트는 통과했지만 최종 방향으로 채택되지 않음
-- 작업 티켓은 `done`이지만 다른 플랫폼에서는 검증하지 않음
-
-이를 하나의 상태로 합치지 않습니다.
+Game mode는 하나의 `target`에 엔진 프로젝트와 Wiki를 섞지 않는다.
 
 ```text
-Design Intent → Implementation State → Validation Evidence → Project Decision
+project_root
+  실제 엔진 프로젝트
+  코드·씬·데이터·원본 에셋·엔진 설정의 정본
+
+vault_root
+  LLM Wiki
+  기획·구현 확인·빌드·플레이테스트·결정·skills·trace index의 정본
 ```
 
-작업 흐름은 별도의 `production_status`로 둡니다.
+설치기와 업그레이더는 다음 정책을 따른다.
+
+```text
+final write policy:      vault-only
+staging/backup policy:   transaction-root-only
+project_root mutation:   금지
+```
+
+`project_root`를 변경하는 것은 설치 작업이 아니라, 사용자가 명시적으로 요청한 `game-project implement` 작업일 때만 허용된다.
+
+## 기본 배치: sidecar
+
+`--vault-root`를 생략하면 게임 프로젝트 옆에 `<project-name>.wiki`를 만든다.
+
+```text
+Workspace/
+├─ MyGame/                 # project_root
+│  ├─ Assets/              # Unity 예시
+│  ├─ Packages/
+│  ├─ ProjectSettings/
+│  └─ ...
+└─ MyGame.wiki/            # vault_root
+   ├─ raw/
+   ├─ wiki/
+   ├─ Output/
+   ├─ templates/
+   ├─ instructions/
+   ├─ tools/
+   ├─ .agents/
+   ├─ .claude/
+   ├─ .llm-wiki.json
+   └─ .llm-wiki-managed.json
+```
+
+Sidecar는 엔진 import, 빌드 glob, 패키징 규칙과 Wiki 파일이 섞일 가능성을 최소화하므로 새 Game mode의 기본값이다.
+
+## 선택 배치
+
+### Embedded
+
+```text
+MyGame/
+├─ <engine-owned files>
+└─ .llm-wiki/
+```
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --layout embedded \
+  --config ./config.json \
+  --mode migrate
+```
+
+모든 Game mode 관리 파일은 `.llm-wiki/` 아래에만 생성된다. Godot에서는 `.llm-wiki/.gdignore`를 만들어 해당 폴더가 `res://` import 대상에 포함되지 않게 한다.
+
+### Custom
+
+프로젝트 밖의 임의 경로를 명시한다.
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --vault-root ../ProjectKnowledge/MyGame \
+  --layout custom \
+  --config ./config.json \
+  --mode migrate
+```
+
+### Legacy in-place
+
+과거처럼 `project_root == vault_root`인 구조다. 새 프로젝트에는 권장하지 않으며 기본적으로 거부한다.
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --vault-root ./MyGame \
+  --layout legacy-in-place \
+  --allow-legacy-in-place \
+  --config ./config.json \
+  --mode upgrade
+```
+
+명시적인 opt-in 없이는 실행되지 않는다.
+
+## Engine adapter와 보호 경로
+
+설치 전 프로젝트 표지를 읽어 adapter를 선택한다.
+
+### Unity
+
+감지 표지:
+
+```text
+Assets/
+Packages/
+ProjectSettings/
+```
+
+보호 경로:
+
+```text
+Assets/
+Packages/
+ProjectSettings/
+```
+
+생성·파생 경로:
+
+```text
+Library/
+Temp/
+Logs/
+obj/
+UserSettings/
+Build/
+Builds/
+```
+
+기본 코드·에셋 추적 root는 `Assets/`다.
+
+### Unreal Engine
+
+감지 표지:
+
+```text
+*.uproject
+Content/
+Config/
+Source/
+Plugins/
+```
+
+보호 경로는 존재하는 `.uproject`, `Content/`, `Config/`, `Source/`, `Plugins/`다. `Binaries/`, `DerivedDataCache/`, `Intermediate/`, `Saved/`, `.vs/`는 생성 경로로 분류한다.
+
+### Godot
+
+감지 표지:
+
+```text
+project.godot
+```
+
+`.godot/`, `.import/`는 생성 경로로 분류하고, 기존 최상위 항목은 보호한다. embedded vault에는 `.gdignore`가 필수다.
+
+### Web / Phaser / Vite / Next.js
+
+감지 표지:
+
+```text
+package.json
+src/ 또는 app/ 또는 pages/ 또는 public/
+```
+
+`package.json` dependency를 통해 Phaser, Vite, Next.js 환경을 보조 판정한다. `node_modules/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `.vite/`, `coverage/`는 생성 경로다.
+
+### Generic
+
+알려진 표지가 없으면 generic adapter를 사용한다. Sidecar와 vault-only 정책은 그대로 적용되지만, 정확한 추적을 위해 `source_roots`를 명시하는 편이 좋다.
+
+## 잘못된 프로젝트 루트 방지
+
+선택한 폴더 아래에 Unity·Unreal·Godot 등의 중첩 프로젝트가 발견되면 해당 폴더를 workspace로 판정하고 적용을 거부한다.
+
+```text
+Workspace/                 # 잘못 선택
+├─ UnityClient/
+└─ GodotPrototype/
+```
+
+이 경우 실제 게임 폴더 하나를 `--project-root`로 다시 선택해야 한다. 여러 엔진 표지가 같은 root에서 동률로 발견돼도 모호한 것으로 보고 적용하지 않는다.
+
+## Dry-run이 기본 사전 절차
+
+실제 적용 전 먼저 write plan을 생성한다.
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --dry-run
+```
+
+Dry-run은 최종 vault를 만들거나 바꾸지 않는다. transaction staging에서 실제 설치와 검증을 수행한 뒤 정확한 계획을 JSON으로 반환하고 staging을 제거한다.
+
+주요 결과:
+
+```text
+project_root
+vault_root
+transaction_root
+layout
+engine adapter와 감지 근거
+protected_roots
+source_roots
+creates / updates / deletes
+collisions
+protected_path_writes
+symlink_violations
+layout_errors
+safe_to_apply
+mutation_started: false
+```
+
+다음 중 하나라도 존재하면 적용을 거부한다.
+
+- 엔진 또는 project root가 모호함
+- 보호 경로 쓰기
+- 기존 unmanaged 파일 덮어쓰기
+- 사용자가 수정한 관리 문서를 직접 덮어쓰기
+- 기존 파일 삭제
+- 기존 vault symlink 또는 symlink를 통해 vault 밖으로 쓰기. Staging은 symlink를 따라가지 않는다.
+- project_root와 vault_root의 위험한 중첩
+- 기존 비-Wiki 폴더를 검토 없이 vault로 채택
+
+기존 비-Wiki 폴더를 의도적으로 vault로 전환할 때만 dry-run을 검토한 뒤 `--adopt-existing-vault`를 사용한다.
+
+## Staging, 원자적 적용, rollback
+
+적용 과정:
+
+```text
+1. engine/project/vault layout 감지
+2. 기존 vault를 transaction staging으로 복사
+3. staging에서 base Wiki 생성·업그레이드
+4. staging에서 Game overlay·skills·runtime 설치
+5. traceability rebuild/verify
+6. managed manifest와 정확한 write plan 생성
+7. safe_to_apply 확인
+8. 같은 파일시스템의 rename으로 vault 교체
+9. 적용 후 managed/runtime/trace/project-integrity 재검증
+10. 실패 시 이전 vault 자동 복구
+```
+
+기존 vault는 기본적으로 transaction root의 rollback backup으로 남긴다. 필요 없을 때만 `--discard-rollback-backup`을 사용한다.
+
+## Project integrity 검증
+
+기본값:
+
+```bash
+--integrity metadata
+```
+
+보호 경로의 파일 크기, 수정 시각, 파일 종류를 적용 전후 비교한다.
+
+내용까지 강하게 검증하려면:
+
+```bash
+--integrity full
+```
+
+SHA-256까지 비교한다. 엔진 소유 경로가 달라지면 새 vault의 적용을 실패 처리하고 이전 vault를 복구한다.
+
+`--integrity off`도 존재하지만 엔진 프로젝트에 적용할 때는 권장하지 않는다.
+
+## 관리 파일 소유권
+
+`vault_root/.llm-wiki-managed.json`이 Game mode가 관리하는 파일과 설치 시점 hash를 기록한다.
+
+정책:
+
+```text
+system-managed
+  skills와 runtime
+
+metadata
+  .llm-wiki.json, managed manifest
+
+managed-proposal
+  사용자가 수정하면 직접 덮어쓰지 않고 제안 방식으로 갱신할 문서
+
+seeded-user-editable
+  최초 생성 후 사용자 소유가 되는 문서
+
+derived
+  traceability index처럼 재생성 가능한 파일
+```
+
+업그레이드는 이전 hash와 현재 파일을 비교해 사용자 변경을 구분한다. 사용자 편집 문서를 직접 덮어써야 하는 상황은 충돌로 보고 적용하지 않는다.
+
+## Game config
+
+```json
+{
+  "project_name": "DI LEMMATON Wiki",
+  "domain_summary": "게임 설계와 실제 구현·검증을 연결한다",
+  "project_root": "../DI_LEMMATON",
+  "layout": "sidecar",
+  "engine": "auto",
+  "game_title": "DI:LEMMATON",
+  "game_engine": "Phaser 3",
+  "game_genre": "2D action puzzle",
+  "target_platforms": "Web, Windows",
+  "project_phase": "vertical-slice",
+  "source_roots": ["src/", "public/assets/"]
+}
+```
+
+`project_name`과 `domain_summary`는 new/migrate에서 필요하다. `project_root`, `vault_root`는 config 또는 CLI에서 지정할 수 있으며 CLI가 더 명확하다.
+
+## 생성과 전환
+
+### Standard + Game sidecar
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --profile standard \
+  --dry-run
+```
+
+계획이 안전하면 `--dry-run`을 제거한다. Sidecar가 없으면 새 Wiki를 생성하고, 기존 게임 프로젝트는 이동·수정하지 않는다.
+
+### Evidence + Game
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --profile evidence
+```
+
+## 업그레이드
+
+GitHub 최신 exact SHA가 기본이다.
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --vault-root ../MyGame.wiki \
+  --config ./config.json \
+  --mode upgrade
+```
+
+오프라인 local bundle을 명시할 때만:
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --vault-root ../MyGame.wiki \
+  --config ./config.json \
+  --mode upgrade \
+  --source local
+```
+
+Game mode Wiki는 base `scripts/upgrade.py`만 사용하지 않는다. `game_project.py --mode upgrade`가 base Wiki, Game overlay, engine-layout contract, trace runtime을 같은 checkout에서 함께 갱신한다.
+
+## 기획과 코드의 별도 추적
+
+기획 정본:
+
+```text
+vault_root/wiki/game/features/
+vault_root/wiki/game/systems/
+vault_root/wiki/game/levels/
+vault_root/wiki/game/content/
+vault_root/wiki/game/narrative/
+vault_root/wiki/game/ui-ux/
+vault_root/wiki/game/technical/
+vault_root/wiki/game/assets/
+```
+
+구현 정본:
+
+```text
+project_root의 실제 코드·씬·데이터·원본 에셋
+```
+
+기획 문서는 안정된 ID와 project-relative path를 가진다.
+
+```yaml
+feature_id: FEATURE-LOCKON-001
+live_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+```
+
+구현 확인은 정확한 Git revision에서 비교한다.
+
+```yaml
+check_id: IMPL-LOCKON-004
+subject_id: FEATURE-LOCKON-001
+source_revision: abc123def456
+checked_paths:
+  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
+```
+
+## Traceability index
+
+설치 파일:
+
+```text
+vault_root/wiki/game/traceability.json
+vault_root/tools/game_trace.py
+```
+
+`traceability.json`은 직접 편집하지 않는 파생 인덱스다.
+
+```text
+spec --implemented_by--> code
+spec --built_in--------> build
+spec --validated_by----> test
+spec --governed_by-----> decision
+```
+
+실행기는 manifest에서 sidecar `project_root`를 해석하므로 vault에서 그대로 실행할 수 있다.
+
+```bash
+cd ../MyGame.wiki
+python tools/game_trace.py rebuild
+python tools/game_trace.py verify
+python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py spec FEATURE-LOCKON-001
+python tools/game_trace.py path src/combat/LockOnSystem.ts#selectTarget
+python tools/game_trace.py affected --base HEAD~1 --head HEAD
+python tools/game_trace.py matrix
+```
+
+관계 상태:
+
+```text
+current
+  마지막 구현 확인 이후 연결된 코드 경로가 바뀌지 않음
+
+stale
+  코드 경로가 바뀌어 기획↔구현 비교를 다시 해야 함
+
+unverified
+  구현 확인 또는 비교 가능한 revision이 없음
+
+missing
+  추적한 live path가 존재하지 않음
+```
+
+`stale`은 의미상 오류를 자동 단정하지 않고 재검사를 요구하는 상태다.
 
 ## 독립 상태
 
@@ -58,351 +506,41 @@ production_status:
   backlog | ready | in_progress | blocked | done
 ```
 
-문서가 존재해도 구현 증거는 아니고, 코드가 존재해도 플레이 경험 검증 증거는 아니며, `done`은 `passed`를 뜻하지 않습니다.
+기획 문서의 존재는 구현 증거가 아니며, 코드 존재는 플레이 경험 검증 증거가 아니다. `done`도 `passed`를 뜻하지 않는다.
 
-## Live game project와 Raw의 경계
-
-> 실행 중인 엔진 프로젝트, 코드, 씬, 원본 에셋, 데이터 파일은 live source이며 `raw/`로 이동하지 않습니다.
-
-`migrate`는 `Source/`, `Assets/`, `Content/`, `Packages/`, `addons/`, `src/` 등 기존 게임 프로젝트 구조를 그대로 보존합니다.
-
-`raw/game/`에는 불변 증거만 둡니다.
-
-- 외부 기획 원문과 참고자료
-- 플레이테스트 원본 메모·설문 export·녹화 메타데이터
-- 빌드 로그·크래시 리포트·텔레메트리 export
-- 외부 LLM·도구 분석 원문
-- 승인된 전달본이나 변경하지 않을 스냅샷
-
-## 기획과 코드를 각각 추적하는 구조
-
-### 기획 정본
+## `game-project` operation
 
 ```text
-wiki/game/features/
-wiki/game/systems/
-wiki/game/levels/
-wiki/game/content/
-wiki/game/narrative/
-wiki/game/ui-ux/
-wiki/game/technical/
-wiki/game/assets/
+define      기능·시스템·레벨·콘텐츠·UI·에셋 의도 정의
+plan        마일스톤·의존성·리스크·출구 조건
+implement   사용자가 명시한 범위에서 project_root 실제 변경
+inspect     spec과 live source 비교
+trace       기획↔코드·빌드·테스트·결정 조회
+impact      Git diff에서 영향받는 spec 계산
+playtest    검증 질문·관찰·해석·후속 분리
+build       exact revision/build/platform과 스모크 결과
+decide      옵션·기준·근거·부작용·supersedes
+bug         재현·원인·수정·회귀 검증
+release     계획 범위와 실제 포함 범위 고정
 ```
-
-각 기획은 안정된 ID를 가집니다.
-
-```yaml
-feature_id: FEATURE-LOCKON-001
-design_status: accepted
-implementation_status: implemented
-validation_status: partial
-live_paths:
-  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
-implementation_check_refs:
-  - wiki/game/implementation/IMPL-LOCKON-004.md
-build_refs:
-  - BUILD-2026-08-29-001
-playtest_refs:
-  - PLAYTEST-LOCKON-003
-decision_refs:
-  - GDEC-LOCKON-002
-```
-
-### 코드 정본
-
-코드는 Wiki로 복사하지 않습니다. 실제 프로젝트의 live path, symbol, scene, data key, Git revision, build ID를 참조합니다.
-
-코드 참조 형식:
-
-```text
-project/relative/path
-project/relative/path#Symbol
-project/relative/path#Symbol@locator
-```
-
-절대 경로와 `..` 탈출 경로는 허용하지 않습니다.
-
-### 기획↔코드 연결 정본
-
-`wiki/game/implementation/`의 구현 확인 문서가 기획 ID와 실제 코드를 연결합니다.
-
-```yaml
-check_id: IMPL-LOCKON-004
-subject_id: FEATURE-LOCKON-001
-expected_spec: wiki/game/features/FEATURE-LOCKON-001.md
-source_revision: abc123def456
-build_id: BUILD-2026-08-29-001
-checked_paths:
-  - src/combat/LockOnSystem.ts#selectTarget@lines 84-139
-implementation_status: implemented
-validation_status: partial
-```
-
-구현 확인에서는 항목마다 다음을 구분합니다.
-
-```text
-일치 | 부분 일치 | 불일치 | 확인 불가
-```
-
-## 자동 Traceability Index
-
-Game mode v2는 다음을 설치합니다.
-
-```text
-wiki/game/traceability.json   # 파생 node/edge index
-tools/game_trace.py           # rebuild/query/verify/impact runtime
-```
-
-`traceability.json`은 직접 편집하지 않습니다. 다음 canonical 문서의 frontmatter에서 재생성합니다.
-
-- 기능·시스템·레벨·콘텐츠·에셋 등 spec
-- implementation check
-- build report
-- playtest report
-- decision record
-
-### 파생 graph
-
-```text
-spec --implemented_by--> code
-spec --built_in--------> build
-spec --validated_by----> test
-spec --governed_by-----> decision
-```
-
-따라서 다음을 양방향으로 조회할 수 있습니다.
-
-- 이 기획을 구현하는 코드는 어디인가?
-- 이 코드가 어떤 기획을 구현하는가?
-- 어느 build와 playtest가 이 기획을 검증했는가?
-- 어떤 결정이 이 기획에 영향을 줬는가?
-
-### 명령
-
-```bash
-python tools/game_trace.py rebuild
-python tools/game_trace.py verify
-python tools/game_trace.py verify --strict-stale
-python tools/game_trace.py spec FEATURE-LOCKON-001
-python tools/game_trace.py path src/combat/LockOnSystem.ts#selectTarget
-python tools/game_trace.py affected --base HEAD~1 --head HEAD
-python tools/game_trace.py matrix
-```
-
-- `rebuild`: canonical 문서에서 index 재생성
-- `verify`: index 최신성, ID, code path, 미해결 참조 검사
-- `spec`: 기획→code/build/test/decision 조회
-- `path`: code→기획 역조회
-- `affected`: Git diffk�� 영향받는 기획 계산
-- `matrix`: 기획별 대응 현황 요약
-
-### stale 판정
-
-구현 확인의 `source_revision` 이후 연결된 code path가 변경되면 relation을 `stale`로 표시합니다.
-
-```text
-current     마지막 확인 revision 이후 해당 path가 바뀌지 않음
-stale       마지막 확인 revision 이후 해당 path가 바뀜
-unverified  확인 기록 또는 비교 가능한 revision이 없음
-missing     추적 중인 live path가 존재하지 않음
-```
-
-`stale`은 구현 오류라는 단정이 아니라 **기획과 코드의 일치 여부를 다시 확인해야 한다는 신호**입니다.
-
-## 설치되는 구조
-
-```text
-MyGame/
-├─ raw/game/
-│  ├─ design/
-│  ├─ playtests/
-│  ├─ builds/
-│  ├─ telemetry/
-│  └─ references/
-├─ wiki/game/
-│  ├─ index.md
-│  ├─ overview.md
-│  ├─ vision.md
-│  ├─ pillars.md
-│  ├─ roadmap.md
-│  ├─ model.md
-│  ├─ traceability.json
-│  ├─ features/
-│  ├─ systems/
-│  ├─ levels/
-│  ├─ content/
-│  ├─ narrative/
-│  ├─ ui-ux/
-│  ├─ technical/
-│  ├─ implementation/
-│  ├─ assets/
-│  ├─ playtests/
-│  ├─ builds/
-│  ├─ bugs/
-│  ├─ decisions/
-│  ├─ proposals/
-│  ├─ milestones/
-│  └─ releases/
-├─ templates/game/
-├─ instructions/game-project.md
-├─ tools/game_trace.py
-├─ Output/game/
-├─ .agents/skills/game-project/
-├─ .claude/skils/game-project/
-└─ .llm-wiki.json
-```
-
-Manifest에는 다음이 기로됩니다.
-
-```json
-{
-  "project_mode": "game",
-  "project_mode_version": 2,
-  "game_traceability": {
-    "schema_version": 1,
-    "index": "wiki/game/traceability.json",
-    "runtime": "tools/game_trace.py"
-  }
-}
-```
-
-## 기본 config
-
-```json
-{
-  "project_name": "DI LEMMATON Wiki",
-  "domain_summary": "게임 설계와 실제 구현·검증을 연결한다",
-  "game_title": "DI:LEMMATON",
-  "game_engine": "Phaser 3",
-  "game_genre": "2D action puzzle",
-  "target_platforms": "Web, Windows",
-  "project_phase": "vertical-slice",
-  "source_roots": ["src/", "public/assets/"]
-}
-```
-
-`game_title` 이�: 필드는 선택 사항입니다. 모르는 값은 `UNKNOWN`, source roots는 빈 목록으로 시작할 수 있습니다.
-
-## 생성과 전환
-
-Standard + Game:
-
-```bash
-python scripts/game_project.py --target ./MyGame --config ./config.json --mode new --profile standard
-```
-
-Evidence + Game:
-
-```bash
-python scripts/game_project.py --target ./MyGameResearch --config ./config.json --mode new --profile evidence
-```
-
-기존 게임 폤더 비파관 전환:
-
-```bash
-python scripts/game_project.py --target ./ExistingGame --config ./config.json --mode migrate --profile standard
-```
-
-기존 파일은 이동·삭제·수정하지 않습니다. 관리 파일 충돌은 `.wiki-proposed`로 제욘됩니다.
-
-## 기조 Wiki�에 추가 또는 갱신
-
-GitHub 최신이 기본입니다.
-
-```bash
-python scripts/game_project.py --target ./ExistingWiki --config ./config.json --mode upgrade
-```
-
-Evidence 승격과 함께:
-
-```bash
-python scripts/game_project.py --target ./ExistingWiki --config ./config.json --mode upgrade --profile evidence
-```
-
-Game mode Wiki는 base `scripts/upgrade.py`만 실행하지 않습니다. `game_project.py --mode upgrade`가 base Wiki, game overlay, trace runtime을 같은 검증된 checkout에서 함께 갱신합니다.
-
-명시적 offline/local 경로:
-
-```bash
-python scripts/game_project.py --target ./ExistingWiki --config ./config.json --mode upgrade --source local
-```
-
-이 결과는 GitHub latest가 아닙니다.
-
-## 템플릿
-
-| 작업 | 템플릿 |
-|---|---|
-| 플레이어 기능 | `templates/game/feature-spec.md` |
-| 규칙·상태 시스템 | `templates/game/system-spec.md` |
-| 레벨·스테이지 | `templates/game/level-spec.md` |
-| 캐릭터·적·아이템·퀘스트 | `templates/game/content-spec.md` |
-| 설계 대비 실제 구현 확인 | `templates/game/implementation-check.md` |
-| 플레이테스트 | `templates/game/playtest-report.md` |
-| 빌드·스모크 | `templates/game/build-report.md` |
-| 채택·기각·대체 결정 | `templates/game/decision-record.md` |
-| 2D/3D/UI/오디오 에셋 | `templates/game/asset-brief.md` |
-| 버그·회귀 | `templates/game/bug-report.md` |
-| 마일스톤 | `templates/game/milestone.md` |
-
-## `game-project` 스킬
-
-설치된 스킬은 요청을 다음 operation으로 라우팅합니다.
-
-- `define`: 기능·시스템·레벨·콘텐츠·UI·에셋 의도 정의
-- `plan`: 마일스톤·의존성·리스크·출구 조건
-- `implement`: live source 실제 변경
-- `inspect`: spec 대비 구현 일치 확인
-- `trace`: 기획→코드 또는 코드→기획 조회
-- `impact`: Git diff 영향 분석
-- `playtest`: 검증 질문·관찰·해석·후속 분리
-- `build`: exact revision/build/platform과 스모크 결과
-- `decide`: 옵션·기준·근거·부작용·supersedes
-- `bug`: 재현·원인·수정·회귀 검증
-- `release`: 계획 범위와 실제 포함 범위 고정
 
 ## Evidence + Game
 
-Evidence profile에서는 다음이 추가됩니다.
+Evidence profile과 결합하면 플레이테스트 원본, 로그, 텔레메트리, 외부 분석을 Raw/Source로 추적하고, 경험적 일반화를 Claim으로, 반례를 Conflict로, 재검증을 Experiment로 관리한다.
 
-```text
-플레이테스트 원본 / 로그 / 텔레메트리
-  ↓ Source
-관찰에서 도출한 경험적 주장
-  ↓ Claim
-지지 / 반박 / Conflict / Experiment
-  ↓
-reviewed Canon 또는 Project Decision
-```
-
-Traceability graph는 **어떤 기획이 어떤 구현·빌드·테스트·결정과 연결되는지** 보여주고, Evidence graph는 **그 결론이 어떤 원문 근거에서 나왔는지** 보여줍니다. 둘을 같은 것으로 취급하지 않습니다.
-
-## 업그레이드 안전성
-
-Game upgrade는 대상 파일을 수정하기 전에 다음을 모두 확인합니다.
-
-1. GitHub의 현재 default branch
-2. 최신 정확한 40자 commit SHA
-3. exact SHA archive
-4. archive path traversal 안전성
-5. base Wiki contract files
-6. game wrapper와 installer
-7. game docs/templates/skills
-8. traceability template와 `game_trace.py` runtime
-
-기존 managed skill과 trace runtime은 `.wiki-upgrade-bak/<timestamp>/`에 백업합니다. 검증 실패 시 대상 Wiki를 수정하지 않으며, 오래된 local bundle로 자동 fallback하지 않습니다.
+Traceability graph는 **어떤 기획이 어떤 코드·빌드·테스트·결정과 연결되는지** 답한다. Evidence graph는 **그 결론을 어떤 원본 근거가 지지하는지** 답한다. 둘은 보완 관계이지만 서로 대체하지 않는다.
 
 ## 비목표
 
-Game mode는 다음을 자동으로 보장하지 않습니다.
+Game mode는 다음을 자동으로 보장하지 않는다.
 
-- 게임 엔진 자체 설치
-- 모든 엔진 전용 binary 포맷의 의미 해석
-- 자동 빌드 성공 또는 테스트 통과
+- 게임 엔진 설치
+- 모든 proprietary binary 포맷의 의미 분석
+- 빌드 성공
 - 자동 설계 승인
+- 코드 diff만으로 의미 변화 단정
 - 자동 Canon 승격
 - 외부 이슈 트래커 대체
-- live source의 복사·재배치·정리
-- code diff만 보고 기획 의미가 실제로 바뀌었다고 단정
+- live source의 자동 재배치
 
-정확한 완료 판단은 기획, live source, revision, build, 테스트와 사람의 결정을 연결해 얻습니다.
+Game mode v3의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.

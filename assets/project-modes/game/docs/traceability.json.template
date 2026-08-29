@@ -2,11 +2,16 @@
   "schema_version": 1,
   "project_mode": "game",
   "generated_at": null,
+  "project_root": {
+    "kind": "relative",
+    "value": "{{PROJECT_ROOT_REFERENCE}}"
+  },
   "source_revision": "UNKNOWN",
   "source_of_truth": [
-    "wiki/game feature/system/level/content/narrative/ui-ux/technical/asset frontmatter",
-    "wiki/game/implementation frontmatter",
-    "wiki/game/builds, playtests, and decisions frontmatter"
+    "vault game-spec frontmatter",
+    "vault implementation-check frontmatter",
+    "vault build, playtest, and decision frontmatter",
+    "live project paths and Git revisions"
   ],
   "nodes": [],
   "edges": [],

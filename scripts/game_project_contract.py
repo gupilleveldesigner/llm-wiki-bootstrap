@@ -5,12 +5,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from game_workspace import (
+    MANAGED_MANIFEST_NAME,
+    MANAGED_MANIFEST_SCHEMA_VERSION,
+    WorkspacePaths,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
 PROJECT_MODE = "game"
-PROJECT_MODE_VERSION = 2
+PROJECT_MODE_VERSION = 3
 TRACEABILITY_SCHEMA_VERSION = 1
 GAME_SKILL = "game-project"
 GAME_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROJECT-MODE -->"
@@ -18,6 +23,7 @@ GAME_TRACE_RUNTIME_SOURCE = "project-modes/game/runtime/game_trace.py"
 GAME_TRACE_RUNTIME_DESTINATION = "tools/game_trace.py"
 GAME_TRACE_INDEX_SOURCE = "project-modes/game/docs/traceability.json.template"
 GAME_TRACE_INDEX_DESTINATION = "wiki/game/traceability.json"
+GAME_ENGINE_LAYOUT_DOC = "instructions/game-engine-layouts.md"
 
 GAME_DIRECTORIES = (
     "raw/game/design",
@@ -45,7 +51,7 @@ GAME_DIRECTORIES = (
     "tools",
 )
 
-# managed=True means a changed existing file is proposed instead of silently replaced.
+# managed=True means a changed existing file is proposed rather than silently replaced.
 GAME_DOCS = (
     ("project-modes/game/docs/game-index.md.template", "wiki/game/index.md", True, True),
     ("project-modes/game/docs/game-overview.md.template", "wiki/game/overview.md", True, False),
@@ -55,16 +61,18 @@ GAME_DOCS = (
     ("project-modes/game/docs/game-model.md.template", "wiki/game/model.md", True, True),
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md", True, True),
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md", True, True),
+    ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC, True, True),
     ("project-modes/game/docs/game-taxonomy.json.template", "wiki/game/taxonomy.json", True, True),
 )
 
 GAME_CONTRACT_FILES = (
     ("project-modes/game/docs/game-model.md.template", "wiki/game/model.md"),
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md"),
+    ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC),
     ("project-modes/game/docs/game-index.md.template", "wiki/game/index.md"),
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md"),
-    ("project-modes/game/docs/traceability.json.template", "wiki/game/traceability.json"),
-    ("project-modes/game/runtime/game_trace.py", "tools/game_trace.py"),
+    ("project-modes/game/docs/traceability.json.template", GAME_TRACE_INDEX_DESTINATION),
+    (GAME_TRACE_RUNTIME_SOURCE, GAME_TRACE_RUNTIME_DESTINATION),
     ("project-modes/game/templates/feature-spec.md", "templates/game/feature-spec.md"),
     ("project-modes/game/templates/implementation-check.md", "templates/game/implementation-check.md"),
     ("project-modes/game/templates/playtest-report.md", "templates/game/playtest-report.md"),
@@ -73,18 +81,17 @@ GAME_CONTRACT_FILES = (
 )
 
 GAME_CONTRACT_MARKERS = {
-    "project-modes/game/docs/game-model.md.template": (
-        "Design Intent → Implementation State → Validation Evidence → Project Decision"
-    ),
-    "project-modes/game/docs/game-operations.md.template": "live game source tree",
+    "project-modes/game/docs/game-model.md.template": "Design Intent → Implementation State → Validation Evidence → Project Decision",
+    "project-modes/game/docs/game-operations.md.template": "vault-only write policy",
+    "project-modes/game/docs/game-engine-layouts.md.template": "sidecar",
     "project-modes/game/docs/game-index.md.template": "project_mode: game",
     "project-modes/game/docs/game-CLAUDE.md.template": "game-project",
     "project-modes/game/docs/traceability.json.template": '"source_of_truth"',
-    "project-modes/game/runtime/game_trace.py": "TRACEABILITY_SCHEMA_VERSION = 1",
+    GAME_TRACE_RUNTIME_SOURCE: "TRACEABILITY_SCHEMA_VERSION = 1",
     "project-modes/game/templates/feature-spec.md": "implementation_status: unknown",
     "project-modes/game/templates/implementation-check.md": "checked_paths: []",
     "project-modes/game/templates/playtest-report.md": "## 관찰 — 해석을 섞지 않음",
-    "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "design_status",
+    "skills-bundle/agents-skills/game-project/SKILL.md.bundled": "vault-only",
     "skills-bundle/claude-adapters/game-project/SKILL.md.bundled": "../../../.agents/skills/game-project/SKILL.md",
 }
 
@@ -92,8 +99,10 @@ REQUIRED_GAME_REMOTE_PATHS = (
     "scripts/game_project.py",
     "scripts/game_project_contract.py",
     "scripts/game_project_install.py",
+    "scripts/game_workspace.py",
     "assets/project-modes/game/docs/game-model.md.template",
     "assets/project-modes/game/docs/game-operations.md.template",
+    "assets/project-modes/game/docs/game-engine-layouts.md.template",
     "assets/project-modes/game/docs/traceability.json.template",
     "assets/project-modes/game/runtime/game_trace.py",
     "assets/project-modes/game/templates/feature-spec.md",
@@ -143,6 +152,10 @@ def validate_config(config: dict[str, Any], *, require_base: bool) -> None:
         "game_genre",
         "target_platforms",
         "project_phase",
+        "layout",
+        "engine",
+        "project_root",
+        "vault_root",
     ):
         if key in config and not isinstance(config[key], str):
             raise ValueError(f"config key '{key}' must be a string")
@@ -168,28 +181,44 @@ def read_manifest(target: Path) -> dict[str, Any]:
     return value
 
 
-def resolve_game_metadata(target: Path, config: dict[str, Any]) -> dict[str, Any]:
+def resolve_game_metadata(
+    target: Path,
+    config: dict[str, Any],
+    workspace: WorkspacePaths,
+    engine: dict[str, Any],
+) -> dict[str, Any]:
     manifest = read_manifest(target)
     previous = manifest.get("game_project")
     metadata = dict(previous) if isinstance(previous, dict) else {}
-    project_name = config.get("project_name") or manifest.get("project_name") or "Game Project"
+    project_name = config.get("project_name") or manifest.get("project_name") or workspace.project_root.name
     metadata.setdefault("game_title", project_name)
     for key, default in GAME_DEFAULTS.items():
         metadata.setdefault(key, default)
-    for key in ("game_title", "game_engine", "game_genre", "target_platforms", "project_phase", "source_roots"):
+    for key in ("game_title", "game_engine", "game_genre", "target_platforms", "project_phase"):
         if key in config:
             metadata[key] = config[key]
+    metadata.update(
+        {
+            "layout": workspace.layout,
+            "project_root": workspace.project_root_reference,
+            "project_root_kind": workspace.project_root_reference_kind,
+            "vault_root": ".",
+            "engine_adapter": engine.get("id"),
+            "engine_environment": engine.get("environment"),
+            "engine_evidence": engine.get("evidence", []),
+            "protected_roots": engine.get("protected_roots", []),
+            "generated_roots": engine.get("generated_roots", []),
+            "source_roots": engine.get("source_roots", []),
+            "write_policy": "vault-only",
+            "temporary_write_policy": "transaction-root-only",
+        }
+    )
     return metadata
 
 
 def replacements(target: Path, config: dict[str, Any], metadata: dict[str, Any]) -> dict[str, str]:
     manifest = read_manifest(target)
-    project_name = str(
-        config.get("project_name")
-        or manifest.get("project_name")
-        or metadata.get("game_title")
-        or "Game Project"
-    )
+    project_name = str(config.get("project_name") or manifest.get("project_name") or metadata.get("game_title") or "Game Project")
     domain_summary = str(config.get("domain_summary") or project_name)
     source_roots = metadata.get("source_roots")
     source_roots_text = ", ".join(source_roots) if isinstance(source_roots, list) and source_roots else "UNKNOWN"
@@ -202,6 +231,9 @@ def replacements(target: Path, config: dict[str, Any], metadata: dict[str, Any])
         "{{TARGET_PLATFORMS}}": str(metadata.get("target_platforms", "UNKNOWN")),
         "{{PROJECT_PHASE}}": str(metadata.get("project_phase", "prototype")),
         "{{SOURCE_ROOTS}}": source_roots_text,
+        "{{LAYOUT}}": str(metadata.get("layout", "sidecar")),
+        "{{PROJECT_ROOT_REFERENCE}}": str(metadata.get("project_root", "UNKNOWN")),
+        "{{ENGINE_ADAPTER}}": str(metadata.get("engine_adapter", "generic")),
         "{{TODAY}}": datetime.now().strftime("%Y-%m-%d"),
     }
 
@@ -245,19 +277,17 @@ def write_game_manifest(target: Path, metadata: dict[str, Any]) -> None:
         "schema_version": TRACEABILITY_SCHEMA_VERSION,
         "index": GAME_TRACE_INDEX_DESTINATION,
         "runtime": GAME_TRACE_RUNTIME_DESTINATION,
-        "source_of_truth": "game specs, implementation checks, builds, playtests, and decisions",
+        "source_of_truth": "vault specs/checks/builds/playtests/decisions plus live project paths and Git revisions",
+    }
+    manifest["managed_files"] = {
+        "schema_version": MANAGED_MANIFEST_SCHEMA_VERSION,
+        "manifest": MANAGED_MANIFEST_NAME,
     }
     manifest["updated_at"] = now
     write_text(path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 
 
-def write_upgrade_provenance(
-    target: Path,
-    *,
-    repository: str,
-    branch: str,
-    commit: str,
-) -> None:
+def write_upgrade_provenance(target: Path, *, repository: str, branch: str, commit: str) -> None:
     path = target / MANIFEST_NAME
     manifest = read_manifest(target)
     if not manifest:

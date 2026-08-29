@@ -20,16 +20,23 @@ Profiles define how knowledge is trusted:
 - `standard` — `raw → wiki → Output`
 - `evidence` — `Raw → Source → Claim or Project Decision → Evidence/Conflict/Experiment → reviewed Canon`
 
-Game project mode adds a production-aware trace:
+Game mode adds:
 
 ```text
 Design Intent → Implementation State → Validation Evidence → Project Decision
 ```
 
-Game mode v2 keeps live code and design specifications as separate sources of truth, derives `wiki/game/traceability.json`, and installs `tools/game_trace.py` for `spec→code`, `code→spec`, build/test/decision links, Git-diff impact analysis, and stale implementation checks.
+Game mode v3 keeps the live engine project and the Wiki as separate roots. The default layout is a sibling sidecar vault, so Unity, Unreal, Godot, and web-project directory structures remain intact. Installation and upgrade use a dry-run write plan, engine protected paths, transaction staging, managed-file ownership, project-integrity verification, and rollback.
 
 ```bash
-python scripts/game_project.py --target ./MyGame --config ./config.json --mode new --profile evidence
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.json \
+  --mode migrate \
+  --profile evidence \
+  --dry-run
 ```
 
-**Upgrade means GitHub latest by default.** The updater pins and validates the official repository's exact default-branch HEAD before touching the target. Game-mode Wikis use `scripts/game_project.py --mode upgrade` so the base Wiki, game overlay, and traceability runtime advance together. No updater silently falls back to a stale local bundle.
+Game mode also derives `wiki/game/traceability.json` and installs `tools/game_trace.py` for spec→code, code→spec, build/test/decision links, Git-diff impact analysis, and stale implementation checks.
+
+**Upgrade means GitHub latest by default.** The updater pins and validates the official repository's exact default-branch HEAD before staging any target changes. Game-mode Wikis use `scripts/game_project.py --mode upgrade` so the base Wiki, engine-layout safety layer, Game overlay, and trace runtime advance together. No updater silently falls back to a stale local bundle.

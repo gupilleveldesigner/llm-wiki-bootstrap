@@ -1,4 +1,4 @@
 interface:
   display_name: "LLM Wiki Bootstrap"
-  short_description: "Wiki lifecycle + standard/evidence profiles + game project mode"
-  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki. Keep lifecycle, vault profile, and project mode separate. For game projects, install the game overlay and preserve live source; for upgrades, pin and validate the official GitHub repository's latest default-branch commit without silent local fallback."
+  short_description: "Safe Wiki lifecycle + evidence + sidecar Game mode"
+  default_prompt: "Use $llm-wiki-bootstrap to build, migrate, or upgrade an LLM Wiki. Keep lifecycle, vault profile, and project mode separate. For Game mode, default to an engine-aware sidecar vault, emit and verify a dry-run write plan, preserve live source structure, and maintain design-to-code traceability. For upgrade, pin the official GitHub repository's exact latest default-branch commit without silent local fallback."

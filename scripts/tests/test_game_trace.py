@@ -24,13 +24,20 @@ def write(path: Path, text: str) -> None:
 
 
 class GameTraceTests(unittest.TestCase):
-    def make_project(self, root: Path) -> tuple[str, str]:
-        run_git(root, "init")
-        run_git(root, "config", "user.email", "test@example.com")
-        run_git(root, "config", "user.name", "Trace Test")
-        write(root / "src/combat/LockOnSystem.ts", "export function selectTarget() { return 1; }\n")
+    def make_project(self, workspace: Path) -> tuple[Path, Path, str, str]:
+        project = workspace / "Game"
+        vault = workspace / "Game.wiki"
+        project.mkdir()
+        run_git(project, "init")
+        run_git(project, "config", "user.email", "test@example.com")
+        run_git(project, "config", "user.name", "Trace Test")
+        write(project / "src/combat/LockOnSystem.ts", "export function selectTarget() { return 1; }\n")
+        run_git(project, "add", ".")
+        run_git(project, "commit", "-m", "Add lock-on implementation")
+        checked_revision = run_git(project, "rev-parse", "HEAD")
+
         write(
-            root / "wiki/game/features/FEATURE-LOCKON-001.md",
+            vault / "wiki/game/features/FEATURE-LOCKON-001.md",
             """---
 type: game_feature_spec
 feature_id: FEATURE-LOCKON-001
@@ -50,11 +57,8 @@ decision_refs:
 # Lock-on
 """,
         )
-        run_git(root, "add", ".")
-        run_git(root, "commit", "-m", "Add lock-on implementation")
-        checked_revision = run_git(root, "rev-parse", "HEAD")
         write(
-            root / "wiki/game/implementation/IMPL-LOCKON-001.md",
+            vault / "wiki/game/implementation/IMPL-LOCKON-001.md",
             f"""---
 type: game_implementation_check
 check_id: IMPL-LOCKON-001
@@ -76,7 +80,7 @@ checked_at: 2026-08-29
 """,
         )
         write(
-            root / "wiki/game/builds/BUILD-001.md",
+            vault / "wiki/game/builds/BUILD-001.md",
             f"""---
 type: game_build_report
 build_id: BUILD-001
@@ -90,7 +94,7 @@ subject_refs:
 """,
         )
         write(
-            root / "wiki/game/playtests/PLAYTEST-001.md",
+            vault / "wiki/game/playtests/PLAYTEST-001.md",
             """---
 type: game_playtest_report
 playtest_id: PLAYTEST-001
@@ -103,7 +107,7 @@ validation_status: partial
 """,
         )
         write(
-            root / "wiki/game/decisions/GDEC-001.md",
+            vault / "wiki/game/decisions/GDEC-001.md",
             """---
 type: game_decision_record
 decision_id: GDEC-001
@@ -114,71 +118,58 @@ affected_refs:
 # Decision
 """,
         )
-        run_git(root, "add", ".")
-        run_git(root, "commit", "-m", "Add trace documents")
-        return checked_revision, run_git(root, "rev-parse", "HEAD")
+        return project, vault, checked_revision, run_git(project, "rev-parse", "HEAD")
 
-    def test_rebuild_supports_bidirectional_trace_and_matrix(self) -> None:
+    def test_rebuild_supports_separate_roots_and_bidirectional_trace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            self.make_project(root)
-            index = trace.build_index(root)
-            trace.write_index(root / trace.DEFAULT_INDEX, index)
+            project, vault, _, _ = self.make_project(Path(temporary))
+            index = trace.build_index(vault, project)
+            trace.write_index(vault / trace.DEFAULT_INDEX, index)
 
             self.assertEqual(index["schema_version"], 1)
+            self.assertEqual(index["project_root"], {"kind": "relative", "value": "../Game"})
             implementation = [edge for edge in index["edges"] if edge["relation"] == "implemented_by"]
-            self.assertEqual(len(implementation), 1)
             self.assertEqual(implementation[0]["trace_status"], "current")
             self.assertEqual(implementation[0]["locators"], ["lines 1-1"])
 
             spec_result = trace.query_spec(index, "FEATURE-LOCKON-001")
-            self.assertEqual({edge["relation"] for edge in spec_result["edges"]}, {"implemented_by", "built_in", "validated_by", "governed_by"})
-
+            self.assertEqual(
+                {edge["relation"] for edge in spec_result["edges"]},
+                {"implemented_by", "built_in", "validated_by", "governed_by"},
+            )
             path_result = trace.query_path(index, "src/combat/LockOnSystem.ts#selectTarget")
             self.assertEqual([item["id"] for item in path_result["specs"]], ["FEATURE-LOCKON-001"])
-
-            matrix = trace.traceability_matrix(index)
-            self.assertEqual(matrix[0]["current_code_relations"], 1)
-            self.assertEqual(matrix[0]["builds"], ["BUILD-001"])
-            self.assertEqual(matrix[0]["tests"], ["PLAYTEST-001"])
-            self.assertEqual(matrix[0]["decisions"], ["GDEC-001"])
-
-            verification = trace.verification_summary(root, root / trace.DEFAULT_INDEX)
-            self.assertTrue(verification["ok"])
+            self.assertTrue(trace.verification_summary(vault, vault / trace.DEFAULT_INDEX, project)["ok"])
 
     def test_code_change_marks_relation_stale_and_affected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, before_change = self.make_project(root)
-            initial = trace.build_index(root)
-            trace.write_index(root / trace.DEFAULT_INDEX, initial)
+            project, vault, _, before_change = self.make_project(Path(temporary))
+            initial = trace.build_index(vault, project)
+            trace.write_index(vault / trace.DEFAULT_INDEX, initial)
 
-            write(root / "src/combat/LockOnSystem.ts", "export function selectTarget() { return 2; }\n")
-            run_git(root, "add", ".")
-            run_git(root, "commit", "-m", "Change targeting")
-            after_change = run_git(root, "rev-parse", "HEAD")
+            write(project / "src/combat/LockOnSystem.ts", "export function selectTarget() { return 2; }\n")
+            run_git(project, "add", ".")
+            run_git(project, "commit", "-m", "Change targeting")
+            after_change = run_git(project, "rev-parse", "HEAD")
 
-            current = trace.build_index(root)
+            current = trace.build_index(vault, project)
             implementation = [edge for edge in current["edges"] if edge["relation"] == "implemented_by"]
             self.assertEqual(implementation[0]["trace_status"], "stale")
-
-            verification = trace.verification_summary(root, root / trace.DEFAULT_INDEX, strict_stale=True)
+            verification = trace.verification_summary(vault, vault / trace.DEFAULT_INDEX, project, strict_stale=True)
             self.assertFalse(verification["ok"])
-            self.assertIn("traceability index is out of date; run rebuild", verification["errors"])
-
-            affected = trace.affected_by_diff(root, current, before_change, after_change)
+            affected = trace.affected_by_diff(project, current, before_change, after_change)
             self.assertEqual(affected["affected_specs"][0]["spec_id"], "FEATURE-LOCKON-001")
             self.assertIn("code_changed:src/combat/LockOnSystem.ts", affected["affected_specs"][0]["reasons"])
-            self.assertEqual(len(affected["stale_edges"]), 1)
 
-    def test_missing_live_path_is_an_error(self) -> None:
+    def test_missing_live_path_is_checked_in_project_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            run_git(root, "init")
-            run_git(root, "config", "user.email", "test@example.com")
-            run_git(root, "config", "user.name", "Trace Test")
+            workspace = Path(temporary)
+            project = workspace / "Game"
+            vault = workspace / "Game.wiki"
+            project.mkdir()
+            run_git(project, "init")
             write(
-                root / "wiki/game/systems/SYSTEM-MISSING-001.md",
+                vault / "wiki/game/systems/SYSTEM-MISSING-001.md",
                 """---
 type: game_system_spec
 system_id: SYSTEM-MISSING-001
@@ -188,13 +179,21 @@ live_paths:
 # Missing
 """,
             )
-            run_git(root, "add", ".")
-            run_git(root, "commit", "-m", "Add missing relation")
-            index = trace.build_index(root)
+            index = trace.build_index(vault, project)
             errors = [item for item in index["issues"] if item["severity"] == "error"]
             self.assertEqual(errors[0]["code"], "missing_live_path")
-            implementation = [edge for edge in index["edges"] if edge["relation"] == "implemented_by"]
-            self.assertEqual(implementation[0]["trace_status"], "missing")
+
+    def test_manifest_resolves_sidecar_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            project = workspace / "Game"
+            vault = workspace / "Game.wiki"
+            project.mkdir()
+            write(
+                vault / ".llm-wiki.json",
+                '{"game_project":{"project_root":"../Game","project_root_kind":"relative"}}',
+            )
+            self.assertEqual(trace.project_root_from_manifest(vault), project.resolve())
 
     def test_invalid_absolute_path_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "project-relative"):

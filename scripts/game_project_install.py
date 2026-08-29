@@ -14,6 +14,7 @@ from game_project_contract import (
     GAME_CONTRACT_MARKERS,
     GAME_DIRECTORIES,
     GAME_DOCS,
+    GAME_ENGINE_LAYOUT_DOC,
     GAME_ROUTER_MARKER,
     GAME_SKILL,
     GAME_TRACE_INDEX_DESTINATION,
@@ -28,18 +29,14 @@ from game_project_contract import (
     write_game_manifest,
     write_text,
 )
+from game_workspace import WorkspacePaths
 
 
 def _proposal_path(destination: Path) -> Path:
     return destination.with_name(destination.name + ".wiki-proposed")
 
 
-def install_game_docs(
-    target: Path,
-    values: dict[str, str],
-    *,
-    propose_existing: bool,
-) -> tuple[list[str], list[str]]:
+def install_game_docs(target: Path, values: dict[str, str], *, propose_existing: bool) -> tuple[list[str], list[str]]:
     installed: list[str] = []
     proposals: list[str] = []
     for source_name, destination_name, should_render, managed in GAME_DOCS:
@@ -141,6 +138,19 @@ def install_game_runtime(target: Path, *, propose_existing: bool) -> tuple[list[
     return installed, proposals
 
 
+def install_engine_isolation(target: Path, workspace: WorkspacePaths, engine: dict[str, Any]) -> list[str]:
+    installed: list[str] = []
+    if workspace.layout != "embedded":
+        return installed
+    for relative, content in engine.get("isolation_files", {}).items():
+        destination = target / relative
+        if destination.exists():
+            continue
+        write_text(destination, str(content))
+        installed.append(relative)
+    return installed
+
+
 def ensure_backup_dir(target: Path, base_result: dict[str, Any]) -> Path:
     existing = base_result.get("backup_dir")
     if isinstance(existing, str) and existing:
@@ -164,20 +174,18 @@ def backup_game_managed_assets(target: Path, backup_dir: Path) -> list[str]:
             shutil.rmtree(destination)
         shutil.move(str(source), str(destination))
         backed_up.append(relative)
-    for relative in (GAME_TRACE_RUNTIME_DESTINATION,):
-        source = target / relative
-        if not source.is_file():
-            continue
-        destination = backup_dir / relative
+    source = target / GAME_TRACE_RUNTIME_DESTINATION
+    if source.is_file():
+        destination = backup_dir / GAME_TRACE_RUNTIME_DESTINATION
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             destination.unlink()
         shutil.move(str(source), str(destination))
-        backed_up.append(relative)
+        backed_up.append(GAME_TRACE_RUNTIME_DESTINATION)
     return backed_up
 
 
-# Compatibility for callers created by the first game-mode draft.
+# Compatibility with the first game-mode draft.
 def backup_game_skills(target: Path, backup_dir: Path) -> list[str]:
     return backup_game_managed_assets(target, backup_dir)
 
@@ -186,13 +194,12 @@ def game_router_block() -> str:
     return (
         f"\n\n{GAME_ROUTER_MARKER}\n"
         "## Game project mode overlay\n\n"
-        "- `.llm-wiki.json`의 `project_mode: game`이 활성 상태다.\n"
-        "- 게임 설계·레벨·시스템·콘텐츠·에셋 브리프·구현 확인·빌드·플레이테스트·결정 기록에는 "
-        "설치된 `game-project` 스킬을 먼저 읽는다.\n"
-        "- 작업 전 `wiki/game/model.md`와 `instructions/game-project.md`를 읽는다.\n"
-        "- 설계 의도, 실제 구현, 검증 결과, 채택 결정을 서로 다른 상태로 기록한다.\n"
-        "- 실행 중인 게임 코드·에셋·엔진 프로젝트를 `raw/`로 이동하지 않는다. `raw/game/`에는 "
-        "불변 증거 사본·로그·리포트만 둔다.\n"
+        "- `.llm-wiki.json`의 `project_mode: game`과 `game_project.project_root`를 먼저 확인한다.\n"
+        "- 게임 작업에는 설치된 `game-project` 스킬을 읽고 `wiki/game/model.md`, "
+        f"`instructions/game-project.md`, `{GAME_ENGINE_LAYOUT_DOC}`를 따른다.\n"
+        "- 설치기와 업그레이더는 vault-only write policy를 지킨다. live project는 읽기·검사 대상이며 "
+        "명시적인 implement 작업 외에는 수정하지 않는다.\n"
+        "- 설계 의도, 실제 구현, 검증 결과, 채택 결정, production 상태를 분리한다.\n"
         "- 기획·코드·빌드·테스트·결정 연결은 `wiki/game/traceability.json`에서 조회하며, "
         "game 문서를 바꾼 뒤 `python tools/game_trace.py rebuild`와 `verify`를 실행한다.\n"
     )
@@ -231,7 +238,7 @@ def _check_installed_marker(target: Path, destination_name: str, marker: str) ->
     return None, f"installed game project file lacks marker {marker!r}: {destination_name}"
 
 
-def verify_game_installation(target: Path) -> dict[str, Any]:
+def verify_game_installation(target: Path, workspace: WorkspacePaths, engine: dict[str, Any]) -> dict[str, Any]:
     pending: list[str] = []
     errors: list[str] = []
     checked: list[str] = []
@@ -255,6 +262,10 @@ def verify_game_installation(target: Path) -> dict[str, Any]:
             pending.append(proposal.relative_to(target).as_posix())
         else:
             errors.append(f"missing game project router marker: {relative}")
+    if workspace.layout == "embedded":
+        for relative in engine.get("isolation_files", {}):
+            if not (target / relative).exists():
+                errors.append(f"missing embedded engine-isolation file: {relative}")
     return {
         "status": "failed" if errors else ("pending" if pending else "ok"),
         "checked": checked,
@@ -276,14 +287,22 @@ def _parse_trace_result(stdout: str) -> dict[str, Any]:
     return result
 
 
-def run_traceability_command(target: Path, command: str, *arguments: str) -> dict[str, Any]:
-    runtime = ASSETS / GAME_TRACE_RUNTIME_SOURCE
+def run_traceability_command(
+    vault_root: Path,
+    project_root: Path,
+    command: str,
+    *arguments: str,
+    runtime_path: Path | None = None,
+) -> dict[str, Any]:
+    runtime = runtime_path or (ASSETS / GAME_TRACE_RUNTIME_SOURCE)
     completed = subprocess.run(
         [
             sys.executable,
             str(runtime),
-            "--root",
-            str(target),
+            "--vault-root",
+            str(vault_root),
+            "--project-root",
+            str(project_root),
             "--index",
             GAME_TRACE_INDEX_DESTINATION,
             "--compact",
@@ -306,14 +325,17 @@ def run_traceability_command(target: Path, command: str, *arguments: str) -> dic
 
 def install_game_overlay(
     target: Path,
+    project_root: Path,
     config: dict[str, Any],
+    workspace: WorkspacePaths,
+    engine: dict[str, Any],
     *,
     mode: str,
     previous_project_mode: str,
     router_propose_existing: bool | None = None,
 ) -> dict[str, Any]:
     validate_game_bundle()
-    metadata = resolve_game_metadata(target, config)
+    metadata = resolve_game_metadata(target, config, workspace, engine)
     values = replacements(target, config, metadata)
     for directory in GAME_DIRECTORIES:
         (target / directory).mkdir(parents=True, exist_ok=True)
@@ -323,15 +345,16 @@ def install_game_overlay(
     runtime_files, runtime_proposals = install_game_runtime(target, propose_existing=mode == "migrate")
     template_count, template_proposals = install_game_templates(target, propose_existing=propose_existing)
     docs, doc_proposals = install_game_docs(target, values, propose_existing=propose_existing)
+    isolation_files = install_engine_isolation(target, workspace, engine)
     router_proposals = install_game_router(
         target,
         propose_existing=propose_existing if router_propose_existing is None else router_propose_existing,
     )
     write_game_manifest(target, metadata)
 
-    trace_rebuild = run_traceability_command(target, "rebuild")
-    trace_verification = run_traceability_command(target, "verify")
-    verification = verify_game_installation(target)
+    trace_rebuild = run_traceability_command(target, project_root, "rebuild")
+    trace_verification = run_traceability_command(target, project_root, "verify")
+    verification = verify_game_installation(target, workspace, engine)
     if verification["status"] == "failed":
         raise RuntimeError("game project installation verification failed: " + "; ".join(verification["errors"]))
     verification["traceability"] = trace_verification
@@ -339,13 +362,7 @@ def install_game_overlay(
         verification["status"] = "pending"
         verification["pending"] = sorted(set(verification["pending"]) | {GAME_TRACE_INDEX_DESTINATION})
 
-    proposals = [
-        *skill_proposals,
-        *runtime_proposals,
-        *template_proposals,
-        *doc_proposals,
-        *router_proposals,
-    ]
+    proposals = [*skill_proposals, *runtime_proposals, *template_proposals, *doc_proposals, *router_proposals]
     return {
         "project_mode": PROJECT_MODE,
         "project_mode_version": PROJECT_MODE_VERSION,
@@ -355,10 +372,9 @@ def install_game_overlay(
         "project_mode_templates_copied": template_count,
         "project_mode_skill": GAME_SKILL,
         "project_mode_runtime": runtime_files,
+        "engine_isolation_files": isolation_files,
         "project_mode_verification": verification,
-        "project_mode_activation_pending": (
-            verification["status"] == "pending" or bool(proposals) or not trace_verification.get("ok")
-        ),
+        "project_mode_activation_pending": verification["status"] == "pending" or bool(proposals) or not trace_verification.get("ok"),
         "traceability": {
             "index": GAME_TRACE_INDEX_DESTINATION,
             "runtime": GAME_TRACE_RUNTIME_DESTINATION,
