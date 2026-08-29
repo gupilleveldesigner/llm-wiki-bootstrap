@@ -1,0 +1,138 @@
+name: Apply Game ingest v5 shared-core patch
+
+on:
+  push:
+    branches:
+      - feature/game-project-mode
+    paths:
+      - .github/workflows/apply-game-ingest-v5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/game-project-mode
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Decode and apply reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/game-ingest-v5-payload/part* > /tmp/game-ingest-v5.tar.xz.b64
+          base64 --decode /tmp/game-ingest-v5.tar.xz.b64 > /tmp/game-ingest-v5.tar.xz
+          echo "bed689fe1b2b7ab63d9e9e13971f4ee2f5e70be33c1033e1a6f820d235b7e401  /tmp/game-ingest-v5.tar.xz" | sha256sum --check --strict
+          mkdir -p /tmp/game-ingest-v5
+          tar -xJf /tmp/game-ingest-v5.tar.xz -C /tmp/game-ingest-v5
+          python /tmp/game-ingest-v5/apply.py "$PWD" /tmp/game-ingest-v5/new
+
+      - name: Validate Python and JSON templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q \
+            scripts \
+            assets/project-modes/game/runtime \
+            assets/project-modes/game/ingest \
+            assets/skills-bundle/agents-skills/ingest/scripts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for path in Path("assets").rglob("*.json.template"):
+              json.loads(path.read_text(encoding="utf-8"))
+          PY
+
+      - name: Run complete repository regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover scripts/tests -p 'test_*.py' -v
+
+      - name: Commit shared ingest core and Game adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "gupilleveldesigner"
+          git config user.email "gupilleveldesigner@gmail.com"
+          cat > /tmp/commit-message.txt <<'EOF'
+          Add adapter-based Game ingest without forking the ingest engine
+
+          Game mode v4 correctly separated the live engine project from the Wiki and
+          tracked design/code synchronization, but the existing ingest runtime still
+          assumed one generic knowledge schema. It could scan raw/game files, yet its
+          completion gate required topics/tags and sources/source on every changed Wiki
+          document, so typed Game specs, playtests, builds, decisions, and implementation
+          checks could not participate in a completed ingest. Running from project_root
+          also could not discover the sibling sidecar vault, and ingest completion did
+          not refresh Game traceability.
+
+          Introduce a shared adapter contract instead of either duplicating the whole
+          ingest implementation or growing a project-mode conditional monolith:
+
+          - keep Raw scanning, Source records, SHA/locator semantic review, Graphify,
+            verification, recovery, and ledger mechanics in the canonical ingest runtime
+          - preserve the existing generic adapter and its portable validation behavior
+          - load a Game adapter only when the manifest declares project_mode: game or the
+            operator explicitly selects --adapter game
+          - provide a dedicated game-ingest skill as an explicit UX entry point while
+            /ingest continues to auto-route through the same shared runtime
+
+          Resolve sidecar context from the installed canonical skill path before falling
+          back to cwd/parents/worktree discovery. This lets an ingest command launched
+          from project_root operate on its installed sibling vault without writing a
+          pointer or any bootstrap-owned file into the engine project.
+
+          Validate Game documents by their own contracts rather than pretending they are
+          generic concept notes. Stable Game IDs, raw_refs/log_refs, evidence_refs,
+          subject_refs/affected_refs, expected_spec, and checked_paths are validated by
+          document type. Evidence Source IDs must resolve to real Source records and keep
+          reverse reflected-document provenance. The adapter supplies deterministic
+          routing guidance for design, playtest, build, telemetry, and reference Raw
+          categories without silently mutating accepted specs or decisions.
+
+          After a successful ingest, run game_trace scan, status, and non-strict verify.
+          Report synchronization drift separately from ingest completion: a Source can be
+          fully ingested while a reflected design correctly becomes design_changed.
+          Never invoke game_trace accept automatically, because accepting a design/code
+          baseline requires a real implementation inspection and an explicit human or
+          team decision.
+
+          Upgrade the ingest ledger to schema v3 for Game vaults. Preserve generic Source
+          coverage while recording Source IDs, reflected Game document IDs and types,
+          subject relationships, trace sync counts, and non-mutating reconciliation
+          proposals. This makes Raw -> Source -> Game reflection -> trace consequence
+          auditable from one ledger without turning the ledger into another source of
+          truth.
+
+          Install and verify the Game adapter, instructions, and Codex/Claude game-ingest
+          skills as managed Game-mode assets. Bump Game mode to version 5 and expose the
+          ingest adapter/schema versions in .llm-wiki.json. Extend upgrade preflight so a
+          remote bundle that lacks the adapter contract is rejected before target
+          mutation.
+
+          Add integrated sidecar tests that exercise the installed ingest runtime from
+          project_root, ingest a raw/game playtest Source, validate typed Game reflections,
+          refresh traceability without accepting a baseline, preserve live code bytes,
+          and emit ledger v3. Also cover broken Source provenance and installation of both
+          host skills and the adapter.
+
+          Validation performed before this commit:
+
+          - Python compileall for bootstrap, Game runtime/adapter, and canonical ingest
+          - JSON parsing for every bundled *.json.template
+          - full `python -m unittest discover scripts/tests -p 'test_*.py' -v`
+          EOF
+          sed -i 's/^          //' /tmp/commit-message.txt
+          git add -A
+          git diff --cached --check
+          git commit -F /tmp/commit-message.txt
+          git push origin HEAD:feature/game-project-mode
