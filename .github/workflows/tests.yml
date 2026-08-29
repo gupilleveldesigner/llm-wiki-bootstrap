@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Decode the clean reviewed payload and apply it without pushing
+      - name: Decode and apply the reviewed payload without pushing
         shell: bash
         run: |
           set -euo pipefail
@@ -90,7 +90,7 @@ jobs:
             .github/game-ingest-v5-payload-v2
           rm -f .github/workflows/apply-game-ingest-v5.yml
 
-      - name: Validate Python and JSON contracts
+      - name: Validate Python, JSON, and the full regression suite
         shell: bash
         run: |
           set -euo pipefail
@@ -109,17 +109,14 @@ jobs:
               json.loads(path.read_text(encoding='utf-8'))
           PY
           git diff --check a556875623bb2a960a613711c2febf4dc5778e61 -- .
-
-      - name: Run complete repository regression suite
-        shell: bash
-        run: |
-          set -euo pipefail
           python -m unittest discover scripts/tests -p 'test_*.py' -v 2>&1 | tee /tmp/game-ingest-v5-tests.log
 
-      - name: Package the validated v4-to-v5 tree delta
+      - name: Package every validated v4-to-v5 file
         shell: bash
         run: |
           set -euo pipefail
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
           python - <<'PY'
           import hashlib
           import json
@@ -132,34 +129,62 @@ jobs:
           files_root = destination / 'files'
           files_root.mkdir(parents=True, exist_ok=True)
 
-          completed = subprocess.run(
-              ['git', 'diff', '--name-status', '-z', base, '--', '.'],
-              check=True,
-              stdout=subprocess.PIPE,
-          )
-          fields = completed.stdout.split(b'\0')
-          if fields and fields[-1] == b'':
-              fields.pop()
-          index = 0
-          entries = []
+          tracked = subprocess.check_output(
+              ['git', 'diff', '--name-status', '-z', base, '--', '.']
+          ).split(b'\0')
+          if tracked and tracked[-1] == b'':
+              tracked.pop()
+
+          entries_by_path = {}
           deleted = []
-          while index < len(fields):
-              status = fields[index].decode('utf-8', errors='strict')
+          index = 0
+          while index < len(tracked):
+              status = tracked[index].decode('utf-8')
               index += 1
               code = status[:1]
+              previous = None
               if code in {'R', 'C'}:
-                  old = fields[index].decode('utf-8', errors='strict')
-                  new = fields[index + 1].decode('utf-8', errors='strict')
+                  previous = tracked[index].decode('utf-8')
+                  path = tracked[index + 1].decode('utf-8')
                   index += 2
-                  path = new
-                  previous = old
               else:
-                  path = fields[index].decode('utf-8', errors='strict')
+                  path = tracked[index].decode('utf-8')
                   index += 1
-                  previous = None
+              entries_by_path[path] = {'status': status, 'path': path}
+              if previous is not None:
+                  entries_by_path[path]['previous_path'] = previous
               if code == 'D':
                   deleted.append(path)
-                  entries.append({'status': status, 'path': path})
+
+          untracked = subprocess.check_output(
+              ['git', 'ls-files', '--others', '--exclude-standard', '-z']
+          ).split(b'\0')
+          for raw in untracked:
+              if not raw:
+                  continue
+              path = raw.decode('utf-8')
+              entries_by_path.setdefault(path, {'status': 'A', 'path': path})
+
+          required_new = {
+              'assets/project-modes/game/docs/game-ingest.md.template',
+              'assets/project-modes/game/ingest/game_adapter.py',
+              'assets/project-modes/game/ingest/routing.json',
+              'assets/skills-bundle/agents-skills/game-ingest/SKILL.md.bundled',
+              'assets/skills-bundle/agents-skills/game-ingest/agents/openai.yaml',
+              'assets/skills-bundle/agents-skills/ingest/scripts/ingest_core/__init__.py',
+              'assets/skills-bundle/agents-skills/ingest/scripts/ingest_core/adapter_contract.py',
+              'assets/skills-bundle/claude-adapters/game-ingest/SKILL.md.bundled',
+              'assets/skills-bundle/claude-adapters/game-ingest/agents/openai.yaml',
+              'scripts/tests/test_game_ingest.py',
+          }
+          missing_required = sorted(required_new - set(entries_by_path))
+          if missing_required:
+              raise SystemExit(f'candidate omitted required new files: {missing_required}')
+
+          entries = []
+          for path, item in sorted(entries_by_path.items()):
+              if item['status'].startswith('D'):
+                  entries.append(item)
                   continue
               source = Path(path)
               if not source.is_file():
@@ -167,30 +192,34 @@ jobs:
               target = files_root / path
               target.parent.mkdir(parents=True, exist_ok=True)
               shutil.copy2(source, target)
-              digest = hashlib.sha256(source.read_bytes()).hexdigest()
-              item = {'status': status, 'path': path, 'sha256': digest, 'size': source.stat().st_size}
-              if previous is not None:
-                  item['previous_path'] = previous
+              item['sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
+              item['size'] = source.stat().st_size
               entries.append(item)
 
           manifest = {
-              'schema': 'llm-wiki-game-ingest-v5-candidate-v1',
+              'schema': 'llm-wiki-game-ingest-v5-candidate-v2',
               'base_commit': base,
               'validated_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
               'entries': entries,
-              'deleted': deleted,
+              'deleted': sorted(deleted),
+              'required_new_files': sorted(required_new),
           }
           (destination / 'manifest.json').write_text(
               json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
               encoding='utf-8',
           )
           shutil.copy2('/tmp/game-ingest-v5-tests.log', destination / 'tests.log')
-          print(json.dumps({'changed_files': len(entries), 'deleted': deleted}, indent=2))
+          print(json.dumps({
+              'changed_files': len(entries),
+              'new_files': sum(item['status'].startswith('A') for item in entries),
+              'deleted': sorted(deleted),
+          }, indent=2))
           PY
 
       - uses: actions/upload-artifact@v4
         with:
-          name: game-ingest-v5-candidate
+          name: game-ingest-v5-candidate-complete
           path: /tmp/game-ingest-v5-candidate
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7
