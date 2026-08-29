@@ -46,94 +46,28 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Decode reviewed payload and apply it without pushing
+      - name: Decode the clean reviewed payload and apply it without pushing
         shell: bash
         run: |
           set -euo pipefail
+          cat .github/game-ingest-v5-payload-v2/part* > /tmp/game-ingest-v5.tar.xz.b64
           python - <<'PY'
           import base64
           import hashlib
           from pathlib import Path
 
-          expected = 'bed689fe1b2b7ab63d9e9e13971f4ee2f5e70be33c1033e1a6f820d235b7e401'
-          root = Path('.github/game-ingest-v5-payload')
-          parts = sorted(root.glob('part*'), key=lambda path: int(path.name.removeprefix('part')))
-          if not parts:
-              raise SystemExit('no Game ingest v5 payload parts were found')
-
-          compact_parts = [b''.join(path.read_bytes().split()) for path in parts]
-          compact = b''.join(compact_parts)
-
-          def matching_decode(candidate: bytes):
-              if len(candidate) % 4:
-                  return None
-              try:
-                  decoded = base64.b64decode(candidate, validate=True)
-              except Exception:
-                  return None
-              return decoded if hashlib.sha256(decoded).hexdigest() == expected else None
-
-          decoded = matching_decode(compact)
-          repair = None
-          if decoded is None and len(compact) % 4 == 1:
-              suspicious_parts = [index for index, value in enumerate(compact_parts) if len(value) % 4 == 1]
-              search_ranges = []
-              offset = 0
-              for index, value in enumerate(compact_parts):
-                  if index in suspicious_parts:
-                      search_ranges.append((index, offset, offset + len(value)))
-                  offset += len(value)
-              if not search_ranges:
-                  search_ranges = [(-1, 0, len(compact))]
-
-              matches = []
-              for part_index, start, end in search_ranges:
-                  for position in range(start, end):
-                      candidate = compact[:position] + compact[position + 1:]
-                      candidate_decoded = matching_decode(candidate)
-                      if candidate_decoded is not None:
-                          matches.append((part_index, position, candidate_decoded))
-                          if len(matches) > 1:
-                              break
-                  if len(matches) > 1:
-                      break
-
-              if not matches and search_ranges != [(-1, 0, len(compact))]:
-                  for position in range(len(compact)):
-                      candidate = compact[:position] + compact[position + 1:]
-                      candidate_decoded = matching_decode(candidate)
-                      if candidate_decoded is not None:
-                          matches.append((-1, position, candidate_decoded))
-                          if len(matches) > 1:
-                              break
-
-              if len(matches) != 1:
-                  raise SystemExit(
-                      f'expected exactly one SHA-verified one-character repair, found {len(matches)}; '
-                      f'base64_bytes={len(compact)}, part_lengths={[len(value) for value in compact_parts]}'
-                  )
-              part_index, position, decoded = matches[0]
-              prefix = sum(len(value) for value in compact_parts[:part_index]) if part_index >= 0 else 0
-              repair = {
-                  'part': parts[part_index].name if part_index >= 0 else 'full-stream-fallback',
-                  'stream_offset': position,
-                  'part_offset': position - prefix if part_index >= 0 else position,
-                  'removed_byte': compact[position:position + 1].decode('ascii', errors='backslashreplace'),
-              }
-
-          if decoded is None:
-              raise SystemExit(
-                  f'payload could not be decoded to the expected SHA-256; '
-                  f'base64_bytes={len(compact)}, part_lengths={[len(value) for value in compact_parts]}'
-              )
-
+          source = Path('/tmp/game-ingest-v5.tar.xz.b64').read_bytes()
+          if len(source) != 31872:
+              raise SystemExit(f'unexpected Base64 length: {len(source)}')
+          decoded = base64.b64decode(source, validate=True)
           digest = hashlib.sha256(decoded).hexdigest()
+          expected = 'f3244efb5d32d6c125d145df69e60eb616e20fc6947570684a58b1f6f069b45e'
+          if digest != expected:
+              raise SystemExit(f'payload sha256 mismatch: {digest} != {expected}')
           Path('/tmp/game-ingest-v5.tar.xz').write_bytes(decoded)
-          print(f'payload_parts={len(parts)}')
-          print(f'original_base64_bytes={len(compact)}')
+          print(f'base64_bytes={len(source)}')
           print(f'archive_bytes={len(decoded)}')
           print(f'archive_sha256={digest}')
-          print(f'unique_repair={repair}')
           PY
           xz -t /tmp/game-ingest-v5.tar.xz
           mkdir -p /tmp/game-ingest-v5
@@ -150,7 +84,10 @@ jobs:
               raise SystemExit('temporary candidate job marker is missing')
           path.write_text(text.split(marker, 1)[0].rstrip() + '\n', encoding='utf-8')
           PY
-          rm -rf .github/game-ingest-v5-payload .github/game-ingest-v5-bin
+          rm -rf \
+            .github/game-ingest-v5-payload \
+            .github/game-ingest-v5-bin \
+            .github/game-ingest-v5-payload-v2
           rm -f .github/workflows/apply-game-ingest-v5.yml
 
       - name: Validate Python and JSON contracts
@@ -179,7 +116,7 @@ jobs:
           set -euo pipefail
           python -m unittest discover scripts/tests -p 'test_*.py' -v 2>&1 | tee /tmp/game-ingest-v5-tests.log
 
-      - name: Package only the reviewed v4-to-v5 tree delta
+      - name: Package the validated v4-to-v5 tree delta
         shell: bash
         run: |
           set -euo pipefail
@@ -242,12 +179,6 @@ jobs:
               'validated_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
               'entries': entries,
               'deleted': deleted,
-              'temporary_transport_removed': [
-                  '.github/workflows/apply-game-ingest-v5.yml',
-                  '.github/game-ingest-v5-payload/',
-                  '.github/game-ingest-v5-bin/',
-                  'temporary candidate job in .github/workflows/tests.yml',
-              ],
           }
           (destination / 'manifest.json').write_text(
               json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
