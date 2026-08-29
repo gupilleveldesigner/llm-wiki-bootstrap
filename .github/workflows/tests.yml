@@ -31,3 +31,174 @@ jobs:
           PY
       - name: Run unit tests
         run: python -m unittest discover scripts/tests -p 'test_*.py' -v
+
+  # GAME-INGEST-V5-CANDIDATE-START
+  game-ingest-v5-candidate:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/game-project-mode'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/game-project-mode
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Decode reviewed payload and apply it without pushing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import hashlib
+          from pathlib import Path
+
+          root = Path('.github/game-ingest-v5-payload')
+          parts = sorted(root.glob('part*'), key=lambda path: int(path.name.removeprefix('part')))
+          if not parts:
+              raise SystemExit('no Game ingest v5 payload parts were found')
+          encoded = b''.join(path.read_bytes() for path in parts)
+          compact = b''.join(encoded.split())
+          if len(compact) % 4:
+              raise SystemExit(f'base64 length is not divisible by four: {len(compact)}')
+          decoded = base64.b64decode(compact, validate=True)
+          digest = hashlib.sha256(decoded).hexdigest()
+          expected = 'bed689fe1b2b7ab63d9e9e13971f4ee2f5e70be33c1033e1a6f820d235b7e401'
+          if digest != expected:
+              raise SystemExit(f'payload sha256 mismatch: {digest} != {expected}')
+          Path('/tmp/game-ingest-v5.tar.xz').write_bytes(decoded)
+          print(f'payload_parts={len(parts)}')
+          print(f'base64_bytes={len(compact)}')
+          print(f'archive_bytes={len(decoded)}')
+          print(f'archive_sha256={digest}')
+          PY
+          xz -t /tmp/game-ingest-v5.tar.xz
+          mkdir -p /tmp/game-ingest-v5
+          tar -xJf /tmp/game-ingest-v5.tar.xz -C /tmp/game-ingest-v5
+          python /tmp/game-ingest-v5/apply.py "$PWD" /tmp/game-ingest-v5/new
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/tests.yml')
+          text = path.read_text(encoding='utf-8')
+          marker = '\n  # GAME-INGEST-V5-CANDIDATE-START\n'
+          if marker not in text:
+              raise SystemExit('temporary candidate job marker is missing')
+          path.write_text(text.split(marker, 1)[0].rstrip() + '\n', encoding='utf-8')
+          PY
+          rm -rf .github/game-ingest-v5-payload .github/game-ingest-v5-bin
+          rm -f .github/workflows/apply-game-ingest-v5.yml
+
+      - name: Validate Python and JSON contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q \
+            scripts \
+            assets/project-modes/game/runtime \
+            assets/project-modes/game/ingest \
+            assets/skills-bundle/agents-skills/ingest/scripts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for path in Path('assets').rglob('*.json.template'):
+              json.loads(path.read_text(encoding='utf-8'))
+          for path in Path('assets/project-modes/game/ingest').rglob('*.json'):
+              json.loads(path.read_text(encoding='utf-8'))
+          PY
+          git diff --check a556875623bb2a960a613711c2febf4dc5778e61 -- .
+
+      - name: Run complete repository regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover scripts/tests -p 'test_*.py' -v 2>&1 | tee /tmp/game-ingest-v5-tests.log
+
+      - name: Package only the reviewed v4-to-v5 tree delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          base = 'a556875623bb2a960a613711c2febf4dc5778e61'
+          destination = Path('/tmp/game-ingest-v5-candidate')
+          files_root = destination / 'files'
+          files_root.mkdir(parents=True, exist_ok=True)
+
+          completed = subprocess.run(
+              ['git', 'diff', '--name-status', '-z', base, '--', '.'],
+              check=True,
+              stdout=subprocess.PIPE,
+          )
+          fields = completed.stdout.split(b'\0')
+          if fields and fields[-1] == b'':
+              fields.pop()
+          index = 0
+          entries = []
+          deleted = []
+          while index < len(fields):
+              status = fields[index].decode('utf-8', errors='strict')
+              index += 1
+              code = status[:1]
+              if code in {'R', 'C'}:
+                  old = fields[index].decode('utf-8', errors='strict')
+                  new = fields[index + 1].decode('utf-8', errors='strict')
+                  index += 2
+                  path = new
+                  previous = old
+              else:
+                  path = fields[index].decode('utf-8', errors='strict')
+                  index += 1
+                  previous = None
+              if code == 'D':
+                  deleted.append(path)
+                  entries.append({'status': status, 'path': path})
+                  continue
+              source = Path(path)
+              if not source.is_file():
+                  raise SystemExit(f'changed path is not a regular file: {path}')
+              target = files_root / path
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(source, target)
+              digest = hashlib.sha256(source.read_bytes()).hexdigest()
+              item = {'status': status, 'path': path, 'sha256': digest, 'size': source.stat().st_size}
+              if previous is not None:
+                  item['previous_path'] = previous
+              entries.append(item)
+
+          manifest = {
+              'schema': 'llm-wiki-game-ingest-v5-candidate-v1',
+              'base_commit': base,
+              'validated_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'entries': entries,
+              'deleted': deleted,
+              'temporary_transport_removed': [
+                  '.github/workflows/apply-game-ingest-v5.yml',
+                  '.github/game-ingest-v5-payload/',
+                  '.github/game-ingest-v5-bin/',
+                  'temporary candidate job in .github/workflows/tests.yml',
+              ],
+          }
+          (destination / 'manifest.json').write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          shutil.copy2('/tmp/game-ingest-v5-tests.log', destination / 'tests.log')
+          print(json.dumps({'changed_files': len(entries), 'deleted': deleted}, indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-ingest-v5-candidate
+          path: /tmp/game-ingest-v5-candidate
+          if-no-files-found: error
+          retention-days: 7
