@@ -681,7 +681,7 @@ def independent_graph_input_files(root: Path) -> list[Path]:
                 continue
             if layer.name == "raw" and path.parent == layer and path.name.casefold() in HOST_INSTRUCTION_FILES:
                 continue
-            if layer.name == "wiki" and not (layer / "sources") in path.parents and path.name.casefold() in OPERATIONAL_WIKI_FILES:
+            if layer.name == "wiki" and not is_within(path, layer / "sources") and path.name.casefold() in OPERATIONAL_WIKI_FILES:
                 continue
             if relative.casefold() == "wiki/taxonomy.json":
                 continue
@@ -863,13 +863,13 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
             continue
         target = targets[0]
         raw_path = (root / target).resolve()
-        if not raw_path.is_file() or root.joinpath("raw") not in raw_path.parents:
+        if not raw_path.is_file() or not is_within(raw_path, root / "raw"):
             errors.append(f"Missing or escaped raw source: {target}")
             continue
         front = record["frontmatter"]
-        if root.joinpath("wiki", "sources") in record["path"].parents and independent_field(front, "type").casefold() != "source":
+        if is_within(record["path"], root / "wiki" / "sources") and independent_field(front, "type").casefold() != "source":
             errors.append(f"Source summary type is not source: {record['relative']}")
-        strict_record = complete_batch or root.joinpath("wiki", "sources") in record["path"].parents
+        strict_record = complete_batch or is_within(record["path"], root / "wiki" / "sources")
         if strict_record:
             if len(re.findall(r"(?m)^##+\s+", record["text"].split("---", 2)[-1])) < 3:
                 errors.append(f"Source summary has too few sections: {record['relative']}")
@@ -899,7 +899,7 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         if structural_ok:
             structurally_verified += 1
         semantic_required = (
-            root.joinpath("wiki", "sources") in record["path"].parents
+            is_within(record["path"], root / "wiki" / "sources")
             or independent_field(front, "type").casefold() == "source"
             or bool(independent_field(front, "semantic_status"))
         )
