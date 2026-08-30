@@ -176,7 +176,7 @@ class WorkspaceTransactionTests(unittest.TestCase):
             project = Path(temporary) / "Game"
             write(project / "project.godot")
             embedded = workspace.resolve_workspace_paths(project, layout="embedded")
-            self.assertEqual(embedded.vault_root, project / ".llm-wiki")
+            self.assertEqual(embedded.vault_root, (project / ".llm-wiki").resolve())
             with self.assertRaisesRegex(workspace.WorkspaceError, "legacy"):
                 workspace.resolve_workspace_paths(project, layout="legacy-in-place")
 

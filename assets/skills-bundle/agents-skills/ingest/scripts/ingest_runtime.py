@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -71,10 +72,20 @@ def normalize_changed_file(root: Path, value: str) -> tuple[Path, str]:
     candidate = candidate.resolve()
     wiki_root = (root / "wiki").resolve()
     try:
-        relative = candidate.relative_to(root).as_posix()
-        candidate.relative_to(wiki_root)
+        relative = "wiki/" + candidate.relative_to(wiki_root).as_posix()
     except ValueError as error:
-        raise ValueError(f"Changed file must stay under wiki/: {value}") from error
+        # Windows runners can expose the same directory through a short
+        # (8.3) path and a long path.  Path.relative_to compares strings and
+        # rejects that harmless spelling difference.  Resolve containment by
+        # canonical filesystem paths before falling back to relpath.
+        try:
+            candidate_path = os.path.normcase(os.path.realpath(str(candidate)))
+            wiki_path = os.path.normcase(os.path.realpath(str(wiki_root)))
+            if os.path.commonpath([candidate_path, wiki_path]) != wiki_path:
+                raise ValueError
+            relative = "wiki/" + os.path.relpath(candidate_path, wiki_path).replace("\\", "/")
+        except (OSError, ValueError) as fallback_error:
+            raise ValueError(f"Changed file must stay under wiki/: {value}") from fallback_error
     if not candidate.is_file():
         raise ValueError(f"Changed wiki file does not exist: {relative}")
     return candidate, relative

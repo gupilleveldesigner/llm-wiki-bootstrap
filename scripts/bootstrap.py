@@ -702,7 +702,11 @@ def upgrade(
 
         backup_dir = result.get("backup_dir")
         if isinstance(backup_dir, str) and backup_dir:
-            result["backup_dir"] = str(target / Path(backup_dir).relative_to(stage))
+            # Windows may spell the same temporary directory using its 8.3
+            # alias in one Path and its long form in another.  The backup is
+            # always created under this fixed root, so avoid Path.relative_to
+            # here and preserve the generated leaf directory name.
+            result["backup_dir"] = str(target / ".wiki-upgrade-bak" / Path(backup_dir).name)
         result["target"] = str(target)
         result["mutation_started"] = mutation_started
         result["transactional"] = True

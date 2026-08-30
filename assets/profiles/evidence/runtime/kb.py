@@ -33,6 +33,13 @@ CLAIM_STATUSES = {
 EVIDENCE_RELATIONS = {"supports", "contradicts", "context", "derived_from"}
 CLAIM_RELATIONS = {"supports", "contradicts", "supersedes", "duplicates", "related"}
 DECISION_STATUSES = {"PROPOSED", "ADOPTED", "SUPERSEDED", "REJECTED", "BLOCKED", "PAUSED"}
+
+
+def configure_utf8_stdout() -> None:
+    """Keep JSON output lossless on Windows consoles using a legacy code page."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8")
 DECISION_SOURCE_RELATIONS = {"records", "recommends", "adopts", "context"}
 TEXT_SUFFIXES = {
     ".txt", ".md", ".json", ".yaml", ".yml", ".log", ".csv",
@@ -1383,6 +1390,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    configure_utf8_stdout()
     args = parser().parse_args()
     try:
         if args.command == "selftest":
