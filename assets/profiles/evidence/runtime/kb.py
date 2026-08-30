@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -1008,7 +1009,7 @@ def fts_query(query: str) -> str:
 
 
 def search(root: Path, query: str, limit: int) -> dict[str, Any]:
-    with connect_db(root) as connection:
+    with closing(connect_db(root)) as connection:
         rows = connection.execute(
             """SELECT doc_type, doc_id, title, path,
                       snippet(search_index, 3, '[', ']', ' … ', 18) AS snippet,
@@ -1155,7 +1156,7 @@ def decision_trace(connection: sqlite3.Connection, root: Path, decision_id: str)
 
 
 def trace(root: Path, item_id: str) -> dict[str, Any]:
-    with connect_db(root) as connection:
+    with closing(connect_db(root)) as connection:
         source = connection.execute("SELECT * FROM sources WHERE id = ?", (item_id,)).fetchone()
         if source:
             linked_decisions = [
@@ -1199,7 +1200,7 @@ def trace(root: Path, item_id: str) -> dict[str, Any]:
 
 
 def status(root: Path) -> dict[str, Any]:
-    with connect_db(root) as connection:
+    with closing(connect_db(root)) as connection:
         built_at = connection.execute("SELECT value FROM metadata WHERE key='built_at'").fetchone()[0]
         counts = {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -1427,3 +1428,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
