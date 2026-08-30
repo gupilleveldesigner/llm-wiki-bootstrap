@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import sys
 from collections import Counter, defaultdict
@@ -47,7 +48,7 @@ def configure_utf8_output() -> None:
 
 
 def find_wiki_root(start: str | Path) -> Path:
-    candidate = Path(start).expanduser().resolve()
+    candidate = Path(start).expanduser()
     if candidate.is_file():
         candidate = candidate.parent
 
@@ -61,6 +62,19 @@ def find_wiki_root(start: str | Path) -> Path:
     if wiki_only is not None:
         return wiki_only
     raise AuditError(f"No LLM Wiki root containing wiki/ was found from: {candidate}")
+
+
+def is_within(path: Path, root: Path) -> bool:
+    current = path
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return True
+        except OSError:
+            pass
+        if current == current.parent:
+            return False
+        current = current.parent
 
 
 def get_frontmatter(text: str) -> str | None:
@@ -124,9 +138,7 @@ def validated_semantic_status(
     if len(raw_targets) != 1:
         return "partial", ["semantic reviewed Source must cite exactly one Raw target"]
     raw_path = (root / raw_targets[0]).resolve()
-    try:
-        raw_path.relative_to((root / "raw").resolve())
-    except ValueError:
+    if not is_within(raw_path, root / "raw"):
         return "partial", ["semantic reviewed Source Raw target escapes raw/"]
     if not raw_path.is_file():
         return "partial", ["semantic reviewed Source Raw target is missing"]
@@ -220,13 +232,9 @@ def resolve_link(
         if candidate.suffix.casefold() != ".md":
             variants.append(candidate.with_name(candidate.name + ".md"))
         for variant in variants:
-            try:
-                resolved = variant.resolve()
-                resolved.relative_to(root.resolve())
-            except (OSError, ValueError):
+            if not variant.is_file() or not is_within(variant, root):
                 continue
-            if resolved.is_file():
-                return resolved
+            return variant
 
     key = normalized.removesuffix(".md").casefold()
     if key in exact:
@@ -539,3 +547,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
