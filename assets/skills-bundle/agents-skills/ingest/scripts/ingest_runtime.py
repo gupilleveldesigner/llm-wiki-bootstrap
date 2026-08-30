@@ -117,6 +117,21 @@ def is_within(path: Path, root: Path) -> bool:
         current = current.parent
 
 
+def relative_by_identity(path: Path, root: Path) -> str:
+    parts: list[str] = []
+    current = path
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return "/".join(reversed(parts))
+        except OSError:
+            pass
+        if current == current.parent:
+            raise ValueError(f"path is outside root: {path}")
+        parts.append(current.name)
+        current = current.parent
+
+
 def graph_status(root: Path, strategy: str | None = None) -> str:
     strategy = strategy or graph_strategy(root)
     if strategy == "curated-finalizer":
@@ -187,11 +202,11 @@ def record_graphify_run(root: Path, host: str) -> dict[str, Any]:
     payload = {
         "version": 1,
         "host": host,
-        "graph": graph_path.relative_to(root).as_posix(),
+        "graph": relative_by_identity(graph_path, root),
         "graph_sha256": raw_sha256(graph_path),
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "inputs": {
-            path.relative_to(root).as_posix(): raw_sha256(path)
+            relative_by_identity(path, root): raw_sha256(path)
             for path in independent_graph_input_files(root)
             if path.is_file()
         },
@@ -991,7 +1006,7 @@ def semantic_plan(
         files = independent_raw_files(root)
     plans = [semantic_partition(path, max_lines=max_lines, overlap_lines=overlap_lines) for path in files]
     for plan, path in zip(plans, files):
-        plan["path"] = path.relative_to(root).as_posix()
+        plan["path"] = relative_by_identity(path, root)
     return {
         "root": str(root),
         "sources": len(plans),

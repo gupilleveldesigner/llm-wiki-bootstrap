@@ -425,19 +425,9 @@ def validate_game_documents(
                 errors.append(f"{relative}: raw provenance must stay under raw/: {raw_ref}")
                 continue
             raw_path = (root / normalized).resolve()
-            current = raw_path
-            inside_raw = False
-            while True:
-                try:
-                    if os.path.samefile(current, (root / "raw").resolve()):
-                        inside_raw = True
-                        break
-                except OSError:
-                    pass
-                if current == current.parent:
-                    break
-                current = current.parent
-            if not inside_raw:
+            try:
+                raw_path.relative_to((root / "raw").resolve())
+            except ValueError:
                 errors.append(f"{relative}: raw provenance escapes raw/: {raw_ref}")
                 continue
             if not raw_path.is_file():
