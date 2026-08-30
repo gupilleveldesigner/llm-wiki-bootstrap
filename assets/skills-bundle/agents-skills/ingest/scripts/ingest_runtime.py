@@ -655,7 +655,7 @@ def independent_raw_exclusions(root: Path) -> dict[str, list[str]]:
     for path in sorted((root / "raw").rglob("*"), key=lambda item: item.as_posix()):
         if not path.is_file() or (path.parent == root / "raw" and path.name.casefold() in {"agents.md", "claude.md", "gemini.md"}):
             continue
-        relative = path.relative_to(root).as_posix()
+        relative = relative_by_identity(path, root)
         if path.suffix.casefold() in attachments:
             result["skipped"].append(relative)
             continue
@@ -675,8 +675,8 @@ def independent_graph_input_files(root: Path) -> list[Path]:
         for path in sorted(layer.rglob("*"), key=lambda item: item.as_posix()):
             if not path.is_file():
                 continue
-            relative = path.relative_to(root).as_posix()
-            parts = {part.casefold() for part in path.relative_to(layer).parts}
+            relative = relative_by_identity(path, root)
+            parts = {part.casefold() for part in relative_by_identity(path, layer).split("/")}
             if "graphify-out" in parts:
                 continue
             if layer.name == "raw" and path.parent == layer and path.name.casefold() in HOST_INSTRUCTION_FILES:
@@ -700,7 +700,9 @@ def independent_source_records(root: Path) -> list[dict[str, Any]]:
         pages = [
             path
             for path in (root / "wiki").rglob("*.md")
-            if "graphify-out" not in {part.casefold() for part in path.relative_to(root / "wiki").parts}
+            if "graphify-out" not in {
+                part.casefold() for part in relative_by_identity(path, root / "wiki").split("/")
+            }
             and path.name.casefold() not in OPERATIONAL_WIKI_FILES
         ]
     records: list[dict[str, Any]] = []
@@ -710,7 +712,7 @@ def independent_source_records(root: Path) -> list[dict[str, Any]]:
         records.append(
             {
                 "path": page,
-                "relative": page.relative_to(root).as_posix(),
+                "relative": relative_by_identity(page, root),
                 "text": text,
                 "frontmatter": front,
                 "raw_targets": independent_raw_targets(text),
@@ -822,7 +824,7 @@ def graphify_host_manifest_error(root: Path) -> str | None:
     if manifest.get("graph_sha256") != raw_sha256(graph_path):
         return "Graphify host-run manifest does not match the current graph.json."
     current_inputs = {
-        path.relative_to(root).as_posix(): raw_sha256(path)
+        relative_by_identity(path, root): raw_sha256(path)
         for path in independent_graph_input_files(root)
         if path.is_file()
     }
@@ -920,7 +922,7 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
             if len(record["raw_targets"]) == 1
         }
         if scoped_verification
-        else {path.relative_to(root).as_posix().casefold() for path in raw_files}
+        else {relative_by_identity(path, root).casefold() for path in raw_files}
     )
     missing = raw_keys - covered
     uncovered_attachments = {
@@ -1171,3 +1173,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
