@@ -2,156 +2,72 @@
 
 [한국어](README.ko.md) · [English](README.en.md)
 
-A Claude Code / Codex skill that builds an **AI-operated personal knowledge vault (LLM Wiki)**, migrates an existing folder non-destructively, and upgrades an existing Wiki's operational skills from the **latest official GitHub repository version**.
+A skill that helps Claude Code or Codex build a personal knowledge Wiki while preserving original files and, when needed, tracking sources and review status.
 
-The default `standard` profile provides a lightweight `raw → wiki → Output` workflow. The `evidence` profile adds **source provenance, atomic Claims, Conflicts, Experiments, Open Questions, and reviewed Canon** for reverse engineering, technical research, multi-LLM analysis, and other work where verified observations must remain separate from inference and hypothesis.
+Files accumulate faster than people can organize them. AI summaries can blur what a source said and what a model inferred. Converting a folder or updating a Wiki can also feel risky.
 
-> Core Evidence principle: **Never treat “an LLM said it” as equivalent to “we verified it.”**
+This repository preserves originals in `raw/`, keeps AI-maintained knowledge in `wiki/`, offers simple `standard` and stricter `evidence` profiles, and separates creation, conversion, and updates into `new`, `migrate`, and `upgrade`. It does not automatically delete or overwrite existing files; conflicting managed documents become `.wiki-proposed` proposals.
 
-## Highlights
+> The shortest path: install the skill, then ask **“Convert this existing folder into a Wiki without losing files.”** You do not need to memorize commands.
 
-- Three-layer `raw/` immutable source → `wiki/` AI-maintained knowledge → `Output/` deliverable model
-- Separate lifecycle `mode` and knowledge-management `profile`
-- Non-destructive `new`, `migrate`, and `upgrade` lifecycles
-- `standard` and `evidence` vault profiles
-- Six base operational skills: `ingest`, `query`, `lint`, `session-memory`, `brief-tuner`, `wiki-audit`
-- Evidence-only `canon-review`
-- Claude/Codex router documents and project-local skill installation
-- One-to-one source summaries, SHA-256, ingest ledger, and completion gates
-- SKOS-shaped controlled vocabulary in `wiki/taxonomy.json`
-- Optional Graphify knowledge-graph integration
-- Optional Obsidian Web Clipper templates
-- Atomic cross-session handoff via `SAVE`
-- `.wiki-proposed` proposals instead of destructive overwrites
-- `.llm-wiki.json` manifest for profile/schema/upgrade provenance
-- Evidence source lineage, epistemic states, trace/verify/challenge queries
-- **GitHub latest upgrade** — resolve and pin the official repository's current default-branch HEAD commit
+## Quick links
 
-## Core model: lifecycle mode and vault profile are different axes
+- [30-second chooser](#30-second-chooser)
+- [Quick start](#quick-start)
+- [Standard](#standard-everyday-knowledge-organization)
+- [Evidence](#evidence-manage-ai-answers-as-reviewable-knowledge)
+- [Safety](#safety-for-existing-folders-and-wikis)
+- [Advanced CLI](#advanced-cli)
 
-### Lifecycle mode
+## 30-second chooser
 
-Lifecycle mode answers **what should happen to the target folder?**
+Choose two separate things: what to do to the folder, and how strictly to manage knowledge.
 
-| Mode | Target | Behavior |
-|---|---|---|
-| `new` | Empty or missing folder | Build a new Wiki |
-| `migrate` | Existing non-Wiki folder with accumulated material | Add Wiki scaffolding while preserving existing files |
-| `upgrade` | Existing Wiki with `raw/` + `wiki/` | Preserve knowledge/Raw and refresh operational skills/managed assets |
+| Choice | Use it when | Existing files | Example |
+|---|---|---|---|
+| `new` | The folder is missing or empty | Creates only the Wiki structure | New study Wiki |
+| `migrate` | A normal folder already contains material | No automatic delete, move, or overwrite | Existing project notes |
+| `upgrade` | The folder already has `raw/` and `wiki/` | Preserves originals and knowledge while refreshing managed assets | Update installed skills |
 
-### Vault profile
+| Choice | Use it when | Flow | Default |
+|---|---|---|---|
+| `standard` | Study material, notes, articles, videos, and books | `raw → wiki → Output` | Start here for most Wikis |
+| `evidence` | Reverse engineering, technical research, multi-LLM comparison, hypothesis testing | `Raw → Source → Claim → review → Canon` | Use when evidence and inference must stay separate |
 
-Vault profile answers **how should knowledge be managed?**
+[![A chooser that combines new, migrate, and upgrade with Standard and Evidence](docs/images/lifecycle-profile-matrix.svg)](docs/images/lifecycle-profile-matrix.svg)
 
-| Profile | Best for | Core flow |
-|---|---|---|
-| `standard` | Study, personal Wiki, article/video/book notes, project notes, second brain | `raw → wiki → Output` |
-| `evidence` | Reverse engineering, implementation inference, technical research, multi-LLM analysis, hypothesis/experiment/refutation tracking | `Raw → Source → Claim → Evidence/Conflict/Experiment → reviewed Canon` |
+`mode` and `profile` are independent axes. Valid combinations include `new + standard`, `migrate + evidence`, and `upgrade + evidence`. Upgrade never automatically downgrades Evidence to Standard.
 
-The axes are orthogonal:
+Game projects add a third axis, project mode (`project_mode: game`). It is not a lifecycle mode or a profile.
 
-```text
-new + standard
-new + evidence
-migrate + standard
-migrate + evidence
-upgrade + standard
-upgrade + evidence
-```
+## Quick start
 
-`upgrade` never automatically downgrades Evidence → Standard. Removing or weakening Evidence records requires a separately designed migration.
+### Requirements
 
-## Exact upgrade meaning: GitHub latest
+- Claude Code or Codex
+- Python 3.10+
+- GitHub HTTPS access for online `upgrade`
+- Graphify is optional
 
-In this project, user-facing `upgrade`, `update to latest`, and `refresh the skills` mean:
+The skill can use `python`, `py -3`, or `python3`. A Windows Microsoft Store execution alias without a real Python installation is not sufficient.
 
-> **Resolve the current default-branch HEAD of the official `gupilleveldesigner/llm-wiki-bootstrap` GitHub repository, pin the exact commit, and apply that commit's upgrade logic and bundled skills to the target Wiki.**
+### Install for Claude Code
 
-It does **not** mean “re-copy whatever possibly stale bundle happens to be installed locally.”
-
-### GitHub latest upgrade flow
-
-```text
-upgrade request
-   ↓
-read GitHub repository metadata
-   ↓
-resolve current default branch
-   ↓
-resolve that branch's latest 40-char commit SHA
-   ↓
-download ZIP for that exact SHA
-   ↓
-validate ZIP safety + required bootstrap/skill bundle paths
-   ↓
-only now may target Wiki mutation begin
-   ↓
-run downloaded latest bootstrap.py --mode upgrade
-   ↓
-back up existing skills
-   ↓
-apply latest bundled skills/runtime/profile assets
-   ↓
-verify
-   ↓
-record exact commit provenance in .llm-wiki.json
-```
-
-### Why pin a commit SHA instead of applying a moving branch archive
-
-The updater reads the current default branch first, but applies a ZIP addressed by the **validated exact commit SHA**. This avoids ambiguity if branch HEAD changes between discovery and download.
-
-Successful results include:
-
-```text
-upgrade_source: github
-bootstrap_repository: gupilleveldesigner/llm-wiki-bootstrap
-bootstrap_branch: <current default branch>
-bootstrap_commit: <exact 40-char SHA>
-```
-
-The target `.llm-wiki.json` also records:
-
-```json
-{
-  "last_upgrade": {
-    "source": "github",
-    "repository": "gupilleveldesigner/llm-wiki-bootstrap",
-    "branch": "master",
-    "commit": "<40-char SHA>",
-    "at": "<timestamp>"
-  }
-}
-```
-
-### GitHub failure behavior
-
-If network access, the GitHub API, ZIP download, or archive validation fails, the updater **does not mutate the target Wiki**.
-
-It also does not silently fall back to a stale local bundle. A GitHub-latest request cannot be reported as successful unless the exact GitHub commit was resolved.
-
-### Explicit local/offline upgrade
-
-Only when the user explicitly requests the currently installed local bundle or is intentionally working offline:
-
-```bash
-python scripts/upgrade.py \
-  --target ./ExistingWiki \
-  --config ./config.json \
-  --source local
-```
-
-This returns `upgrade_source: local` and must **not** be described as GitHub latest.
-
-## Installation
-
-### Claude Code
+macOS / Linux:
 
 ```bash
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.claude/skills/llm-wiki-bootstrap"
 ```
 
-### Codex
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$env:USERPROFILE\.claude\skills\llm-wiki-bootstrap"
+```
+
+### Install for Codex
+
+macOS / Linux:
 
 ```bash
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$HOME/.codex/skills/llm-wiki-bootstrap"
@@ -163,485 +79,268 @@ Windows PowerShell:
 git clone https://github.com/gupilleveldesigner/llm-wiki-bootstrap "$env:USERPROFILE\.codex\skills\llm-wiki-bootstrap"
 ```
 
-For Claude Code, use `.claude` instead of `.codex` in the same command.
-
 The repository includes `agents/openai.yaml` for Codex.
 
-### Requirements
-
-- Claude Code or Codex
-- Python 3.10+
-- GitHub HTTPS access for online upgrade
-- Graphify is optional
-
-The bootstrap can use `python`, `py -3`, or `python3`. A Windows Microsoft Store stub is not treated as a real Python installation.
-
-## Usage
-
-Claude Code:
+### Ask in plain language
 
 ```text
-/llm-wiki-bootstrap
-```
-
-Codex:
-
-```text
-$llm-wiki-bootstrap
-```
-
-Natural-language examples:
-
-```text
-Build an LLM Wiki for my cooking research.
+Create a Wiki for studying cooking.
 Convert this existing folder into a Wiki without losing files.
-Build an Evidence Wiki that separates observations, hypotheses, experiments, and Canon.
+Create an Evidence Wiki that separates AI answers from verified facts.
 Upgrade this Wiki's operational skills to the latest GitHub version.
-Upgrade this Standard Wiki to the latest version and activate the Evidence profile.
 ```
 
-Bootstrap does not re-ask information already supplied. If necessary it performs one short interview covering:
+You can also invoke `/llm-wiki-bootstrap` in Claude Code or `$llm-wiki-bootstrap` in Codex. The skill reuses information already supplied.
 
-1. Wiki topic and purpose
-2. Main source/material types
-3. Project name
+## Standard: everyday knowledge organization
 
-## CLI
-
-Base config:
-
-```json
-{
-  "project_name": "My Wiki",
-  "domain_summary": "One-sentence project purpose"
-}
+```text
+preserve originals (raw/) → organize and connect (wiki/) → publish results (Output/)
 ```
 
-The same base example is available as [`config.example.json`](config.example.json); [`config.game.example.json`](config.game.example.json) contains the fuller Game mode example. On Windows, `py -3` may replace `python` in the commands below.
+[![Three Standard layers: preserved originals in raw, organized knowledge in wiki, and shareable results in Output](docs/images/standard-structure.svg)](docs/images/standard-structure.svg)
 
-### Create Standard
+- `raw/` preserves articles, notes, transcripts, and other originals.
+- `wiki/` contains summaries and connections maintained from those originals.
+- `Output/` contains documents and reports intended for sharing.
 
-```bash
-python scripts/bootstrap.py \
-  --target ./MyWiki \
-  --config ./config.json \
-  --mode new \
-  --profile standard
-```
+If an AI-maintained Wiki page is wrong, the original remains available for review.
 
-### Create Evidence
-
-```bash
-python scripts/bootstrap.py \
-  --target ./ResearchWiki \
-  --config ./config.json \
-  --mode new \
-  --profile evidence
-```
-
-### Migrate an existing folder into Evidence
-
-```bash
-python scripts/bootstrap.py \
-  --target ./ExistingProject \
-  --config ./config.json \
-  --mode migrate \
-  --profile evidence
-```
-
-### Upgrade an existing Wiki from GitHub latest
-
-```bash
-python scripts/upgrade.py \
-  --target ./ExistingWiki \
-  --config ./config.json
-```
-
-### Promote Standard → Evidence while applying GitHub latest
-
-```bash
-python scripts/upgrade.py \
-  --target ./ExistingWiki \
-  --config ./config.json \
-  --profile evidence
-```
-
-### Internal local apply primitive
-
-`scripts/bootstrap.py --mode upgrade` is **not the user-facing “find latest GitHub version” entry point**. It is the low-level local apply primitive invoked inside the exact checkout downloaded by `upgrade.py`.
-
-Use `scripts/upgrade.py` for user-facing latest upgrade.
-
-## Standard profile layout
+<details>
+<summary>Full Standard folder layout</summary>
 
 ```text
 MyWiki/
-├─ raw/
-│  ├─ inbox/
-│  ├─ personal/
-│  ├─ journal/
-│  ├─ archive/
-│  ├─ assets/
-│  └─ reference/
-│     ├─ articles/
-│     ├─ youtube/
-│     ├─ podcasts/
-│     ├─ books/
-│     └─ research/
-├─ wiki/
-│  ├─ entities/
-│  ├─ concepts/
-│  ├─ projects/
-│  ├─ sources/
-│  ├─ index.md
-│  ├─ overview.md
-│  ├─ questions.md
-│  ├─ log.md
-│  ├─ taxonomy.json
-│  └─ ingest-ledger.json
-├─ Output/
-├─ instructions/
-├─ templates/
-├─ .agents/skills/
-├─ .claude/skills/
-├─ .session-memory/
-├─ CLAUDE.md
-├─ AGENTS.md
-├─ log.md
-├─ changelog.md
+├─ raw/inbox/ · personal/ · journal/ · archive/ · assets/ · reference/
+├─ wiki/entities/ · concepts/ · projects/ · sources/
+├─ Output/ · instructions/ · templates/
+├─ .agents/skills/ · .claude/skills/ · .session-memory/
+├─ CLAUDE.md · AGENTS.md · log.md · changelog.md
 └─ .llm-wiki.json
 ```
 
-`raw/` is immutable source material, `wiki/` is curated AI-maintained knowledge, and `Output/` holds external deliverables.
+</details>
 
-## Evidence profile layout
+## Evidence: manage AI answers as reviewable knowledge
 
-Evidence extends Standard rather than replacing it.
+### AI output is not stored as fact by default
 
-```text
-ResearchWiki/
-├─ raw/                         # immutable originals
-├─ wiki/
-│  ├─ sources/                 # 1:1 source records
-│  ├─ claims/                  # atomic claims
-│  ├─ conflicts/               # conflicting claims
-│  ├─ experiments/             # hypothesis tests
-│  ├─ questions/
-│  │  ├─ open/
-│  │  ├─ answered/
-│  │  └─ blocked/
-│  ├─ canon/
-│  │  └─ overview.md
-│  └─ evidence-model.md
-├─ instructions/
-│  └─ evidence-operations.md
-├─ templates/
-│  └─ evidence/
-│     ├─ source-record.md
-│     ├─ claim.md
-│     ├─ conflict.md
-│     ├─ experiment.md
-│     └─ canon-entry.md
-└─ .wiki-cache/
-   ├─ normalized/
-   ├─ index/
-   └─ embeddings/
-```
+[![Five Evidence steps from preserving the original through source linking, claim separation, evidence review, and adoption as current knowledge](docs/images/evidence-workflow.svg)](docs/images/evidence-workflow.svg)
 
-`.wiki-cache/` is **disposable derived data**, never the source of truth.
+1. **Preserve the original (Raw):** keep documents, code, logs, and AI answers in their original form.
+2. **Link the source (Source record):** connect extracted information to where it came from.
+3. **Separate claims (Atomic Claim):** split content into independently checkable statements.
+4. **Review evidence:** inspect observations, supporting and opposing material, experiments, and source independence.
+5. **Adopt current knowledge (Reviewed Canon):** use only reviewed material as the project's current conclusion.
 
-## Evidence data model
+Reviewed Canon is not absolute truth. It is the conclusion the project currently adopts based on available evidence. New evidence can change it. A Claim never becomes Canon automatically.
 
-### Source records
+### Understand Atomic Claims through one example
 
-Each Raw source has a one-to-one record under `wiki/sources/`. When available, record:
+The following scenario only explains Atomic Claims; it is not an event from this repository.
 
-- `raw_sha256`
-- provider/model
-- created/ingested time
-- source locator (section, line, message, function, etc.)
-- `parent_sources`
-- verification/epistemic state
+> “A test failed on Windows, so the product has a Windows-only regression.”
 
-External LLMs are Sources, not Authorities. Their outputs return to Raw and do not edit Canon directly.
+Split it into independently checkable statements:
 
-### Source lineage and independence
+- A test failed on windows-latest with Python 3.12.
+- The failure occurred in repository tests.
+- The Ubuntu job passed.
+- The cause is an operating-system-specific path representation difference.
+- The product code has a Windows-only regression.
+- The failure is a test-assumption problem rather than a product problem.
 
-```text
-ChatGPT answer
-  ↓ forwarded
-Qwen answer
-  ↓ forwarded
-Codex answer
-```
+The first three can be checked in logs. The path explanation needs investigation. Product regression and test-assumption failure may remain competing hypotheses until a fix is rerun.
 
-These are not automatically three independent pieces of evidence. If they share an information lineage, record `parent_sources` or equivalent provenance and do not double-count dependent repetitions.
+> If one part could be true while another is false, split the sentence into more than one Claim.
 
-### Claims
+### Read states before confidence numbers
 
-Reusable knowledge is extracted as **atomic Claims**.
+Start with directly observed, inferred, hypothesis, supported conclusion, rejected or disputed, and unknown. Numeric `confidence` is secondary and never overrides the state. Keep `UNKNOWN` when material is insufficient.
+
+<details>
+<summary>Actual Claim states</summary>
 
 | State | Meaning |
 |---|---|
-| `OBSERVED` | Directly observed in source/code/log/runtime result |
-| `INFERRED` | Reasonably inferred but not directly verified |
-| `HYPOTHESIS` | Active hypothesis requiring validation |
-| `SUPPORTED` | Multiple sources/experiments support it without decisive proof |
-| `CONFIRMED` | Direct evidence or sufficiently controlled reproduction exists |
-| `REJECTED` | Refuted; retained instead of deleted |
-| `DISPUTED` | Valid contradictory evidence exists |
-| `DEPRECATED` | Retained only as historical knowledge |
-| `UNKNOWN` | Current evidence is insufficient |
+| `OBSERVED` | Directly observed in source, code, log, or output |
+| `INFERRED` | Inferred but not directly verified |
+| `HYPOTHESIS` | Needs testing |
+| `SUPPORTED` | Supported but not decisive |
+| `CONFIRMED` | Directly evidenced or sufficiently verified |
+| `REJECTED` | Refuted and retained as history |
+| `DISPUTED` | Has valid conflicting evidence |
+| `DEPRECATED` | Retained for historical use only |
+| `UNKNOWN` | Cannot be judged from current material |
 
-Numeric confidence is secondary and never outranks the state.
+</details>
 
-At minimum, Claim-source relations distinguish:
+### Relayed model answers are not independent sources
 
 ```text
-originates
-supports
-contradicts
-derived_from
-mentions
+ChatGPT answer → given to Qwen → given to Codex
 ```
 
-When evidence is missing, keep `UNKNOWN` instead of filling gaps with plausible guesses.
+If the information descends from one answer, three models do not create three independent pieces of evidence. The system records source lineage with `parent_sources` or equivalent provenance. An external LLM answer is a Source, not an Authority.
 
-### Conflicts / Experiments / Questions
+### Review records form a graph, not one mandatory pipeline
 
-- `wiki/conflicts/` — preserve unresolved conflicting Claims instead of forcing a merge
-- `wiki/experiments/` — record hypothesis, setup, control, variant, metrics, result
-- `wiki/questions/open/` — unresolved research questions
-- `wiki/questions/answered/` — answered questions
-- `wiki/questions/blocked/` — blocked by missing evidence/tools
+[![Relationships among Raw, Source, Claim, optional Evidence, Conflict and Experiment records, and Reviewed Canon](docs/images/evidence-data-model.svg)](docs/images/evidence-data-model.svg)
 
-Failed experiments and rejected Claims remain research history.
+Evidence supports or contradicts a Claim. Conflict preserves incompatible Claims. Experiment records how a hypothesis was tested. Reviewed Canon references only reviewed Claims. Not every Claim must pass through Conflict and Experiment in sequence. `canon-review` is read-only by default.
 
-### Canon
+<details>
+<summary>Main folders added by Evidence</summary>
 
-`wiki/canon/` stores the project's **currently adopted, reviewed knowledge** and should remain small.
+```text
+wiki/sources/ · claims/ · decisions/ · conflicts/ · experiments/
+wiki/questions/open/ · answered/ · blocked/
+wiki/canon/ · evidence-model.md
+templates/evidence/ · instructions/evidence-operations.md · tools/kb.py
+.wiki-cache/normalized/ · index/ · embeddings/
+```
 
-Claims are never auto-promoted to Canon.
+`.wiki-cache/` is regenerable derived data, not authoritative project knowledge.
 
-Minimum review criteria:
+</details>
 
-1. source quality
-2. source independence / lineage
-3. contradictory evidence
-4. experiment evidence
-5. direct observation
-6. conflicts with existing Canon
+## Safety for existing folders and Wikis
 
-`canon-review` produces recommendations and is read-only by default. Canon changes require an explicit promotion/status-change request.
+### Convert an existing folder (`migrate`)
+
+- Existing files are not automatically deleted, edited, or moved.
+- Conflicting managed documents become `.wiki-proposed` proposals.
+- Moving material into `raw/` requires a per-file plan and approval.
+- Project settings such as `.git` are not treated as Raw.
+- A symlink inside the target stops the operation before writes can escape the Wiki root.
+
+### Update an existing Wiki (`upgrade`)
+
+- `raw/`, existing knowledge, and `Output/` are preserved.
+- The updater first resolves the default branch and exact 40-character commit SHA.
+- It does not touch the target before validating the ZIP and required bundle.
+- Apply and verification run in a sibling staging copy on the same filesystem.
+- Operational skills are backed up under `.wiki-upgrade-bak/<timestamp>-<unique-id>/`.
+- Apply or post-check failure keeps or restores the original Wiki.
+- GitHub failure is never reported as success using a stale local bundle.
+
+[![Safe upgrade flow that validates an exact GitHub commit before applying it](docs/images/upgrade-flow.svg)](docs/images/upgrade-flow.svg)
+
+Pinning the SHA makes the applied version reproducible. Success records `.llm-wiki.json.last_upgrade` and `bootstrap_commit`.
+
+`upgrade.py` finds and validates GitHub latest. `bootstrap.py --mode upgrade` applies an already prepared version. Promotion can leave `profile_activation_pending: true` when user-edited routers need review.
+
+<details>
+<summary>Internal upgrade flow</summary>
+
+```text
+metadata → default branch → exact SHA → ZIP validation
+→ sibling staging → backup → apply and post-check → rename or restore
+```
+
+Important results: `upgrade_source`, `bootstrap_commit`, `backup_dir`, and `profile_activation_pending`. `--source local` is explicit offline use and is never called GitHub latest.
+
+</details>
 
 ## Operational skills
 
-### `ingest`
+[![Operational loop from collecting originals through ingest, query, checks, and session handoff](docs/images/operations-loop.svg)](docs/images/operations-loop.svg)
 
-Ingest keeps `raw/` immutable while reflecting source material into `wiki/`.
+| Skill | Use it when | What it does | Does not do |
+|---|---|---|---|
+| `ingest` | New Raw should enter the Wiki | Creates linked Source records and summaries without editing Raw | Change Canon automatically |
+| `query` | You need a Wiki-grounded answer | Opens indexes, selected pages, and Raw as needed | Fill gaps from model memory |
+| `lint` | Links, metadata, or freshness need checks | Fixes safe mechanical issues | Decide facts, merge, or delete by judgment |
+| `session-memory` | Work must continue later | Saves state on `SAVE` with an atomic transaction | Mark unrun checks complete |
+| `brief-tuner` | A work brief needs calibration | Tunes templates through an interview | Choose the user's criteria |
+| `wiki-audit` | Installation needs checking | Read-only contract and environment inspection | Modify files |
+| `canon-review` | An Evidence conclusion may be promoted | Reviews source quality, independence, conflicts, and experiments | Promote automatically |
 
-Base completion contract:
+Evidence query modes are current answer (`answer`), investigation (`research`), claim verification (`verify`), opposing-evidence search (`challenge`), Raw trace (`trace`), and source comparison (`compare`).
 
-- never modify Raw
-- each Raw source needs a one-to-one `wiki/sources/<source>.md` summary
-- a catalog merely listing Raw paths is not completion evidence
-- source summaries need real content evidence such as path and SHA-256
-- categories come from controlled `wiki/taxonomy.json`
-- batch completion passes category audit and an independent verification gate
-- when Graphify is required, run host Graphify, record the run manifest, then pass `verify --complete-batch --require-graph`
-- on failure, reprocess only failed sources through `scan → ingest → finalize → verify`
+## Game project support
 
-Evidence extends the pipeline through:
-
-```text
-Raw → Source Record → atomic Claim → support/contradiction → Conflict/Experiment/Open Question → review-needed
-```
-
-**Ingest never auto-edits Canon.**
-
-### `query`
-
-Standard query uses progressive disclosure:
+Game is neither a lifecycle mode nor a profile. It is a separate project mode (`project_mode: game`) and works with `standard + game` or `evidence + game`.
 
 ```text
-catalog/index → candidate frontmatter → selected body → Raw only when exact verification is needed
+Workspace/
+├─ MyGame/       live code, scenes, data, source assets (project_root)
+└─ MyGame.wiki/  design, implementation checks, builds, playtests, decisions (vault_root)
 ```
 
-It never fills Wiki gaps from model memory and surfaces contradictions, stale knowledge, and unverified states.
+The default is a sibling sidecar Wiki. Engine markers for Unity, Unreal, Godot, and web projects select protected paths and source roots. Installation and upgrade write only to `vault_root`. Design and live implementation remain separate, ingest never overwrites either automatically, and `game_project.py --mode upgrade` updates the base Wiki and Game overlay together.
 
-Evidence query modes:
+Inspect the write plan first:
 
-| Mode | Behavior |
-|---|---|
-| `answer` | Canon → CONFIRMED/SUPPORTED → OBSERVED |
-| `research` | Canon, Claims, Conflicts, Experiments, Questions, relevant Raw |
-| `verify` | Verify a Claim against supporting/contradicting evidence and Raw |
-| `challenge` | Prioritize disputed/rejected Claims, conflicts, failed experiments, refutation |
-| `trace` | Follow `Canon → Claim → Evidence/Experiment → Source → Raw locator` |
-| `compare` | Compare source quality, independence, direct evidence, experiments, contradictions |
-
-### `lint`
-
-Standard lint checks links, frontmatter, index registration, orphan pages, source links, and freshness. Only mechanical fixes with one unambiguous answer are auto-applied.
-
-Evidence additionally checks:
-
-- Claims with no source
-- nonexistent source/claim/experiment/conflict IDs
-- broken Canon → Claim trace
-- broken Claim → Raw locator trace
-- `parent_sources` cycles/breaks
-- `CONFIRMED` with no recorded validation evidence
-- current Canon depending on a `REJECTED` Claim
-- hidden unresolved conflicts
-- orphan experiments/conflicts
-- obvious duplicate Claim families
-- `raw_sha256` mismatch
-
-### `session-memory`
-
-`SAVE` persists session state through a lock/journal-based atomic transaction. Unfinished work and unrun verification are not recorded as completed.
-
-### `brief-tuner`
-
-Interview-driven tuning of AI work briefs/templates to the user's work pattern.
-
-### `wiki-audit`
-
-Read-only audit of installed skills, runtimes, Graphify environment, and Wiki contracts.
-
-### `canon-review` — Evidence only
-
-Reviews source quality, source independence/lineage, contradictory evidence, experiments, direct observation, and Canon conflicts. It recommends by default rather than auto-promoting.
-
-## Taxonomy
-
-`wiki/taxonomy.json` uses a lightweight SKOS-shaped controlled vocabulary:
-
-- `prefLabel`
-- `altLabel`
-- `broader`
-- `scopeNote`
-
-Graphify community names are discovery aids, not taxonomy or truth.
-
-## Graphify
-
-Graphify is an optional exploration/visualization aid.
-
-Codex:
-
-```text
-$graphify <WIKI_ROOT>
-$graphify <WIKI_ROOT> --update
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --config ./config.game.json \
+  --mode migrate \
+  --profile standard \
+  --dry-run
 ```
 
-Claude:
+See [`config.game.example.json`](config.game.example.json) and the [Game project mode guide](GAME_PROJECT_MODE.en.md).
 
-```text
-/graphify <WIKI_ROOT>
-/graphify <WIKI_ROOT> --update
+## Optional features and preservation boundary
+
+Graphify is an optional exploration aid. Use `$graphify <WIKI_ROOT>` in Codex or `/graphify <WIKI_ROOT>` in Claude Code. Raw and Markdown remain authoritative.
+
+Obsidian Web Clipper templates under `templates/web-clipper/` collect material in `raw/reference/`; collected Raw is not current knowledge before ingest and review.
+
+Preserve `raw/`, `wiki/sources/`, Evidence `wiki/claims/`, `wiki/canon/`, `wiki/experiments/`, and needed `.session-memory/` records. `.wiki-cache/`, Graphify output, derived indexes, and embeddings are regenerable.
+
+## Advanced CLI
+
+The basic configuration matches [`config.example.json`](config.example.json).
+
+```json
+{"project_name": "My Wiki", "domain_summary": "One-sentence project purpose"}
 ```
 
-Do not invoke bare `graphify <path>` from a Python subprocess. After the host Graphify run, record it with `ingest_runtime.py record-graphify-run --host codex|claude` and run required batch verification.
+On Windows, `py -3` can replace `python`.
 
-Even in Evidence, Graphify is not the truth database. Markdown/frontmatter and Raw provenance remain canonical.
+```bash
+python scripts/bootstrap.py --target ./MyWiki --config ./config.json --mode new --profile standard
+python scripts/bootstrap.py --target ./ResearchWiki --config ./config.json --mode new --profile evidence
+python scripts/bootstrap.py --target ./ExistingProject --config ./config.json --mode migrate --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki --config ./config.json
+python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --source local
+```
 
-## Migrate safety
-
-- refuse apply when the target or any descendant is a symlink, preventing writes outside the Wiki root
-- never delete or rewrite existing files
-- root document conflicts become `.wiki-proposed`
-- produce a per-file old-path → Raw destination migration map
-- move files only after user approval
-- run batch `/ingest` afterward
-- do not move project configuration such as `.git` into Raw
-
-## Upgrade safety
-
-- GitHub latest is the default
-- no target mutation until remote resolution/download/archive validation succeeds
-- complete and verify the upgrade in sibling transaction staging, then apply with same-filesystem renames
-- restore the original Wiki if apply or post-apply verification fails
-- require temporary same-filesystem capacity for a staged vault copy during upgrade
-- pin an exact SHA before execution
-- back up existing operational skills under a collision-safe `.wiki-upgrade-bak/<timestamp>-<unique-id>/`
-- preserve `raw/`, existing knowledge, and `Output/`
-- customized router/operations documents use `.wiki-proposed`
-- Standard → Evidence adds Evidence folders/templates/canon-review
-- when router proposals are required, return `profile_activation_pending: true`
-- refuse automatic Evidence → Standard downgrade
-- never claim a GitHub-latest upgrade complete without reporting the exact `bootstrap_commit`
-
-## Obsidian Web Clipper
-
-Templates under `templates/web-clipper/` can collect web sources under `raw/reference/`. Collected Raw is still source material, not automatically accepted knowledge.
-
-## Preservation and recovery boundary
-
-### Preserve long-term
-
-- `raw/`
-- `wiki/sources/`
-- `wiki/claims/` (Evidence)
-- `wiki/canon/` (Evidence)
-- `wiki/experiments/` (Evidence)
-- relevant `.session-memory/` handoff records
-
-### Regenerable
-
-- `.wiki-cache/normalized/`
-- `.wiki-cache/index/`
-- `.wiki-cache/embeddings/`
-- Graphify output
-- derived indexes/caches
-
-Raw and reviewed records are durable; caches/indexes are disposable.
-
-## Smoke check
-
-After build/migrate/upgrade:
+## Post-install checks
 
 ```bash
 python ".claude/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
 ```
 
-Verify:
+Check core files and placeholders; Evidence runtime and `canon-review`; upgrade results and `.llm-wiki.json.last_upgrade.commit`; and, for Game, `tools/game_trace.py verify` plus project integrity.
 
-- correct target root
-- `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json`
-- no unresolved render placeholders
-- Evidence has `wiki/evidence-model.md`, `instructions/evidence-operations.md`, `canon-review`
-- upgrade result includes `upgrade_source`, `bootstrap_commit`, `backup_dir`
-- GitHub result SHA matches `.llm-wiki.json.last_upgrade.commit`
-- batch ingest completion gates actually passed before reporting completion
+## Design principles and non-goals
 
-## Design principles
+Raw is immutable. In Evidence, LLM output is a Source rather than an Authority. One lineage is not inflated into multiple independent sources. Rejections, conflicts, and failed experiments remain visible. Unknowns remain `UNKNOWN`. Claim and Canon are separate. `migrate` and `upgrade` are non-destructive. GitHub failure is never hidden behind a stale local fallback.
 
-- Raw is immutable
-- LLM output is a Source, not Authority, in Evidence
-- Claim and Canon are separate
-- dependent lineage is not over-counted as independent evidence
-- conflicts, rejected Claims, and failed experiments are retained
-- unknown stays `UNKNOWN`
-- Canon is never auto-promoted
-- migrate/upgrade remain non-destructive
-- GitHub latest upgrade records exact commit provenance
-- remote failure is never hidden by stale local fallback
-- DB/embedding/Graphify never replace Raw/Markdown canonical data
+The default system does not require Kubernetes, a large vector database, a Neo4j cluster, microservices, or an external database as the source of truth. It remains file- and Markdown-first.
 
-## Non-goals
+## Glossary
 
-The default installation does not require:
-
-- Kubernetes
-- large Vector DBs
-- Neo4j clusters
-- microservices
-- an external DB as source of truth
-
-The system remains file/Markdown-centered, with indexes/caches designed to be regenerable.
+| Term | Plain meaning |
+|---|---|
+| Raw | An original preserved without modification |
+| Source record | A record linking content to where it came from |
+| Claim | An independently judgeable statement |
+| Atomic Claim | A Claim containing one point |
+| Evidence | Material or observation supporting or contradicting a Claim |
+| Conflict | A preserved record of incompatible Claims |
+| Experiment | Conditions, method, metrics, and results used to test a hypothesis |
+| Canon | Knowledge currently adopted after review, not absolute truth |
+| provenance | A record of where information came from |
+| lineage | The path information followed through sources and AI systems |
+| locator | A pointer to an exact section, line, message, or function in Raw |
+| cache | Derived data that can be recreated from originals |
 
 ## License
 
