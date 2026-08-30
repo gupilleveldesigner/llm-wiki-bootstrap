@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="564" viewBox="0 0 420 740" role="img" aria-labelledby="title desc">
+  <title id="title">모바일용 LLM Wiki 애니메이션 흐름</title>
+  <desc id="desc">자연어 요청에서 lifecycle, vault profile, Raw 보존, Wiki 정리와 검토, Output 또는 Canon 활용까지 세로로 이어지는 흐름이 차례로 밝아진다.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0c1712"/><stop offset="1" stop-color="#0f1e18"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 1 L9 5 L0 9 Z" fill="#3d544a"/></marker>
+    <clipPath id="typing-clip"><rect x="34" y="58" width="0" height="22"><animate attributeName="width" values="0;0;214;214;0" keyTimes="0;0.04;0.23;0.96;1" dur="10s" repeatCount="indefinite"/></rect></clipPath>
+    <style>
+      .type{font-family:"Segoe UI","Apple SD Gothic Neo",sans-serif}.mono{font-family:"Cascadia Mono",Consolas,monospace}
+      .node{fill:#14251e;stroke:#3d544a;stroke-width:1.5}.title{font-size:17px;font-weight:700;fill:#d8e7df}.copy{font-size:13px;fill:#7f9c8f}
+      .edge{fill:none;stroke:#3d544a;stroke-width:2.5;marker-end:url(#arrow)}.trace{fill:none;stroke:#34d399;stroke-width:3.5;stroke-linecap:round}.active{fill:none;stroke:#34d399;stroke-width:2.5}
+      .reduced{display:none}@media (prefers-reduced-motion:reduce){.motion{display:none}.reduced{display:inline}}
+    </style>
+  </defs>
+  <rect x="1" y="1" width="418" height="738" rx="16" fill="url(#bg)" stroke="#20342b" stroke-width="1.5"/>
+
+  <rect x="16" y="16" width="388" height="194" rx="12" fill="#102019" stroke="#284238"/>
+  <circle cx="32" cy="32" r="4" fill="#ff5f56"/><circle cx="48" cy="32" r="4" fill="#ffbd2e"/><circle cx="64" cy="32" r="4" fill="#27c93f"/>
+  <text class="mono" x="388" y="36" text-anchor="end" font-size="9" fill="#6f8a7f">llm-wiki-bootstrap</text>
+  <text class="mono" x="22" y="74" font-size="13" fill="#4db18f" font-weight="700">$</text>
+  <text class="mono motion" x="34" y="74" font-size="12" fill="#d8e7df" clip-path="url(#typing-clip)">Evidence Wiki로 바꿔줘</text>
+  <rect class="motion" x="34" y="60" width="7" height="16" fill="#4db18f"><animate attributeName="x" values="34;34;248;248;34" keyTimes="0;0.04;0.23;0.96;1" dur="10s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;1;0.2;1;0" keyTimes="0;0.23;0.28;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+  <g class="mono motion" font-size="12">
+    <text x="24" y="112" fill="#62c4a2" opacity="0">lifecycle: migrate<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.31;0.33;0.96;1" dur="10s" repeatCount="indefinite"/></text>
+    <text x="24" y="140" fill="#c4b5fd" opacity="0">profile: evidence<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.40;0.42;0.96;1" dur="10s" repeatCount="indefinite"/></text>
+    <text x="24" y="168" fill="#fcd34d" opacity="0">기존 파일: 삭제·덮어쓰기 없음<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.50;0.52;0.96;1" dur="10s" repeatCount="indefinite"/></text>
+    <text x="24" y="194" fill="#6ee7b7" opacity="0">준비 완료<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.76;0.78;0.96;1" dur="10s" repeatCount="indefinite"/></text>
+  </g>
+  <g class="mono reduced" font-size="12"><text x="34" y="74" fill="#d8e7df">Evidence Wiki로 바꿔줘</text><text x="24" y="112" fill="#62c4a2">lifecycle: migrate</text><text x="24" y="140" fill="#c4b5fd">profile: evidence</text><text x="24" y="168" fill="#fcd34d">기존 파일: 삭제·덮어쓰기 없음</text><text x="24" y="194" fill="#6ee7b7">준비 완료</text></g>
+
+  <path class="edge" d="M210 288 V314"/><path class="edge" d="M210 372 V398"/><path class="edge" d="M210 456 V482"/><path class="edge" d="M210 540 V566"/><path class="edge" d="M210 624 V650"/>
+  <g class="type">
+    <rect class="node" x="60" y="230" width="300" height="58" rx="12"/><text class="title" x="210" y="254" text-anchor="middle">1. 자연어 요청</text><text class="copy" x="210" y="276" text-anchor="middle">무엇을 만들거나 바꿀지 말합니다</text>
+    <rect class="node" x="60" y="314" width="300" height="58" rx="12"/><text class="title" x="210" y="338" text-anchor="middle">2. lifecycle mode</text><text class="copy" x="210" y="360" text-anchor="middle">new · migrate · upgrade</text>
+    <rect class="node" x="60" y="398" width="300" height="58" rx="12"/><text class="title" x="210" y="422" text-anchor="middle">3. vault profile</text><text class="copy" x="210" y="444" text-anchor="middle">standard · evidence</text>
+    <rect class="node" x="60" y="482" width="300" height="58" rx="12"/><text class="title" x="210" y="506" text-anchor="middle">4. Raw 보존</text><text class="copy" x="210" y="528" text-anchor="middle">기존 원문은 바꾸지 않습니다</text>
+    <rect class="node" x="60" y="566" width="300" height="58" rx="12"/><text class="title" x="210" y="590" text-anchor="middle">5. Wiki 정리·검토</text><text class="copy" x="210" y="612" text-anchor="middle">요약·연결·근거 확인</text>
+    <rect class="node" x="60" y="650" width="300" height="58" rx="12"/><text class="title" x="210" y="674" text-anchor="middle">6. 현재 지식으로 활용</text><text class="copy" x="210" y="696" text-anchor="middle">Output · Reviewed Canon</text>
+  </g>
+  <g class="motion">
+    <rect class="active" x="60" y="230" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.28;0.30;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+    <path class="trace" d="M210 288 V314" stroke-dasharray="26" stroke-dashoffset="26"><animate attributeName="stroke-dashoffset" values="26;26;0;0;26" keyTimes="0;0.31;0.36;0.96;1" dur="10s" repeatCount="indefinite"/></path>
+    <rect class="active" x="60" y="314" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.36;0.38;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+    <path class="trace" d="M210 372 V398" stroke-dasharray="26" stroke-dashoffset="26"><animate attributeName="stroke-dashoffset" values="26;26;0;0;26" keyTimes="0;0.39;0.44;0.96;1" dur="10s" repeatCount="indefinite"/></path>
+    <rect class="active" x="60" y="398" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.44;0.46;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+    <path class="trace" d="M210 456 V482" stroke-dasharray="26" stroke-dashoffset="26"><animate attributeName="stroke-dashoffset" values="26;26;0;0;26" keyTimes="0;0.49;0.54;0.96;1" dur="10s" repeatCount="indefinite"/></path>
+    <rect class="active" x="60" y="482" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.54;0.56;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+    <path class="trace" d="M210 540 V566" stroke-dasharray="26" stroke-dashoffset="26"><animate attributeName="stroke-dashoffset" values="26;26;0;0;26" keyTimes="0;0.59;0.64;0.96;1" dur="10s" repeatCount="indefinite"/></path>
+    <rect class="active" x="60" y="566" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.64;0.66;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+    <path class="trace" d="M210 624 V650" stroke-dasharray="26" stroke-dashoffset="26"><animate attributeName="stroke-dashoffset" values="26;26;0;0;26" keyTimes="0;0.69;0.74;0.96;1" dur="10s" repeatCount="indefinite"/></path>
+    <rect class="active" x="60" y="650" width="300" height="58" rx="12" opacity="0"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.74;0.76;0.96;1" dur="10s" repeatCount="indefinite"/></rect>
+  </g>
+  <text class="type" x="210" y="726" text-anchor="middle" fill="#6f8a7f" font-size="11">모션 감소 설정에서는 완성된 정적 흐름으로 표시</text>
+</svg>
