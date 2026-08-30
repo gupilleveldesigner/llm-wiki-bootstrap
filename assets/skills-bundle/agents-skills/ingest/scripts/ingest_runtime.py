@@ -66,26 +66,37 @@ def _has_meaningful_value(value: str) -> bool:
 
 
 def normalize_changed_file(root: Path, value: str) -> tuple[Path, str]:
-    candidate = Path(value)
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    candidate = candidate.resolve()
-    wiki_root = (root / "wiki").resolve()
+    raw_candidate = Path(value)
+    if not raw_candidate.is_absolute():
+        raw_candidate = root / raw_candidate
+    raw_wiki_root = root / "wiki"
+    candidate = raw_candidate.resolve()
+    wiki_root = raw_wiki_root.resolve()
     try:
-        relative = "wiki/" + candidate.relative_to(wiki_root).as_posix()
+        relative = "wiki/" + raw_candidate.relative_to(raw_wiki_root).as_posix()
     except ValueError as error:
         # Windows runners can expose the same directory through a short
         # (8.3) path and a long path.  Path.relative_to compares strings and
-        # rejects that harmless spelling difference.  Resolve containment by
-        # canonical filesystem paths before falling back to relpath.
+        # rejects that harmless spelling difference.  The input is still
+        # checked lexically, while the resolved path is checked for symlink
+        # escapes by comparing its ancestors to the real wiki root.
         try:
-            candidate_path = os.path.normcase(os.path.realpath(str(candidate)))
-            wiki_path = os.path.normcase(os.path.realpath(str(wiki_root)))
-            if os.path.commonpath([candidate_path, wiki_path]) != wiki_path:
+            relative_candidate = Path(value).as_posix()
+            if Path(value).is_absolute() or relative_candidate.startswith("../") or "/../" in relative_candidate:
                 raise ValueError
-            relative = "wiki/" + os.path.relpath(candidate_path, wiki_path).replace("\\", "/")
+            relative = "wiki/" + relative_candidate.removeprefix("wiki/")
         except (OSError, ValueError) as fallback_error:
             raise ValueError(f"Changed file must stay under wiki/: {value}") from fallback_error
+    current = candidate
+    while True:
+        try:
+            if os.path.samefile(current, wiki_root):
+                break
+        except OSError:
+            pass
+        if current == current.parent:
+            raise ValueError(f"Changed file must stay under wiki/: {value}")
+        current = current.parent
     if not candidate.is_file():
         raise ValueError(f"Changed wiki file does not exist: {relative}")
     return candidate, relative

@@ -22,7 +22,14 @@ def write_config(root: Path) -> Path:
 
 
 def run_json(command: list[str], *, cwd: Path) -> tuple[subprocess.CompletedProcess[str], dict]:
-    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
     payload = json.loads(completed.stdout) if completed.stdout.strip() else {}
     return completed, payload
 
