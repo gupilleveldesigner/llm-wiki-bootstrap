@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="380" viewBox="0 0 800 380" role="img" aria-labelledby="title desc">
+  <title id="title">lifecycle mode와 vault profile의 조합</title>
+  <desc id="desc">mode는 대상 폴더에 할 일을, profile은 지식을 관리하는 방식을 고른다. 세 mode와 두 profile은 독립적으로 조합된다.</desc>
+  <defs>
+    <style>
+      .type { font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif; }
+      .cell-title { font-size: 18px; font-weight: 700; }
+      .cell-copy { font-size: 14px; }
+    </style>
+  </defs>
+  <rect width="800" height="380" rx="18" fill="#f8fafc"/>
+  <rect x="24" y="22" width="752" height="54" rx="12" fill="#172033"/>
+  <text class="type" x="48" y="56" fill="#ffffff" font-size="22" font-weight="700">두 축을 분리하면 6가지 조합이 보입니다</text>
+  <text class="type" x="48" y="101" fill="#475569" font-size="16">mode = 무엇을 할까  ·  profile = 지식을 어떻게 다룰까</text>
+  <rect x="24" y="126" width="176" height="224" rx="14" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
+  <text class="type cell-title" x="48" y="158" fill="#9a3412">vault profile</text>
+  <rect x="44" y="178" width="136" height="64" rx="10" fill="#ffedd5"/>
+  <text class="type cell-title" x="60" y="204" fill="#9a3412">standard</text>
+  <text class="type cell-copy" x="60" y="227" fill="#7c2d12">raw → wiki → 산출물</text>
+  <rect x="44" y="258" width="136" height="72" rx="10" fill="#fef3c7"/>
+  <text class="type cell-title" x="60" y="286" fill="#854d0e">evidence</text>
+  <text class="type cell-copy" x="60" y="309" fill="#713f12">근거·가설·Canon 분리</text>
+  <rect x="224" y="126" width="552" height="224" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M224 140 Q224 126 238 126 H762 Q776 126 776 140 V174 H224 Z" fill="#e2e8f0"/>
+  <text class="type" x="449" y="156" text-anchor="middle" fill="#334155" font-size="16" font-weight="700">standard profile</text>
+  <text class="type" x="667" y="156" text-anchor="middle" fill="#334155" font-size="16" font-weight="700">evidence profile</text>
+  <line x1="340" y1="126" x2="340" y2="350" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="558" y1="126" x2="558" y2="350" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="224" y1="174" x2="776" y2="174" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="224" y1="232" x2="776" y2="232" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="224" y1="290" x2="776" y2="290" stroke="#cbd5e1" stroke-width="2"/>
+
+  <text class="type cell-title" x="248" y="199" fill="#334155">new</text>
+  <text class="type cell-copy" x="248" y="219" fill="#64748b">새 Wiki 생성</text>
+  <text class="type cell-title" x="248" y="257" fill="#334155">migrate</text>
+  <text class="type cell-copy" x="248" y="277" fill="#64748b">기존 폴더 전환</text>
+  <text class="type cell-title" x="248" y="315" fill="#334155">upgrade</text>
+  <text class="type cell-copy" x="248" y="335" fill="#64748b">기존 Wiki 갱신</text>
+
+  <rect x="364" y="187" width="170" height="32" rx="16" fill="#dbeafe"/>
+  <text class="type" x="449" y="209" text-anchor="middle" fill="#1e3a8a" font-size="15" font-weight="700">new + standard</text>
+  <rect x="582" y="187" width="170" height="32" rx="16" fill="#fef3c7"/>
+  <text class="type" x="667" y="209" text-anchor="middle" fill="#854d0e" font-size="15" font-weight="700">new + evidence</text>
+  <rect x="364" y="245" width="170" height="32" rx="16" fill="#dbeafe"/>
+  <text class="type" x="449" y="267" text-anchor="middle" fill="#1e3a8a" font-size="15" font-weight="700">migrate + standard</text>
+  <rect x="582" y="245" width="170" height="32" rx="16" fill="#fef3c7"/>
+  <text class="type" x="667" y="267" text-anchor="middle" fill="#854d0e" font-size="15" font-weight="700">migrate + evidence</text>
+  <rect x="364" y="303" width="170" height="32" rx="16" fill="#dbeafe"/>
+  <text class="type" x="449" y="325" text-anchor="middle" fill="#1e3a8a" font-size="15" font-weight="700">upgrade + standard</text>
+  <rect x="582" y="303" width="170" height="32" rx="16" fill="#fef3c7"/>
+  <text class="type" x="667" y="325" text-anchor="middle" fill="#854d0e" font-size="15" font-weight="700">upgrade + evidence</text>
+</svg>

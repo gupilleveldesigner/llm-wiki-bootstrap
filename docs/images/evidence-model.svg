@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="580" viewBox="0 0 800 580" role="img" aria-labelledby="title desc">
+  <title id="title">Evidence profile의 데이터 모델</title>
+  <desc id="desc">Raw 원문을 Source record로 남기고 원자적 Claim을 만든 뒤 Evidence, Conflict, Experiment를 거쳐 검토된 Canon으로 연결한다.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 1 L11 6 L0 11 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      .type { font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif; }
+      .card-title { font-size: 18px; font-weight: 700; }
+      .card-copy { font-size: 15px; }
+      .card-meta { font-size: 14px; }
+      .connector { fill: none; stroke: #64748b; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="800" height="580" rx="18" fill="#f8fafc"/>
+  <rect x="24" y="22" width="752" height="54" rx="12" fill="#172033"/>
+  <text class="type" x="48" y="56" fill="#ffffff" font-size="22" font-weight="700">Evidence profile: 주장에 근거의 계보를 붙입니다</text>
+  <text class="type" x="48" y="102" fill="#475569" font-size="16">Raw → Source → Claim → 검증·충돌 기록 → reviewed Canon</text>
+
+  <!-- Shared 3-column grid: x = 30 / 292 / 554, width = 216, inner left padding = 24. -->
+  <rect x="30" y="128" width="216" height="98" rx="14" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
+  <text class="type card-title" x="54" y="160" fill="#9a3412">Raw</text>
+  <text class="type card-copy" x="54" y="187" fill="#7c2d12">불변 원문</text>
+  <text class="type card-meta" x="54" y="210" fill="#7c2d12">경로 · SHA-256 기준</text>
+  <path class="connector" d="M246 177 H286" marker-end="url(#arrow)"/>
+
+  <rect x="292" y="128" width="216" height="98" rx="14" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text class="type card-title" x="316" y="160" fill="#1e3a8a">Source record</text>
+  <text class="type card-copy" x="316" y="187" fill="#1e40af">원문별 1:1 요약</text>
+  <text class="type card-meta" x="316" y="210" fill="#1e40af">provider · locator · lineage</text>
+  <path class="connector" d="M508 177 H548" marker-end="url(#arrow)"/>
+
+  <rect x="554" y="128" width="216" height="98" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text class="type card-title" x="578" y="160" fill="#5b21b6">Claim</text>
+  <text class="type card-copy" x="578" y="187" fill="#6d28d9">원자적 주장</text>
+  <text class="type card-meta" x="578" y="210" fill="#6d28d9">OBSERVED · INFERRED · 상태</text>
+
+  <!-- Claim branches from the bottom edge to exact top-center anchors. -->
+  <path class="connector" d="M662 226 V258 H138 V278" marker-end="url(#arrow)"/>
+  <path class="connector" d="M662 226 V258 H400 V278" marker-end="url(#arrow)"/>
+  <path class="connector" d="M662 226 V278" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="288" width="216" height="98" rx="14" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+  <text class="type card-title" x="54" y="320" fill="#065f46">Evidence</text>
+  <text class="type card-copy" x="54" y="347" fill="#047857">지지하는 근거</text>
+  <text class="type card-meta" x="54" y="370" fill="#047857">직접 관찰 · 독립성 확인</text>
+
+  <rect x="292" y="288" width="216" height="98" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="2"/>
+  <text class="type card-title" x="316" y="320" fill="#9f1239">Conflict</text>
+  <text class="type card-copy" x="316" y="347" fill="#be123c">상충하는 주장 보존</text>
+  <text class="type card-meta" x="316" y="370" fill="#be123c">unresolved를 숨기지 않음</text>
+
+  <rect x="554" y="288" width="216" height="98" rx="14" fill="#fffbeb" stroke="#fbbf24" stroke-width="2"/>
+  <text class="type card-title" x="578" y="320" fill="#92400e">Experiment</text>
+  <text class="type card-copy" x="578" y="347" fill="#a16207">가설을 시험한 기록</text>
+  <text class="type card-meta" x="578" y="370" fill="#a16207">setup · metrics · result</text>
+
+  <!-- Verification records converge on one bus, then enter Canon once. -->
+  <path class="connector" d="M138 386 V416 H662"/>
+  <path class="connector" d="M400 386 V416"/>
+  <path class="connector" d="M662 386 V416"/>
+  <path class="connector" d="M400 416 V432" marker-end="url(#arrow)"/>
+
+  <rect x="252" y="442" width="296" height="82" rx="16" fill="#0f766e"/>
+  <text class="type" x="400" y="475" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="700">reviewed Canon</text>
+  <text class="type" x="400" y="500" text-anchor="middle" fill="#ccfbf1" font-size="15">검토된 현재 지식 · 자동 승격하지 않음</text>
+
+  <rect x="180" y="540" width="440" height="24" rx="12" fill="#e2e8f0"/>
+  <text class="type" x="400" y="557" text-anchor="middle" fill="#334155" font-size="14" font-weight="700">외부 LLM 답변은 Authority가 아니라 Source</text>
+</svg>

@@ -29,6 +29,10 @@ Claude Code / Codex에서 폴더 하나를 **AI가 운영하는 개인 지식 �
 
 ## 핵심 모델: lifecycle mode와 vault profile은 다른 축이다
 
+[![lifecycle mode와 vault profile의 조합을 보여주는 2축 매트릭스](docs/images/lifecycle-profile-matrix.svg)](docs/images/lifecycle-profile-matrix.svg)
+
+> **읽는 법:** `mode`는 대상 폴더에 할 일을, `profile`은 지식을 다루는 방식을 고릅니다. 두 축을 조합해도 서로의 의미는 바뀌지 않습니다. 모바일에서는 이미지를 누르면 확대할 수 있습니다.
+
 ### Lifecycle mode
 
 대상 폴더에 **무슨 작업을 할지** 결정합니다.
@@ -96,6 +100,10 @@ ZIP 안전성 + 필수 파일/skills bundle 검증
    ↓
 .llm-wiki.json에 exact commit provenance 기록
 ```
+
+[![GitHub 최신 upgrade의 조회·SHA 고정·검증·적용 흐름](docs/images/upgrade-flow.svg)](docs/images/upgrade-flow.svg)
+
+> **핵심:** branch를 내려받아 바로 적용하지 않고, 검증한 exact commit만 staging에서 적용합니다. 중간 단계가 실패하면 대상 Wiki는 바꾸지 않습니다. 모바일에서는 이미지를 누르면 확대할 수 있습니다.
 
 ### 왜 branch ZIP이 아니라 exact SHA를 고정하나
 
@@ -274,6 +282,10 @@ python scripts/upgrade.py \
 
 ## Standard profile 구조
 
+[![Standard profile의 raw·wiki·Output 3계층 구조](docs/images/standard-structure.svg)](docs/images/standard-structure.svg)
+
+> `raw/`는 출처를 보존하고, `wiki/`는 정리·연결하며, `Output/`은 공유할 산출물을 담습니다. 모바일에서는 이미지를 누르면 확대할 수 있습니다.
+
 ```text
 MyWiki/
 ├─ raw/
@@ -351,6 +363,10 @@ ResearchWiki/
 `.wiki-cache/`는 **재생성 가능한 파생 데이터**이며 정본이 아닙니다.
 
 ## Evidence 데이터 모델
+
+[![Evidence profile의 Raw·Source·Claim·검증·Canon 연결 구조](docs/images/evidence-model.svg)](docs/images/evidence-model.svg)
+
+> **검토 경계:** Claim은 자동으로 Canon이 되지 않습니다. 근거의 품질·독립성·상충 여부·실험 결과를 확인한 뒤 현재 지식으로 채택합니다. 모바일에서는 이미지를 누르면 확대할 수 있습니다.
 
 ### Source record
 
@@ -435,6 +451,10 @@ Claim은 자동으로 Canon으로 승격되지 않습니다.
 `canon-review`는 recommendation을 만들지만 기본적으로 읽기 전용입니다. 사용자가 명시적으로 승격/상태 변경을 요청한 경우에만 Canon을 수정합니다.
 
 ## 운영 스킬
+
+[![LLM Wiki 운영의 수집·ingest·query·검증·SAVE 반복 workflow](docs/images/operations-loop.svg)](docs/images/operations-loop.svg)
+
+> **운영 원칙:** 수집한 Raw를 기준으로 ingest하고, query 결과를 trace하며, lint·audit로 계약을 점검한 뒤 `SAVE`로 다음 세션에 넘깁니다. 모바일에서는 이미지를 누르면 확대할 수 있습니다.
 
 ### `ingest`
 
