@@ -19,6 +19,17 @@ This repository preserves originals in `raw/`, keeps AI-maintained knowledge in 
 - [Safety](#safety-for-existing-folders-and-wikis)
 - [Advanced CLI](#advanced-cli)
 
+## See the flow
+
+<p align="center">
+  <picture>
+    <source media="(max-width: 600px)" srcset="docs/images/wiki-flow-animated-mobile.svg">
+    <img src="docs/images/wiki-flow-animated.svg" alt="Animated flow from a natural-language request through lifecycle and profile selection, Raw preservation, Wiki organization and review, and use as Output or Canon">
+  </picture>
+</p>
+
+The skill reads a plain-language request, chooses what should happen to the folder and how knowledge should be managed, preserves the originals, and uses only organized or reviewed knowledge in the Wiki and its outputs. Environments without animation support still show the completed flowchart.
+
 ## 30-second chooser
 
 Choose two separate things: what to do to the folder, and how strictly to manage knowledge.

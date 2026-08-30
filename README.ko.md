@@ -24,6 +24,17 @@ Claude Code 또는 Codex가 폴더 속 원문을 보존하면서 자료를 정�
 - [안전성](#기존-폴더와-기존-wiki의-안전성)
 - [고급 CLI](#고급-cli)
 
+## 한눈에 보는 흐름
+
+<p align="center">
+  <picture>
+    <source media="(max-width: 600px)" srcset="docs/images/wiki-flow-animated-mobile.svg">
+    <img src="docs/images/wiki-flow-animated.svg" alt="자연어 요청에서 lifecycle과 profile 선택, Raw 보존, Wiki 정리와 검토, Output 또는 Canon 활용으로 이어지는 애니메이션 흐름">
+  </picture>
+</p>
+
+자연어 요청을 읽어 대상 폴더에 할 일과 지식관리 방식을 고릅니다. 기존 원문은 보존하고, AI가 정리하거나 검토한 지식만 Wiki와 산출물에 반영합니다. 애니메이션을 지원하지 않는 환경에서는 완성된 흐름도가 그대로 보입니다.
+
 ## 30초 선택 가이드
 
 먼저 서로 다른 두 가지를 고릅니다.
