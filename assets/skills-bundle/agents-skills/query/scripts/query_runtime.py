@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ def configure_utf8_output() -> None:
 
 
 def find_wiki_root(start: str | Path) -> Path:
-    candidate = Path(start).expanduser().resolve()
+    candidate = Path(start).expanduser()
     if candidate.is_file():
         candidate = candidate.parent
 
@@ -37,6 +38,34 @@ def find_wiki_root(start: str | Path) -> Path:
         return wiki_only
 
     raise QueryRuntimeError(f"No LLM Wiki root containing wiki/ was found from: {candidate}")
+
+
+def is_within(path: Path, root: Path) -> bool:
+    current = path
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return True
+        except OSError:
+            pass
+        if current == current.parent:
+            return False
+        current = current.parent
+
+
+def relative_by_identity(path: Path, root: Path) -> str:
+    parts: list[str] = []
+    current = path
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return "/".join(reversed(parts))
+        except OSError:
+            pass
+        if current == current.parent:
+            raise QueryRuntimeError(f"Path is outside Wiki root: {path}")
+        parts.append(current.name)
+        current = current.parent
 
 
 def status_payload(root: Path) -> dict[str, Any]:
@@ -82,12 +111,12 @@ def resolve_wiki_document(root: Path, value: str) -> Path:
         if candidate.suffix.lower() != ".md":
             expanded.append(candidate.with_name(candidate.name + ".md"))
 
-    existing = next((path.resolve() for path in expanded if path.is_file()), None)
+    existing = next((path for path in expanded if path.is_file()), None)
     if existing is None:
         raise QueryRuntimeError(f"Wiki Markdown file not found: {value}")
 
-    wiki_root = (root / "wiki").resolve()
-    if not existing.is_relative_to(wiki_root):
+    wiki_root = root / "wiki"
+    if not is_within(existing, wiki_root):
         raise QueryRuntimeError(f"Only Markdown files inside wiki/ may be inspected: {value}")
     if existing.suffix.lower() != ".md":
         raise QueryRuntimeError(f"Only Markdown files are supported: {value}")
@@ -154,7 +183,7 @@ def frontmatter_payload(root: Path, values: list[str]) -> tuple[list[dict[str, A
             frontmatter = extract_frontmatter(path)
             items.append(
                 {
-                    "path": path.relative_to(root).as_posix(),
+                    "path": relative_by_identity(path, root),
                     "has_frontmatter": frontmatter is not None,
                     "frontmatter": frontmatter,
                     **semantic_metadata(frontmatter),
@@ -238,3 +267,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
