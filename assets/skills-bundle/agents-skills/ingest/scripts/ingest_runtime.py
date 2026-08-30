@@ -102,6 +102,21 @@ def normalize_changed_file(root: Path, value: str) -> tuple[Path, str]:
     return candidate, relative
 
 
+def is_within(path: Path, root: Path) -> bool:
+    """Check containment by filesystem identity, tolerating Windows 8.3 paths."""
+    current = path
+    root = root.resolve()
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return True
+        except OSError:
+            pass
+        if current == current.parent:
+            return False
+        current = current.parent
+
+
 def graph_status(root: Path, strategy: str | None = None) -> str:
     strategy = strategy or graph_strategy(root)
     if strategy == "curated-finalizer":
@@ -340,9 +355,7 @@ def validate_changed_files(root: Path, changed_files: Sequence[str]) -> list[str
                         errors.append(f"{relative}: reflected Wiki link does not exist: {target}")
             for target in raw_paths:
                 candidate = (root / target).resolve()
-                try:
-                    candidate.relative_to(raw_root)
-                except ValueError:
+                if not is_within(candidate, raw_root):
                     errors.append(f"{relative}: raw source escapes raw/: {target}")
                     continue
                 candidates = [candidate]
@@ -969,10 +982,8 @@ def semantic_plan(
             if not candidate.is_absolute():
                 candidate = root / candidate
             candidate = candidate.resolve()
-            try:
-                candidate.relative_to(raw_root)
-            except ValueError as error:
-                raise ValueError(f"Semantic-plan source must stay under raw/: {value}") from error
+            if not is_within(candidate, raw_root):
+                raise ValueError(f"Semantic-plan source must stay under raw/: {value}")
             if not candidate.is_file():
                 raise ValueError(f"Semantic-plan source does not exist: {value}")
             files.append(candidate)

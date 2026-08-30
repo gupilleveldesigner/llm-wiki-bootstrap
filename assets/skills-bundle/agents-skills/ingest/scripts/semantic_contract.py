@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -173,6 +174,21 @@ def effective_semantic_status(text: str) -> str:
     return "partial"
 
 
+def _relative_by_identity(path: Path, root: Path) -> str:
+    parts: list[str] = []
+    current = path
+    while True:
+        try:
+            if os.path.samefile(current, root):
+                return "/".join(reversed(parts))
+        except OSError:
+            pass
+        if current == current.parent:
+            raise ValueError(f"path is outside root: {path}")
+        parts.append(current.name)
+        current = current.parent
+
+
 def _resolve_wiki_target(root: Path, target: str) -> Path | None:
     normalized = target.strip().replace("\\", "/").removeprefix("./")
     candidates = [root / "wiki" / normalized, root / normalized]
@@ -182,7 +198,7 @@ def _resolve_wiki_target(root: Path, target: str) -> Path | None:
     for candidate in candidates:
         try:
             resolved = candidate.resolve()
-            resolved.relative_to((root / "wiki").resolve())
+            _relative_by_identity(resolved, (root / "wiki").resolve())
         except (OSError, ValueError):
             continue
         if resolved.is_file():
@@ -192,7 +208,7 @@ def _resolve_wiki_target(root: Path, target: str) -> Path | None:
 
 def _provenance_errors(root: Path, source_text: str, raw_path: Path, reflected_lines: list[str] | None) -> list[str]:
     errors: list[str] = []
-    raw_relative = raw_path.relative_to(root).as_posix().casefold()
+    raw_relative = _relative_by_identity(raw_path, root).casefold()
     source_id = field(source_text, "id").casefold()
     targets = WIKILINK_RE.findall("\n".join(reflected_lines or []))
     for target in targets:
