@@ -207,7 +207,7 @@ class ProviderRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reference"]["symbol"], "jump")
         self.assertEqual(result["reference"]["locator"], "L1-2")
         self.assertEqual(result["reference"]["symbol_resolution"], "unverified")
-        self.assertEqual(result["reference"]["uri"], (self.project / "player.py").as_uri())
+        self.assertEqual(result["reference"]["uri"], (self.project / "player.py").resolve().as_uri())
         self.assertEqual(before["scope"], "file")
         self.assertEqual(before, code_fingerprint(self.project, "player.py#jump"))
         self.assertTrue(self.route("HOW", live_ref="player.py")["reference"]["exists"])
