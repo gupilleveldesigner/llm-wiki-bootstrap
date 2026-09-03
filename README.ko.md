@@ -326,6 +326,15 @@ python scripts/game_project.py \
 
 설정 예시는 [`config.game.example.json`](config.game.example.json), 전체 계약은 [게임 프로젝트 모드](GAME_PROJECT_MODE.ko.md)에 있습니다.
 
+Game v6는 두 외부 그래프를 선택 provider로 연결합니다.
+`providers.code_intelligence: "codegraph"`는 HOW(구현 구조)를,
+`providers.knowledge_graph: "graphify"`는 WHAT(프로젝트 관계)을 담당합니다.
+WHY(의도·검증·결정)의 정본은 Wiki입니다. MCP가 없으면 로컬 조회로 돌아가며,
+그래프 데이터는 Wiki나 traceability에 복제하지 않습니다. 기존 v5 config와
+trace schema 2·baseline 1은 유지합니다. Game ingest의 핵심 검증은 그래프 없이
+완료할 수 있고, `verify --require-graph`는 기존 vault-local Graphify 계약을
+명시적으로 검사할 때만 사용합니다.
+
 ## 선택 기능과 보존 경계
 
 Graphify는 탐색·시각화를 돕는 선택 기능입니다. Codex는 `$graphify <WIKI_ROOT>`, Claude Code는 `/graphify <WIKI_ROOT>`로 실행합니다. Raw와 Markdown이 기준이며 Graphify나 embedding이 이를 대체하지 않습니다.

@@ -7,5 +7,9 @@
   "target_platforms": "Windows",
   "project_phase": "prototype",
   "layout": "sidecar",
-  "engine": "auto"
+  "engine": "auto",
+  "providers": {
+    "code_intelligence": "codegraph",
+    "knowledge_graph": "graphify"
+  }
 }

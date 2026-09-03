@@ -25,7 +25,7 @@
 - Query(질의) → 설치된 `query` 스킬을 읽고 `wiki/index.md`에서 시작한다.
 - Lint(점검) → 설치된 `lint` 스킬을 읽는다.
 - Wiki Audit(환경·스킬·Graphify 정합성) → 설치된 `wiki-audit` 스킬을 읽는다. 이 점검은 읽기 전용이다.
-- 그래프가 있는 폭넓은 탐색 질문 → `graphify query`를 먼저 쓰고 필요 시 `path`/`explain`을 쓴다.
+- 그래프가 있는 폭넓은 탐색 질문 → `graphify query`를 먼저 쓰고 필요 시 `path`/`explain`을 쓴다. Game mode에서는 `instructions/game-providers.md`의 WHAT/HOW/WHY 정책을 우선한다.
 {{PROFILE_ROUTER}}
 
 위키 변경·폭넓은 탐색 전 필독: [`instructions/wiki-operations.md`](instructions/wiki-operations.md)

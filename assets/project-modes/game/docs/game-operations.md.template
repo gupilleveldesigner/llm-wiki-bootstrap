@@ -58,6 +58,12 @@ layout_errors
 5. 구현 요청이면 project_root의 live source와 Git revision을 직접 확인한다.
 6. operation을 분류한다.
 
+외부 보조 조회가 필요하면 `instructions/game-providers.md`에 따라
+WHAT → Graphify / HOW → CodeGraph / WHY → Wiki로 라우팅한다.
+`python tools/game_providers.py status`는 선택 상태만 확인한다. 실제 호스트의
+연결·기본 corpus·스키마를 확인할 수 없으면 로컬 조회로 돌아간다.
+provider 출력은 구현·검증·baseline 승인 근거를 자동 생성하지 않는다.
+
 ## Operations
 
 ### define

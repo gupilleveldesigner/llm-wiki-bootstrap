@@ -26,6 +26,7 @@ updated: "{{TODAY}}"
 - [Game operations](../../instructions/game-project.md)
 - [Engine layout safety](../../instructions/game-engine-layouts.md)
 - [Game ingest](../../instructions/game-ingest.md)
+- [Optional providers](../../instructions/game-providers.md)
 - [Traceability index](traceability.json)
 
 ## 설계

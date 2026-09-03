@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -87,7 +88,7 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertTrue((vault / "wiki/game/traceability.json").is_file())
             self.assertIn("checked_spec_digest", (vault / "templates/game/implementation-check.md").read_text(encoding="utf-8"))
             manifest = json.loads((vault / ".llm-wiki.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["project_mode_version"], 5)
+            self.assertEqual(manifest["project_mode_version"], 6)
             self.assertEqual(manifest["game_traceability"]["schema_version"], 2)
             self.assertEqual(manifest["game_traceability"]["sync_baseline_version"], 1)
             self.assertEqual(manifest["ingest"]["adapter"], "game")
@@ -98,6 +99,14 @@ class GameProjectModeTests(unittest.TestCase):
             self.assertEqual(manifest["game_project"]["project_root"], "../UnityGame")
             self.assertEqual(manifest["game_project"]["engine_adapter"], "unity")
             self.assertEqual(manifest["game_project"]["write_policy"], "vault-only")
+            self.assertEqual(manifest["game_project"]["provider_schema_version"], 1)
+            self.assertEqual(manifest["game_project"]["providers"], {"code_intelligence": None, "knowledge_graph": None})
+            provider_status = subprocess.run(
+                [sys.executable, str(vault / "tools/game_providers.py"), "--vault-root", str(vault), "status"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(provider_status.returncode, 0, provider_status.stderr)
+            self.assertFalse(json.loads(provider_status.stdout)["query_executed"])
             trace_index = json.loads((vault / "wiki/game/traceability.json").read_text(encoding="utf-8"))
             self.assertEqual(trace_index["schema_version"], 2)
             self.assertIn("sync_counts", trace_index)
@@ -147,13 +156,19 @@ class GameProjectModeTests(unittest.TestCase):
             root = Path(temporary)
             project = root / "UnityGame"
             make_unity_project(project)
-            config = write_config(root, source_roots=["Assets"])
+            selected = {"code_intelligence": "codegraph", "knowledge_graph": "graphify"}
+            config = write_config(root, source_roots=["Assets"], providers=selected)
             first = game_project.run_local_game_project(project, config, "migrate")
             vault = Path(first["vault_root"])
             model = vault / "wiki/game/model.md"
             runtime = vault / "tools/game_trace.py"
             model.write_text("# user-owned game model\n", encoding="utf-8")
             runtime.write_text("# user-modified trace runtime\n", encoding="utf-8")
+            provider_runtime = vault / "tools/game_providers.py"
+            provider_runtime.write_text("# previous provider runtime\n", encoding="utf-8")
+            provider_doc = vault / "instructions/game-providers.md"
+            provider_doc.write_text("# User provider instructions\n", encoding="utf-8")
+            write_config(root, source_roots=["Assets"])
 
             result = game_project.upgrade_game_from_local(
                 project,
@@ -179,6 +194,37 @@ class GameProjectModeTests(unittest.TestCase):
                 "# user-modified trace runtime\n",
             )
             self.assertIsNotNone(result["rollback_backup"])
+            manifest = json.loads((vault / ".llm-wiki.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["game_project"]["providers"], selected)
+            self.assertIn("PROVIDER_RUNTIME_VERSION = 1", provider_runtime.read_text(encoding="utf-8"))
+            self.assertEqual((base_backup / "tools/game_providers.py").read_text(encoding="utf-8"), "# previous provider runtime\n")
+            self.assertEqual(provider_doc.read_text(encoding="utf-8"), "# User provider instructions\n")
+            self.assertTrue(provider_doc.with_name("game-providers.md.wiki-proposed").is_file())
+
+    def test_bad_provider_input_and_future_contract_are_rejected_before_staging(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-provider-preflight-") as temporary:
+            root = Path(temporary)
+            project = root / "UnityGame"
+            make_unity_project(project)
+            config = write_config(root, providers={"code_intelligence": "graphify"})
+            with mock.patch.object(game_project, "make_staging_directory") as stage:
+                with self.assertRaisesRegex(ValueError, "does not support slot"):
+                    game_project.run_local_game_project(project, config, "migrate")
+                stage.assert_not_called()
+            self.assertFalse((root / "UnityGame.wiki").exists())
+            write_config(root)
+            installed = game_project.run_local_game_project(project, config, "migrate")
+            vault = Path(installed["vault_root"])
+            manifest_path = vault / ".llm-wiki.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["game_project"]["provider_schema_version"] = 99
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            before = manifest_path.read_bytes()
+            with mock.patch.object(game_project, "make_staging_directory") as stage:
+                with self.assertRaisesRegex(ValueError, "provider_schema_version"):
+                    game_project.run_local_game_project(project, config, "upgrade", vault_root=vault)
+                stage.assert_not_called()
+            self.assertEqual(before, manifest_path.read_bytes())
 
     def test_foreign_default_sidecar_requires_explicit_adoption(self) -> None:
         with tempfile.TemporaryDirectory(prefix="game-foreign-vault-") as temporary:

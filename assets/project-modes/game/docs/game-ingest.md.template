@@ -90,6 +90,13 @@ python .agents/skills/ingest/scripts/ingest_runtime.py finalize \
 
 Source/general 문서가 최소 하나 포함되어야 한다. Game 문서는 Source를 대신하지 않고 Source 반영 결과다.
 
+Game v6에서는 Graphify/CodeGraph가 없어도 `--complete-batch`의 핵심 검증을 수행한다.
+graph discovery·payload 읽기·curated finalizer는 생략하며 결과는
+`graph_status: not_checked_optional`이다. 의미 검토·Source provenance·분류·Game 반영·
+trace 오류는 계속 실패시킨다. 일반 `verify`도 graph 없이 확인한다.
+명시적인 `verify --require-graph`만 기존 vault-local Graphify provenance 계약을 검사한다.
+이는 외부 MCP provider 검증이 아니다. 보조 탐색은 `instructions/game-providers.md`를 따른다.
+
 ## 완료 상태 분리
 
 ```text

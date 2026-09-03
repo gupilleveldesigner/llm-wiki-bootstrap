@@ -22,6 +22,11 @@ LLM Wiki의 컨텍스트는 저장 공간이 아니라 과업별 예산이다. �
 
 ## 핵심 원칙
 
+대상이 `project_mode: game`이면 `instructions/game-providers.md`의 선택 provider 정책을
+먼저 적용한다. WHAT의 관계 후보는 Graphify, HOW의 코드 질문은 CodeGraph/game-project,
+WHY의 의도·검증·결정은 Wiki를 따른다. 확인된 MCP 연결·기본 corpus가 없으면 로컬 조회로
+돌아간다. 보조 그래프 결과로 정본·출처·검증 상태를 대체하지 않는다.
+
 - **물리적 파일은 분리하지 않는다.** YAML frontmatter와 Markdown 본문은 같은 파일에 두고, 읽기 단계만 분리한다. 별도 메타데이터 사본을 만들면 본문과 불일치할 수 있다.
 - **후보 선별 전에는 본문을 열지 않는다.** `cat`, `Get-Content -Raw`, 일반 파일 전체 읽기처럼 본문까지 컨텍스트에 넣는 호출을 후보 문서에 사용하지 않는다.
 - 벡터 DB·임베딩 검색은 기본 근거가 아니다. 사람이 관리하는 `index.md` 또는 대상 Wiki의 catalog에서 시작한다. 대상 규칙이 Graphify 같은 보조 탐색을 요구하면 후보 경로 탐색에만 사용하고, 실제 주장은 Wiki 문서와 원문으로 확인한다.

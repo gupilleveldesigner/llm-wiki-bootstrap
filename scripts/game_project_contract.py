@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from game_provider_config import resolve_provider_settings
 from game_workspace import (
     MANAGED_MANIFEST_NAME,
     MANAGED_MANIFEST_SCHEMA_VERSION,
@@ -16,7 +17,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPOSITORY_ROOT / "assets"
 MANIFEST_NAME = ".llm-wiki.json"
 PROJECT_MODE = "game"
-PROJECT_MODE_VERSION = 5
+PROJECT_MODE_VERSION = 6
 TRACEABILITY_SCHEMA_VERSION = 2
 SYNC_BASELINE_VERSION = 1
 INGEST_SCHEMA_VERSION = 3
@@ -25,6 +26,12 @@ GAME_INGEST_LEDGER_VERSION = 3
 GAME_SKILL = "game-project"
 GAME_INGEST_SKILL = "game-ingest"
 GAME_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROJECT-MODE -->"
+GAME_PROVIDER_ROUTER_MARKER = "<!-- LLM-WIKI:GAME-PROVIDERS:1 -->"
+GAME_PROVIDER_CONFIG_SOURCE = "scripts/game_provider_config.py"
+GAME_PROVIDER_CONFIG_DESTINATION = "tools/game_provider_config.py"
+GAME_PROVIDERS_RUNTIME_SOURCE = "project-modes/game/runtime/game_providers.py"
+GAME_PROVIDERS_RUNTIME_DESTINATION = "tools/game_providers.py"
+GAME_PROVIDERS_DOC = "instructions/game-providers.md"
 GAME_TRACE_RUNTIME_SOURCE = "project-modes/game/runtime/game_trace.py"
 GAME_TRACE_RUNTIME_DESTINATION = "tools/game_trace.py"
 GAME_TRACE_INDEX_SOURCE = "project-modes/game/docs/traceability.json.template"
@@ -75,6 +82,7 @@ GAME_DOCS = (
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md", True, True),
     ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC, True, True),
     ("project-modes/game/docs/game-ingest.md.template", GAME_INGEST_DOC, True, True),
+    ("project-modes/game/docs/game-providers.md.template", GAME_PROVIDERS_DOC, True, True),
     ("project-modes/game/docs/game-taxonomy.json.template", "wiki/game/taxonomy.json", True, True),
 )
 
@@ -83,6 +91,9 @@ GAME_CONTRACT_FILES = (
     ("project-modes/game/docs/game-operations.md.template", "instructions/game-project.md"),
     ("project-modes/game/docs/game-engine-layouts.md.template", GAME_ENGINE_LAYOUT_DOC),
     ("project-modes/game/docs/game-ingest.md.template", GAME_INGEST_DOC),
+    ("project-modes/game/docs/game-providers.md.template", GAME_PROVIDERS_DOC),
+    (GAME_PROVIDER_CONFIG_SOURCE, GAME_PROVIDER_CONFIG_DESTINATION),
+    (GAME_PROVIDERS_RUNTIME_SOURCE, GAME_PROVIDERS_RUNTIME_DESTINATION),
     ("project-modes/game/docs/game-index.md.template", "wiki/game/index.md"),
     ("project-modes/game/docs/game-CLAUDE.md.template", "wiki/game/CLAUDE.md"),
     ("project-modes/game/docs/traceability.json.template", GAME_TRACE_INDEX_DESTINATION),
@@ -106,13 +117,16 @@ GAME_CONTRACT_MARKERS = {
     "project-modes/game/docs/game-operations.md.template": "vault-only write policy",
     "project-modes/game/docs/game-engine-layouts.md.template": "sidecar",
     "project-modes/game/docs/game-ingest.md.template": "shared ingest runtime",
+    "project-modes/game/docs/game-providers.md.template": "WHAT → Graphify / HOW → CodeGraph / WHY → Wiki",
+    GAME_PROVIDER_CONFIG_SOURCE: "PROVIDER_SCHEMA_VERSION = 1",
+    GAME_PROVIDERS_RUNTIME_SOURCE: "PROVIDER_RUNTIME_VERSION = 1",
     "project-modes/game/docs/game-index.md.template": "project_mode: game",
     "project-modes/game/docs/game-CLAUDE.md.template": "game-project",
     "project-modes/game/docs/traceability.json.template": '"sync_baseline_version"',
     GAME_TRACE_RUNTIME_SOURCE: "TRACEABILITY_SCHEMA_VERSION = 2",
     GAME_INGEST_ADAPTER_SOURCE: "GAME_INGEST_ADAPTER_VERSION = 1",
     GAME_INGEST_ROUTING_SOURCE: '"adapter": "game"',
-    "skills-bundle/agents-skills/ingest/scripts/ingest_runtime.py": "dispatch_configured_adapter",
+    "skills-bundle/agents-skills/ingest/scripts/ingest_runtime.py": 'graph_policy: str = "legacy"',
     "skills-bundle/agents-skills/ingest/scripts/find_uningested.py": "skill_root: Path | None = None",
     "skills-bundle/agents-skills/ingest/scripts/ingest_core/adapter_contract.py": "configured_adapter",
     "project-modes/game/templates/feature-spec.md": "GAME-SYNC:DESIGN-START",
@@ -127,6 +141,7 @@ GAME_CONTRACT_MARKERS = {
 REQUIRED_GAME_REMOTE_PATHS = (
     "scripts/game_project.py",
     "scripts/game_project_contract.py",
+    GAME_PROVIDER_CONFIG_SOURCE,
     "scripts/game_project_install.py",
     "scripts/game_workspace.py",
     "scripts/template_render.py",
@@ -134,6 +149,8 @@ REQUIRED_GAME_REMOTE_PATHS = (
     "assets/project-modes/game/docs/game-operations.md.template",
     "assets/project-modes/game/docs/game-engine-layouts.md.template",
     "assets/project-modes/game/docs/game-ingest.md.template",
+    "assets/project-modes/game/docs/game-providers.md.template",
+    "assets/" + GAME_PROVIDERS_RUNTIME_SOURCE,
     "assets/project-modes/game/docs/traceability.json.template",
     "assets/project-modes/game/runtime/game_trace.py",
     "assets/project-modes/game/ingest/game_adapter.py",
@@ -179,6 +196,7 @@ def read_json_object(path: Path) -> dict[str, Any]:
 
 
 def validate_config(config: dict[str, Any], *, require_base: bool) -> None:
+    resolve_provider_settings(config)
     if require_base:
         for key in ("project_name", "domain_summary"):
             if not isinstance(config.get(key), str) or not str(config[key]).strip():
@@ -229,6 +247,7 @@ def resolve_game_metadata(
     manifest = read_manifest(target)
     previous = manifest.get("game_project")
     metadata = dict(previous) if isinstance(previous, dict) else {}
+    metadata.update(resolve_provider_settings(config, metadata))
     project_name = config.get("project_name") or manifest.get("project_name") or workspace.project_root.name
     metadata.setdefault("game_title", project_name)
     for key, default in GAME_DEFAULTS.items():
@@ -281,11 +300,17 @@ def render_file(source: Path, values: dict[str, str]) -> str:
     return render_template(source, values)
 
 
+def game_bundle_source(source_name: str, root: Path = REPOSITORY_ROOT) -> Path:
+    # Only static bundle contract entries are accepted by callers. Shared config
+    # lives in scripts/ so both the installer and installed planner use one copy.
+    return root / source_name if source_name.startswith("scripts/") else root / "assets" / source_name
+
+
 def validate_game_bundle(root: Path = REPOSITORY_ROOT) -> None:
     missing = [relative for relative in REQUIRED_GAME_REMOTE_PATHS if not (root / relative).is_file()]
     marker_errors: list[str] = []
     for source_name, marker in GAME_CONTRACT_MARKERS.items():
-        source = root / "assets" / source_name
+        source = game_bundle_source(source_name, root)
         if not source.is_file():
             marker_errors.append(f"missing contract source: {source_name}")
         elif marker not in source.read_text(encoding="utf-8"):

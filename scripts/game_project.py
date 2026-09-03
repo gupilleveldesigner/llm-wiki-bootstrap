@@ -11,6 +11,7 @@ from typing import Any
 
 import bootstrap as wiki_bootstrap
 import upgrade as wiki_upgrade
+from game_provider_config import resolve_provider_settings
 from game_project_contract import (
     GAME_TRACE_RUNTIME_DESTINATION,
     PROJECT_MODE,
@@ -212,6 +213,9 @@ def prepare_local_game_project(
     base_mode = determine_base_mode(workspace.vault_root, mode)
     previous_manifest = read_manifest(workspace.vault_root) if workspace.vault_root.exists() else {}
     previous_project_mode = str(previous_manifest.get("project_mode", "knowledge"))
+    # Refuse unsupported future provider contracts before creating a stage or
+    # rewriting metadata. Omitted selections survive upgrades.
+    resolve_provider_settings(config, previous_manifest.get("game_project"))
     stage = make_staging_directory(workspace)
     try:
         seed_staging_from_existing(workspace.vault_root, stage)

@@ -26,7 +26,15 @@ Game mode adds:
 Design Intent → Implementation State → Validation Evidence → Project Decision
 ```
 
-Game mode v5 keeps the live engine project and Wiki as separate roots, tracks both sides, and routes Raw game evidence through a shared ingest engine plus a Game-specific policy adapter. The default sibling sidecar preserves Unity, Unreal, Godot, and web-project layouts. Installation and upgrade use dry-run planning, engine protected paths, transaction staging, managed-file ownership, project-integrity verification, and rollback.
+Game mode v6 keeps the live engine project and Wiki as separate roots, retains v5 trace/baseline compatibility, and adds optional provider federation. The default sibling sidecar preserves Unity, Unreal, Godot, and web-project layouts. Installation and upgrade use dry-run planning, engine protected paths, transaction staging, managed-file ownership, project-integrity verification, and rollback.
+
+| Question | Layer |
+| --- | --- |
+| WHAT: broader project relationships | Graphify (`Graphify-Labs/graphify`) |
+| HOW: code structure, symbols, impact and tests | CodeGraph (`codegraph-ai/CodeGraph`) |
+| WHY: canonical intent, validation and decisions | LLM Wiki |
+
+Select both in [`config.game.example.json`](config.game.example.json). `tools/game_providers.py` plans scoped host queries and falls back to local files when MCP is missing or incompatible. It never starts providers or merges/copies their graph data. See the [reviewed design](docs/GAME_PROVIDER_FEDERATION_DESIGN.md) and [Game guide](GAME_PROJECT_MODE.en.md#optional-provider-federation-v6).
 
 ```bash
 python scripts/game_project.py \
@@ -53,7 +61,7 @@ python tools/game_trace.py verify --strict-sync
 
 The runtime also supports spec→code, code→spec, build/test/decision links, monorepo-safe Git-diff impact analysis, and non-Git change detection through fingerprints. It never automatically overwrites design with code or code with design; changed relations require inspection, proposal/decision, and a new accepted baseline.
 
-Game vaults install a `game-ingest` skill and configure generic `/ingest` to auto-route through `tools/ingest-adapters/game_adapter.py`. Raw scanning, Source records, SHA and semantic review, Graphify, and the base ledger remain shared; the adapter adds sidecar resolution, `raw_refs`/`evidence_refs`, typed Game validation, routing, trace post-processing, and ledger v3.
+Game vaults install a `game-ingest` skill and configure generic `/ingest` to auto-route through `tools/ingest-adapters/game_adapter.py`. Raw scanning, Source records, SHA and semantic review, and the base ledger remain shared; the adapter adds sidecar resolution, `raw_refs`/`evidence_refs`, typed Game validation, routing, trace post-processing, and ledger v3. Game completion checks work without external graphs and report `not_checked_optional`. Explicit `verify --require-graph` retains the old vault-local Graphify provenance check; knowledge-mode ingest keeps its existing policy.
 
 ```bash
 python .agents/skills/ingest/scripts/ingest_runtime.py scan --json

@@ -16,6 +16,7 @@
 3. `../../instructions/game-project.md`
 4. `../../instructions/game-engine-layouts.md`
 5. 설치된 `game-project` 스킬
+6. `../../instructions/game-providers.md` — WHAT → Graphify / HOW → CodeGraph / WHY → Wiki
 
 ## Game ingest
 
@@ -33,3 +34,5 @@
 - 새 문서는 `index.md`에 연결한다.
 - 변경 뒤 `python tools/game_trace.py rebuild`와 `verify`를 실행한다.
 - Evidence profile이면 Source/Claim/Decision/Experiment와 `evidence_refs`를 연결한다.
+- 외부 provider는 선택 기능이다. 확인된 호스트 연결·기본 corpus로만 조회하고,
+  없거나 바뀌면 로컬 조회로 돌아간다. graph payload·provider 내부 ID를 Wiki/trace에 복제하지 않는다.
