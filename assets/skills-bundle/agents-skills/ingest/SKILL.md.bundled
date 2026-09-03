@@ -14,6 +14,7 @@ Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르�
 - `project_mode: game`은 `tools/ingest-adapters/game_adapter.py`로 자동 라우팅한다. `/game-ingest`는 같은 경로를 명시적으로 호출하는 별도 UX이며 Raw/Source 엔진을 복제하지 않는다.
 - adapter가 선언됐는데 파일이 없거나 vault 밖을 가리키면 generic ingest로 조용히 fallback하지 않고 실패한다.
 - Game adapter는 typed Game 문서, `raw_refs/evidence_refs`, game taxonomy, trace 후처리를 담당하지만 `game_trace accept`를 자동 실행하지 않는다.
+- Game에서는 설치된 `game-ingest`와 `instructions/game-providers.md`가 아래 일반 Graphify 안내보다 우선한다. 보조 탐색은 WHAT 라우팅으로 선택하고, graph 생성·설치·갱신을 ingest 완료 조건으로 만들지 않는다.
 
 ## 대상 Wiki와 호스트
 
@@ -117,7 +118,13 @@ Andrej Karpathy의 LLM Wiki 패턴(`raw/` → `wiki/` → `Output/`)을 따르�
     python "<SKILL_ROOT>/scripts/ingest_runtime.py" finalize --root "<WIKI_ROOT>" \
       --changed-file "wiki/<대상 스키마의 지식 문서>.md"
     ```
-    런타임은 모든 대상에서 변경 파일이 1개 이상인지, 각 지식 문서의 `topics` 또는 `tags`가 비어 있지 않은지, `sources`·`source` 또는 본문의 raw 위키링크·평문 파일 경로가 실제 `raw/` 내부 파일을 가리키는지 먼저 검사한 뒤 다음 전략 중 하나를 선택한다.
+    Game adapter이면 설치된 `game-ingest`와 `instructions/game-providers.md`를 따른다.
+    Game의 finalize/status/verify는 외부 graph를 필수로 요구하지 않고 `not_checked_optional`로 보고한다.
+    `--complete-batch`의 Raw/Source·의미 검토·반영·trace 게이트는 유지하며, 일반 verify에서는
+    아래의 `--require-graph`를 붙이지 않는다. 명시적으로 요청한 vault-local Graphify 검사에만 사용한다.
+    아래 Graphify 생성·갱신·finalizer 전략은 기본 knowledge mode에 해당하며 Game에서는 실행하지 않는다.
+
+    기본 knowledge runtime은 변경 파일이 1개 이상인지, 각 지식 문서의 `topics` 또는 `tags`가 비어 있지 않은지, `sources`·`source` 또는 본문의 raw 위키링크·평문 파일 경로가 실제 `raw/` 내부 파일을 가리키는지 먼저 검사한 뒤 다음 전략 중 하나를 선택한다.
     - 대상에 `tools/graphify_knowledge/finalize_ingest.py`가 있으면 그 Wiki의 고급 후보 검증·원자적 승격 절차를 실행한다.
     - 표준 그래프가 루트 `graphify-out/`에 있으면 `WIKI_ROOT`, `wiki/graphify-out/`에 있으면 `WIKI_ROOT/wiki`를 Graphify 작업공간으로 갱신한다.
     - 그래프가 없으면 런타임이 `agent_action_required`와 호스트별 명령을 반환한다. Codex는 `python -m pip install graphifyy && graphify install --platform codex` 후 `$graphify <WIKI_ROOT>`를 실행하고, Claude는 `python -m pip install graphifyy && graphify install` 후 `/graphify <WIKI_ROOT>`를 실행한다. Python에서 bare `graphify <WIKI_ROOT>`를 직접 실행하지 않는다. 항상 그래프를 탐색에 사용하려면 Codex의 `graphify codex install` 또는 Claude의 `graphify claude install`을 선택적으로 추가한다.

@@ -20,6 +20,10 @@ The identities and interfaces were checked against primary sources on 2026-09-03
   The initial read tool is `codegraph_symbol_search(query, ...)`. Follow-up
   tools cover callers, callees, impact, and related tests. Symbol node IDs are
   provider-local; URI/line addressing uses zero-based lines.
+  The [server definitions](https://github.com/codegraph-ai/CodeGraph/blob/489ccf1612555510f8367e3e673181f6a1275fe4/crates/codegraph-server/src/mcp/tools.rs)
+  and [schema serializer](https://github.com/codegraph-ai/CodeGraph/blob/489ccf1612555510f8367e3e673181f6a1275fe4/crates/codegraph-server/src/mcp/protocol.rs)
+  confirm an object schema with required string `query` and an optional numeric
+  (JSON Schema `number`, not only `integer`) `limit`.
 - [Graphify README](https://github.com/Graphify-Labs/graphify/blob/33362d969292b57eda82f3fbd9eb5f3f5bc9bbc2/README.md)
   and [MCP source](https://github.com/Graphify-Labs/graphify/blob/33362d969292b57eda82f3fbd9eb5f3f5bc9bbc2/graphify/serve.py).
   Its default branch is `v8`. `query_graph` requires `question` and can accept

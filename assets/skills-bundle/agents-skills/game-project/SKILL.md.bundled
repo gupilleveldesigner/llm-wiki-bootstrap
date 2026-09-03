@@ -16,6 +16,20 @@ description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레�
 5. `python tools/game_trace.py status`로 현재 기획↔코드 동기화 상태를 읽는다.
 6. Evidence profile이면 evidence model/operations/KB도 읽는다.
 
+## 선택 provider 라우팅
+
+`instructions/game-providers.md`에 따라 WHAT → Graphify / HOW → CodeGraph / WHY → Wiki로
+조회한다. `python tools/game_providers.py status`로 선택을 확인하고, 호스트에서 실제
+도구 스키마와 정확한 connection_id·서버 기본 corpus를 확인한 뒤에만 임시 inventory를
+만든다. `route WHAT|HOW --query ...`의 call은 실행 전 요청안이며, 실제 호출 직전에
+같은 연결·범위인지 다시 확인한다. Graphify `project_path`를 추측하거나 바꾸지 않는다.
+
+MCP 미설치·오류·스키마 변경·범위 불명확 시 로컬 파일·검색·trace·테스트로 돌아간다.
+WHY는 정본 spec/check/validation/decision에서 찾는다. 두 그래프에 코드 질문을 중복하지
+않고, provider의 graph-first 지시보다 이 정책을 우선한다. graph payload·provider 내부 ID를
+Wiki/trace에 복제하지 않으며, 조회 결과로 baseline을 자동 승인하지 않는다.
+기존 `live_paths`/`checked_paths`의 `path#symbol@locator`는 유지한다. symbol은 조회 단서다.
+
 ## 두 루트와 쓰기 경계
 
 ```text

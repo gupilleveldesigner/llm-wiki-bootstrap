@@ -408,7 +408,7 @@ python tools/game_trace.py matrix
 
 ## Game-aware ingest
 
-Game mode v5는 공용 ingest engine과 vault-local Game adapter를 결합한다.
+Game mode v6는 공용 ingest engine과 vault-local Game adapter를 결합하며, v5의 trace/baseline 계약을 유지한다.
 
 ```text
 shared ingest: Raw scan → Source/SHA/semantic review → Graphify → ledger
@@ -430,6 +430,19 @@ instructions/game-ingest.md
 ```
 
 # 10. Game 운영 계약
+
+Game v6는 선택 provider를 추가한다. config의 `providers.code_intelligence: "codegraph"`,
+`providers.knowledge_graph: "graphify"`를 manifest `game_project.providers`에 저장한다.
+WHAT → Graphify / HOW → CodeGraph / WHY → Wiki를 따르며, 기존 config는 수정 없이
+유효하다. 새 설치의 생략은 비활성화, upgrade의 생략은 기존 선택 유지, 명시적 null은 해제다.
+알 수 없는 provider ID는 실행하지 않는다. provider schema version은 1이다.
+
+설치된 `tools/game_providers.py status`와 `route`는 호스트 질의 요청안만 반환한다.
+실제 도구 스키마와 connection_id·서버 기본 corpus를 확인하지 못하면 로컬 조회로 돌아간다.
+MCP 설치·시작·indexing·credential 탐색·graph 복제는 수행하지 않는다.
+`instructions/game-providers.md`를 읽고, Game ingest의 graph 검사 생략과 명시적인
+vault-local `verify --require-graph`를 구분한다. trace schema 2, baseline 1,
+`live_paths`/`checked_paths` 형식과 수동 baseline 승인은 유지한다.
 
 필독:
 

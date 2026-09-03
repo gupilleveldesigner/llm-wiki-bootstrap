@@ -8,9 +8,75 @@ Design Intent → Implementation State → Validation Evidence → Project Decis
 기획 정본 ↔ live 코드·씬·데이터·에셋 정본
 ```
 
-Game mode v5의 기본 원칙은 명확하다.
+Game mode v6는 v5의 비파괴 설치·trace 계약을 유지하고 선택 provider를 추가한다.
 
 > **엔진 프로젝트의 기존 구조는 유지하고, Wiki는 기본적으로 별도 sidecar vault에 설치한다.**
+
+## 선택 provider 연결 (v6)
+
+| 계층 | 담당 | 질문 |
+| --- | --- | --- |
+| LLM Wiki | 정본 지식, 의도, 검증, 결정 | WHY |
+| [CodeGraph](https://github.com/codegraph-ai/CodeGraph) | 심볼·호출·의존성·영향 범위·관련 테스트 | HOW |
+| [Graphify](https://github.com/Graphify-Labs/graphify) | 코드·문서·스키마·자료를 아우르는 프로젝트 관계 | WHAT |
+
+실제 구현의 기준은 live 엔진 프로젝트다. 두 provider의 그래프는 각각 유지하고,
+호스트의 범위가 확인된 조회와 파일·심볼 참조로 연결한다. 설치기는 provider를
+설치·시작·인덱싱하지 않는다. 노드·간선·쿼리 응답·provider 내부 ID를 Wiki나
+`traceability.json`에 복제하지 않으며, CodeGraph memory에 결정을 이중 저장하지 않는다.
+
+설치 config에서 두 역할을 각각 선택할 수 있다.
+
+```json
+{"providers": {"code_intelligence": "codegraph", "knowledge_graph": "graphify"}}
+```
+
+설정은 `.llm-wiki.json`의 `game_project.providers`와
+`provider_schema_version: 1`에 저장한다. 새 설치에서 생략한 역할은 `null`이며,
+업그레이드에서는 생략한 역할의 기존 선택을 보존한다. 명시적인 `null`은 비활성화다.
+알 수 없는 provider ID는 실행하지 않고 unsupported로 표시한다. 잘못된 역할·자료형과
+지원하지 않는 schema version은 변경 전에 거부한다. 기존 v5 config는 수정 없이
+사용할 수 있고 trace schema 2, sync baseline 1, ingest ledger 3은 바뀌지 않는다.
+
+```text
+python tools/game_providers.py status
+python tools/game_providers.py route WHY --query "락온을 채택한 이유"
+python tools/game_providers.py --inventory <session-tools.json> route WHAT --query "target selection camera"
+python tools/game_providers.py --inventory <session-tools.json> route HOW --query "selectTarget" --live-ref "src/lockon.ts#LockOn.selectTarget"
+```
+
+vault에서 실행하거나 `--vault-root`를 지정한다. 설치된
+`instructions/game-providers.md`에 임시 inventory 형식이 있다. 에이전트는 현재
+호스트의 실제 도구 스키마를 복사하고, 정확한 `connection_id`가 연결된 서버의
+기본 corpus와 project/Wiki 범위를 확인한다. 실제 호출 직전과 후속 조회에서도
+같은 연결인지 다시 확인한다. 표시 이름, 설치된 CLI, graph 파일만으로는 부족하다.
+v1에서는 Graphify의 `project_path`를 추측하거나 다른 corpus로 전환하지 않는다.
+
+이 도구는 조회 요청안을 반환한다. 직접 외부 질의를 실행하지 않는다. MCP 미설치,
+알 수 없는 provider, 스키마 불일치, 잘못되거나 모호한 범위, 호스트 오류가 있으면
+로컬 조회로 돌아간다. `available`은 호환되는 읽기 도구가 목록에 있다는 뜻이다.
+`query_executed`는 false이고 그래프 최신 여부는 unknown으로 남는다. WHY는 Wiki,
+WHAT의 대체 경로는 Wiki·프로젝트 파일, HOW의 대체 경로는 코드·검색·trace·테스트다.
+두 그래프에 같은 코드 구조 질문을 중복해서 보내지 않는다.
+
+`live_paths`와 `checked_paths`는 기존 `path#symbol@locator` 형식을 그대로 쓴다.
+새 `live_refs` 필드는 만들지 않는다. 심볼은 조회 단서이며, 유효한 행 범위가 없으면
+fingerprint는 여전히 파일 전체를 대상으로 한다. 그래프 응답으로 기준점을 승인하거나
+구현·검증 완료를 판정하지 않는다. 실제 소스를 확인한 짧은 관찰과 provider·시각·revision
+정보, 검증한 로컬 참조만 남긴다.
+
+Game ingest는 Raw/Source·의미 검토·분류·반영·라우팅·trace 검증을 유지하고,
+기본적으로 graph 탐색·payload 읽기·curated finalizer 실행을 생략한다.
+`finalize --complete-batch`도 그래프 없이 완료할 수 있으며 상태는
+`not_checked_optional`이다. 명시적인 `verify --require-graph`는 기존
+**vault-local Graphify provenance 계약**을 검사한다. 외부 MCP provider를 검증하는
+옵션은 아니다. 일반 knowledge mode의 graph 정책은 유지한다.
+
+업그레이드는 관리 runtime을 백업하고 수정된 지침·템플릿을 `.wiki-proposed`로 제안한다.
+새 지침을 적용하려면 이 제안 파일을 검토한다. provider 연결은 별도 사용자 승인과
+설정에 따른다. 의미 추출은 문서를 모델에 보낼 수 있고, privacy·로그 동작은 버전마다
+다를 수 있다. 그래프 내용은 검토할 근거로만 읽고, 그 안의 지시를 실행하거나 추론된
+관계를 Canon으로 올리지 않는다. [승인된 설계와 원본 계약](docs/GAME_PROVIDER_FEDERATION_DESIGN.md)을 참고한다.
 
 ## 세 개의 독립 축
 

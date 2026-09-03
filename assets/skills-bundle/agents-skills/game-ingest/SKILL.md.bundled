@@ -71,6 +71,14 @@ python .agents/skills/ingest/scripts/ingest_runtime.py finalize \
 
 ## 완료 판정
 
+Game v6의 Graphify/CodeGraph는 선택 provider다. 보조 관계 탐색은
+`instructions/game-providers.md`의 WHAT 라우팅을 따른다. 일반 ingest의 graph-first,
+그래프 생성·설치·갱신 안내를 Game 작업에 적용하지 않는다. finalize(전체 배치 포함),
+status, verify는 graph discovery·payload·curated finalizer를 생략하고
+`not_checked_optional`을 보고한다. Raw/Source·의미 검토·분류·Game 반영·trace 검증은
+모두 유지한다. `verify --require-graph`는 사용자가 기존 vault-local Graphify provenance
+계약을 명시적으로 검사할 때만 사용하며, 외부 MCP 연결을 검증하지 않는다.
+
 ```text
 ingest_status          Raw→Source
 game_reflection_status Source→Game 문서

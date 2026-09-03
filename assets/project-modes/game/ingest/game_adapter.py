@@ -795,14 +795,13 @@ def enrich_ledger(
 
 
 def generic_status(root: Path, generic: ModuleType) -> dict[str, Any]:
-    workspace = generic.graph_workspace(root)
     return {
         "root": str(root),
-        "graph_strategy": generic.graph_strategy(root),
-        "graph_workspace": str(workspace) if workspace is not None else None,
-        "graph_status": generic.graph_status(root),
+        "graph_strategy": "optional-provider",
+        "graph_workspace": None,
+        "graph_status": "not_checked_optional",
         "coverage": generic.coverage_summary(root),
-        "graph_counts": generic.graph_counts(root, workspace),
+        "graph_counts": None,
     }
 
 
@@ -856,7 +855,7 @@ def finalize_game(root: Path, args: argparse.Namespace, generic: ModuleType) -> 
             "exit_code": 2,
         }
 
-    generic_result = generic.finalize(root, generic_files, complete_batch=args.complete_batch)
+    generic_result = generic.finalize(root, generic_files, complete_batch=args.complete_batch, graph_policy="optional")
     if int(generic_result.get("exit_code", 2)) != 0:
         trace = trace_bundle(root, scan_first=False)
         enrich_ledger(root, game_validation["reflections"], trace, warnings=combined_warnings)
@@ -927,6 +926,7 @@ def verify_game(root: Path, args: argparse.Namespace, generic: ModuleType) -> di
     generic_result = generic.verify(
         root,
         require_graph=args.require_graph,
+        inspect_graph=args.require_graph,
         complete_batch=args.complete_batch,
         changed_files=generic_files or None,
     )

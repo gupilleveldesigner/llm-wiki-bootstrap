@@ -147,6 +147,14 @@ python tools/game_trace.py proposals
 python tools/game_trace.py verify --strict-sync
 ```
 
+## 선택 provider와 정본 경계
+
+WHAT → Graphify / HOW → CodeGraph / WHY → Wiki. `../../instructions/game-providers.md`의
+호스트 연결·기본 corpus 확인 절차를 따른다. 두 외부 그래프는 별도로 유지하며,
+외부 nodes/edges·provider ID·쿼리 응답을 이 Wiki나 traceability에 복제하지 않는다.
+MCP가 없으면 로컬 문서·코드·테스트로 확인한다. 심볼 조회 결과와 그래프 최신 여부는
+trace의 sync 상태·baseline 승인과 별개이며, `live_paths`/`checked_paths` 형식은 유지한다.
+
 ## Sidecar와 monorepo
 
 - sidecar에서도 runtime은 실제 `project_root`에서 파일과 Git을 읽는다.

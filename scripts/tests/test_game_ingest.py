@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 INGEST_SCRIPTS = REPOSITORY_ROOT / "assets/skills-bundle/agents-skills/ingest/scripts"
@@ -546,6 +547,44 @@ checked_paths:
             self.assertEqual(ledger["sources"][0]["source_id"], "RAW-PLAYTEST-001")
             self.assertFalse(any(path.name == "IMPL-000.md" for path in vault.rglob("*")))
             self.assertEqual(before, list(project.rglob("*")))
+
+    def test_complete_batch_skips_all_graph_paths_but_keeps_core_verification(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-optional-graphs-") as temporary:
+            _, vault, source = self.make_vault(Path(temporary))
+            args = Namespace(changed_file=[source.relative_to(vault).as_posix(),
+                "wiki/game/playtests/PLAYTEST-LOCKON-001.md"], complete_batch=True, require_graph=False)
+            # A graph/finalizer may be present, corrupt, stale or from another
+            # workflow; none may become a Game completion dependency.
+            write(vault / "tools/graphify_knowledge/finalize_ingest.py", "raise RuntimeError('must not run')")
+            write(vault / "graphify-out/graph.json", "invalid graph")
+            with mock.patch.object(generic, "graph_strategy", side_effect=AssertionError("graph discovery")), \
+                 mock.patch.object(generic, "graph_counts", side_effect=AssertionError("graph payload")), \
+                 mock.patch.object(generic, "run_command", side_effect=AssertionError("graph finalizer")):
+                result = adapter.finalize_game(vault, args, generic)
+                self.assertEqual(result["exit_code"], 0, result)
+                self.assertEqual(result["completion"], "complete_without_graph")
+                self.assertEqual(result["graph_status"], "not_checked_optional")
+                self.assertIsNone(result["graph_counts"])
+                self.assertTrue(adapter.verify_game(vault, args, generic)["verified"])
+                self.assertEqual(adapter.generic_status(vault, generic)["graph_status"], "not_checked_optional")
+                text = source.read_text(encoding="utf-8").replace("semantic_status: reviewed", "semantic_status: pending")
+                source.write_text(text, encoding="utf-8")
+                failed = adapter.finalize_game(vault, args, generic)
+                self.assertNotEqual(failed["exit_code"], 0, failed)
+
+    def test_explicit_local_graph_verification_and_generic_legacy_gate_remain_strict(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="game-explicit-graph-") as temporary:
+            _, vault, source = self.make_vault(Path(temporary))
+            args = Namespace(changed_file=[source.relative_to(vault).as_posix(),
+                "wiki/game/playtests/PLAYTEST-LOCKON-001.md"], complete_batch=True, require_graph=True)
+            result = adapter.verify_game(vault, args, generic)
+            self.assertFalse(result["verified"])
+            self.assertTrue(any("Graphify" in error for error in result["errors"]), result)
+            # Existing knowledge callers keep the old default, including its
+            # complete-batch graph gate. Optional Game behavior is explicit.
+            result = generic.finalize(vault, [source.relative_to(vault).as_posix()], complete_batch=True)
+            self.assertNotEqual(result["exit_code"], 0, result)
+            self.assertEqual(result["graph_status"], "agent_action_required")
 
 
 if __name__ == "__main__":

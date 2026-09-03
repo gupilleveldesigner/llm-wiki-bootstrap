@@ -439,7 +439,9 @@ def run_command(command: Sequence[str], *, cwd: Path) -> int:
     return completed.returncode
 
 
-def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool = False) -> dict[str, Any]:
+def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool = False, graph_policy: str = "legacy") -> dict[str, Any]:
+    if graph_policy not in ("legacy", "optional"):
+        raise ValueError("unsupported graph_policy")
     errors = validate_changed_files(root, changed_files)
     if errors:
         scan_result = scan(root)
@@ -491,6 +493,25 @@ def finalize(root: Path, changed_files: Sequence[str], *, complete_batch: bool =
             "category_audit": category_result,
             "errors": errors,
             "exit_code": 2,
+        }
+
+    if graph_policy == "optional":
+        # Game federation is a query aid, not a Raw/Source completion gate. Do not
+        # discover graphs or execute even an existing curated finalizer here.
+        verification = verify(
+            root, complete_batch=complete_batch, inspect_graph=False,
+            changed_files=None if complete_batch else changed_files,
+        )
+        complete = not (structural_incomplete or semantic_incomplete)
+        completion = ("complete_without_graph" if complete else "partial") if verification["verified"] else "incomplete"
+        write_ingest_ledger(root, scan_result, graph="not_checked_optional",
+                            errors=verification["errors"], completion=completion)
+        return {
+            "status": "validated_without_graph" if verification["verified"] else "verification_failed",
+            "root": str(root), "coverage": coverage, "completion": completion,
+            "graph_status": "not_checked_optional", "graph_counts": None,
+            "verification": verification, "errors": verification["errors"],
+            "exit_code": 0 if verification["verified"] else 2,
         }
 
     strategy = graph_strategy(root)
@@ -833,7 +854,7 @@ def graphify_host_manifest_error(root: Path) -> str | None:
     return None
 
 
-def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = False, changed_files: Sequence[str] | None = None) -> dict[str, Any]:
+def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = False, changed_files: Sequence[str] | None = None, inspect_graph: bool = True) -> dict[str, Any]:
     """Independent read-only verifier; deliberately does not call scan() or finalize gates."""
     raw_files = independent_raw_files(root)
     exclusions = independent_raw_exclusions(root)
@@ -939,9 +960,12 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         errors.extend(f"Raw source has no independent source record: {path}" for path in sorted(missing))
         errors.extend(f"Catalog-only raw source: {path}" for path in sorted(catalog_only))
 
-    strategy = graph_strategy(root)
-    graph = graph_status(root, strategy)
-    counts = graph_counts(root, graph_workspace(root))
+    graph = "not_checked_optional"
+    counts = None
+    if inspect_graph or require_graph:
+        strategy = graph_strategy(root)
+        graph = graph_status(root, strategy)
+        counts = graph_counts(root, graph_workspace(root))
     if require_graph:
         if graph not in {"configured", "graph_present"}:
             errors.append(f"Graphify is not ready: {graph}")
@@ -975,7 +999,7 @@ def verify(root: Path, *, require_graph: bool = False, complete_batch: bool = Fa
         "verified": not errors,
         "coverage": coverage,
         "graph_status": graph,
-        "graph_contract": "structural_only",
+        "graph_contract": "structural_only" if inspect_graph or require_graph else "not_checked",
         "graph_counts": counts,
         "category_audit": category_result,
         "errors": errors,
@@ -1173,4 +1197,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

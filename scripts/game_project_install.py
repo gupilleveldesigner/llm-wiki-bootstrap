@@ -20,6 +20,12 @@ from game_project_contract import (
     GAME_INGEST_ROUTING_DESTINATION,
     GAME_INGEST_ROUTING_SOURCE,
     GAME_INGEST_SKILL,
+    GAME_PROVIDER_CONFIG_SOURCE,
+    GAME_PROVIDER_CONFIG_DESTINATION,
+    GAME_PROVIDERS_RUNTIME_SOURCE,
+    GAME_PROVIDERS_RUNTIME_DESTINATION,
+    GAME_PROVIDERS_DOC,
+    GAME_PROVIDER_ROUTER_MARKER,
     GAME_ROUTER_MARKER,
     GAME_SKILL,
     GAME_TRACE_INDEX_DESTINATION,
@@ -27,6 +33,7 @@ from game_project_contract import (
     GAME_TRACE_RUNTIME_SOURCE,
     PROJECT_MODE,
     PROJECT_MODE_VERSION,
+    game_bundle_source,
     render_file,
     replacements,
     resolve_game_metadata,
@@ -125,6 +132,8 @@ def install_game_skills(target: Path, *, propose_existing: bool) -> list[str]:
 
 def install_game_runtime(target: Path, *, propose_existing: bool) -> tuple[list[str], list[str]]:
     managed = (
+        (GAME_PROVIDER_CONFIG_SOURCE, GAME_PROVIDER_CONFIG_DESTINATION, "Game provider config"),
+        (GAME_PROVIDERS_RUNTIME_SOURCE, GAME_PROVIDERS_RUNTIME_DESTINATION, "Game provider planner"),
         (GAME_TRACE_RUNTIME_SOURCE, GAME_TRACE_RUNTIME_DESTINATION, "game traceability runtime"),
         (GAME_INGEST_ADAPTER_SOURCE, GAME_INGEST_ADAPTER_DESTINATION, "Game ingest adapter"),
         (GAME_INGEST_ROUTING_SOURCE, GAME_INGEST_ROUTING_DESTINATION, "Game ingest routing"),
@@ -132,7 +141,7 @@ def install_game_runtime(target: Path, *, propose_existing: bool) -> tuple[list[
     installed: list[str] = []
     proposals: list[str] = []
     for source_name, destination_name, label in managed:
-        source = ASSETS / source_name
+        source = game_bundle_source(source_name)
         if not source.is_file():
             raise FileNotFoundError(f"{label} is missing: {source}")
         destination = target / destination_name
@@ -194,6 +203,8 @@ def backup_game_managed_assets(target: Path, backup_dir: Path) -> list[str]:
         shutil.move(str(source), str(destination))
         backed_up.append(relative)
     for relative in (
+        GAME_PROVIDER_CONFIG_DESTINATION,
+        GAME_PROVIDERS_RUNTIME_DESTINATION,
         GAME_TRACE_RUNTIME_DESTINATION,
         GAME_INGEST_ADAPTER_DESTINATION,
         GAME_INGEST_ROUTING_DESTINATION,
@@ -232,23 +243,36 @@ def game_router_block() -> str:
     )
 
 
+def game_provider_router_block() -> str:
+    return (
+        f"\n\n{GAME_PROVIDER_ROUTER_MARKER}\n"
+        "## Optional Game providers\n\n"
+        f"- Game 질의는 `{GAME_PROVIDERS_DOC}`의 WHAT → Graphify / HOW → CodeGraph / WHY → Wiki 정책을 따른다.\n"
+        "- `python tools/game_providers.py status`로 선택 상태를 확인한다. MCP 연결·기본 corpus를 확인하지 못하면 로컬 조회로 돌아간다.\n"
+        "- 외부 graph는 선택 기능이다. graph 데이터·node ID를 Wiki/traceability에 복제하거나 baseline을 자동 승인하지 않는다.\n"
+        "- 이 정책이 Game 작업의 일반 graph-first 안내보다 우선한다. Game ingest는 graph 없이 핵심 검증을 완료한다.\n"
+    )
+
+
 def install_game_router(target: Path, *, propose_existing: bool) -> list[str]:
     proposals: list[str] = []
-    block = game_router_block()
+    blocks = ((GAME_ROUTER_MARKER, game_router_block()), (GAME_PROVIDER_ROUTER_MARKER, game_provider_router_block()))
     for relative in ("CLAUDE.md", "AGENTS.md", "wiki/CLAUDE.md"):
         destination = target / relative
         if not destination.is_file():
             raise RuntimeError(f"base router is missing: {relative}")
         current = destination.read_text(encoding="utf-8")
-        if GAME_ROUTER_MARKER in current:
+        missing = [block for marker, block in blocks if marker not in current]
+        if not missing:
             continue
         if not propose_existing:
-            write_text(destination, current.rstrip() + block)
+            write_text(destination, current.rstrip() + "".join(missing))
             continue
         proposal = _proposal_path(destination)
         proposal_base = proposal.read_text(encoding="utf-8") if proposal.is_file() else current
-        if GAME_ROUTER_MARKER not in proposal_base:
-            write_text(proposal, proposal_base.rstrip() + block)
+        missing = [block for marker, block in blocks if marker not in proposal_base]
+        if missing:
+            write_text(proposal, proposal_base.rstrip() + "".join(missing))
         proposals.append(proposal.relative_to(target).as_posix())
     return proposals
 
@@ -282,10 +306,11 @@ def verify_game_installation(target: Path, workspace: WorkspacePaths, engine: di
             errors.append(f"missing installed game project directory: {directory}")
     for relative in ("CLAUDE.md", "AGENTS.md", "wiki/CLAUDE.md"):
         path = target / relative
-        if path.is_file() and GAME_ROUTER_MARKER in path.read_text(encoding="utf-8"):
+        markers = (GAME_ROUTER_MARKER, GAME_PROVIDER_ROUTER_MARKER)
+        if path.is_file() and all(marker in path.read_text(encoding="utf-8") for marker in markers):
             continue
         proposal = _proposal_path(path)
-        if proposal.is_file() and GAME_ROUTER_MARKER in proposal.read_text(encoding="utf-8"):
+        if proposal.is_file() and all(marker in proposal.read_text(encoding="utf-8") for marker in markers):
             pending.append(proposal.relative_to(target).as_posix())
         else:
             errors.append(f"missing game project router marker: {relative}")

@@ -294,6 +294,14 @@ python scripts/game_project.py \
 
 See [`config.game.example.json`](config.game.example.json) and the [Game project mode guide](GAME_PROJECT_MODE.en.md).
 
+Game v6 adds optional, independent providers: `providers.code_intelligence: "codegraph"`
+for HOW and `providers.knowledge_graph: "graphify"` for WHAT. WHY stays with canonical
+Wiki intent, validation and decisions. The scoped host query planner falls back to
+local reads when MCP is unavailable; graph payloads are never copied into Wiki or
+traceability. Existing v5 configs, trace schema 2 and baseline 1 remain compatible.
+Game ingest keeps its core checks and skips graph checks by default; explicit
+`verify --require-graph` still checks the existing vault-local Graphify contract.
+
 ## Optional features and preservation boundary
 
 Graphify is an optional exploration aid. Use `$graphify <WIKI_ROOT>` in Codex or `/graphify <WIKI_ROOT>` in Claude Code. Raw and Markdown remain authoritative.
