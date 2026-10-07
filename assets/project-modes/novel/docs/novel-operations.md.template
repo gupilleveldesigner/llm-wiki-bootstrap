@@ -1,0 +1,46 @@
+# Novel 집필 운영
+
+먼저 `.llm-wiki.json`의 `project_mode: novel`, `wiki/novel/index.md`, `wiki/novel/model.md`와
+`.agents/skills/novel-project/SKILL.md`를 읽는다.
+
+## 쓰기 경계
+
+- `raw/novel/`: 가져온 원고·조사 자료의 원본. 수정·자동 이동하지 않는다.
+- `wiki/novel/`: 인물·설정·구성·검토·결정. 제안과 채택 상태를 구분한다.
+- `manuscripts/novel/drafts/`: 편집 가능한 초고. 집필·퇴고 요청에서 수정한다.
+- `manuscripts/novel/revisions/`: 원고의 명시적 수정본. 이전 공개 원고를 조용히 덮어쓰지 않는다.
+- `Output/novel/`: 공유·출판용 산출물. 파일 생성은 외부 서비스 게시와 별개의 작업이다.
+
+## 일상 작업
+
+1. 설정·구성을 `templates/novel/`에서 복사하고 고유 ID를 붙인다.
+2. 회차에 장면 ID를, 장면에 회차·시점 인물·원고 경로를 연결한다.
+3. 참고자료는 기존 `ingest` 스킬로 Source에 연결한다. 집필 원고를 Raw로 옮기지 않는다.
+4. 읽은 원고에서 설정·인과·시간선·시점·인물 동기를 검토하고 파일·인용을 `review`에 남긴다.
+5. 수정 제안과 작가의 채택 결정을 분리한다. 집필 요청 범위의 원고를 편집하고 영향받은 연결을 점검한다.
+
+```text
+python tools/novel_check.py status
+python tools/novel_check.py check
+python tools/novel_check.py outline
+python tools/novel_check.py trace CHAR-001
+```
+
+네 명령은 읽기 전용이다. `check`는 구조 오류가 있으면 exit 1을 반환하며 경고만 있으면 exit 0이다.
+`status`/`outline`/`trace`는 성공적으로 읽었다면 exit 0이며 `has_errors`와 `summary`를 함께 확인한다.
+구조 검사가 통과해도 의미 검토는 미실행이다. 의도적인 회상·불신 화자·복선 미회수는 작가 판단을 남긴다.
+
+## 변경과 업그레이드
+
+설치·업그레이드는 Novel vault에만 쓰며 기존 원고·Raw를 보존한다. 사용자 문서와 충돌하면
+`.wiki-proposed`를 만든다. 다른 내용의 기존 제안 파일이 있으면 번호를 붙여 보존한다.
+관리 runtime·스킬 교체 전 백업을 만들며, 적용 후 검증 실패 시 이전 vault를 복원한다.
+`project_mode_activation_pending`이면 제안을 검토하고 필요한 지침을 반영한다.
+`rollback_backup`은 적용 전 vault 전체의 보관 위치다.
+
+```text
+python <BOOTSTRAP_ROOT>/scripts/novel_project.py --target <VAULT> --config <CONFIG> --mode upgrade --dry-run
+```
+
+업그레이드는 GitHub 정확한 최신 commit을 기본으로 사용한다. 오프라인 또는 개발 중 bundle은
+명시적인 `--source local`을 사용한다. Novel 계약이 없는 원격 버전으로는 업그레이드하지 않는다.

@@ -49,7 +49,8 @@ Choose two separate things: what to do to the folder, and how strictly to manage
 
 `mode` and `profile` are independent axes. Valid combinations include `new + standard`, `migrate + evidence`, and `upgrade + evidence`. Upgrade never automatically downgrades Evidence to Standard.
 
-Game projects add a third axis, project mode (`project_mode: game`). It is not a lifecycle mode or a profile.
+Project mode is a third independent axis: `knowledge` for general knowledge, `game` for game production,
+and `novel` for fiction writing. It is separate from lifecycle and vault profile.
 
 ## Quick start
 
@@ -360,6 +361,24 @@ The default system does not require Kubernetes, a large vector database, a Neo4j
 | lineage | The path information followed through sources and AI systems |
 | locator | A pointer to an exact section, line, message, or function in Raw |
 | cache | Derived data that can be recreated from originals |
+
+## Novel writing project mode
+
+`project_mode: novel` supports fiction and serialized novels independently of `standard`/`evidence`.
+It links characters, locations, world rules, arcs, chapters, scenes, timelines and foreshadowing
+to editable manuscripts, reviews and author decisions. Ten templates and a Codex/Claude
+`novel-project` skill cover planning, drafting, revision and evidence-backed semantic review.
+
+Imported originals stay immutable in `raw/`; drafts and revisions live in `manuscripts/novel/`.
+The read-only runtime checks declared IDs, references, chapter/scene order, manuscript paths,
+time ranges and foreshadow links. It does not judge prose, meaning or publication readiness.
+Installation supports dry-run, staged application, user-document proposals and rollback.
+
+```bash
+python scripts/novel_project.py --target ./MyNovel --config ./config.novel.example.json --mode new --dry-run
+```
+
+See the [Novel guide](NOVEL_PROJECT_MODE.en.md). Remove `--dry-run` after inspecting the plan.
 
 ## License
 

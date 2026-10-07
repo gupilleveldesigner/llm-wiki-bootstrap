@@ -1,6 +1,6 @@
 ---
 name: llm-wiki-bootstrap
-description: LLM Wiki를 신규 구축(new), 기존 일반 폴더에서 비파괴 전환(migrate), 또는 GitHub 공식 저장소 최신 exact commit 기준으로 업그레이드(upgrade)한다. 지식관리 profile은 standard/evidence, 프로젝트 운영 mode는 knowledge/game으로 분리한다. Evidence는 Raw→Source→Claim/Project Decision→Evidence/Conflict/Experiment→reviewed Canon을 제공한다. Game mode는 실제 엔진 프로젝트와 Wiki를 project_root/vault_root로 분리하고, engine-aware sidecar 설치, dry-run write plan, protected paths, staging·rollback, managed-files manifest, 기획↔코드 traceability를 제공한다. 사용자가 LLM Wiki, 세컨드브레인, Evidence Wiki, 기존 폴더 전환, Wiki 최신화, 게임 프로젝트용 기획·구현·검증 지식베이스 구축을 요청할 때 사용한다. 설치 후 일상 ingest/query/lint/canon-review/game-project 작업에는 프로젝트 로컬 스킬을 사용한다.
+description: LLM Wiki를 신규 구축(new), 기존 일반 폴더에서 비파괴 전환(migrate), 또는 GitHub 공식 저장소 최신 exact commit 기준으로 업그레이드(upgrade)한다. 지식관리 profile은 standard/evidence, 프로젝트 운영 mode는 knowledge/game/novel로 분리한다. Novel은 인물·세계관·회차·장면·원고·시간선·복선·검토·작가 결정과 읽기 전용 구조 점검을 제공한다. Evidence는 Raw→Source→Claim/Project Decision→Evidence/Conflict/Experiment→reviewed Canon을 제공한다. Game mode는 실제 엔진 프로젝트와 Wiki를 project_root/vault_root로 분리하고, engine-aware sidecar 설치, dry-run write plan, protected paths, staging·rollback, managed-files manifest, 기획↔코드 traceability를 제공한다. 사용자가 LLM Wiki, 세컨드브레인, Evidence Wiki, 기존 폴더 전환, Wiki 최신화, 게임 프로젝트용 기획·구현·검증 지식베이스 또는 소설·웹소설 집필 Wiki 구축을 요청할 때 사용한다. 설치 후 일상 ingest/query/lint/canon-review/game-project/novel-project 작업에는 프로젝트 로컬 스킬을 사용한다.
 ---
 
 # LLM Wiki Bootstrap
@@ -12,7 +12,7 @@ Claude Code / Codex가 운영하는 LLM Wiki를 구축·전환·업그레이드�
 ```text
 lifecycle mode: new | migrate | upgrade
 vault profile:  standard | evidence
-project mode:   knowledge | game
+project mode:   knowledge | game | novel
 ```
 
 예:
@@ -22,6 +22,7 @@ new + standard + knowledge
 migrate + evidence + knowledge
 migrate + standard + game
 upgrade + evidence + game
+migrate + standard + novel
 ```
 
 ## 절대 규칙
@@ -44,6 +45,7 @@ upgrade + evidence + game
 16. Knowledge mode도 target 내부 symlink를 따라 쓰지 않는다. symlink가 있으면 적용 전 중단하고 경로를 보고한다.
 17. Knowledge mode upgrade는 sibling transaction staging에서 검증한 뒤 적용하며 실패 시 원래 Wiki를 복원한다.
 18. Knowledge mode upgrade 전 staging 복제본을 위한 같은 파일시스템 여유 공간을 확인한다.
+19. Novel mode의 가져온 원고는 Raw에 보존하고, 편집 가능한 집필 원고는 `manuscripts/novel/`에 둔다. 작가 채택 설정·구성안·원고·검토를 구분한다.
 
 ## 전제 조건
 
@@ -131,6 +133,41 @@ evidence + game
 ```
 
 Game → knowledge 자동 제거는 제공하지 않는다. Game 기록과 router를 없애는 작업은 별도 migration이다.
+
+## novel
+
+소설·웹소설의 인물, 장소, 세계관 규칙, 아크, 회차, 장면, 사건 시간선, 복선,
+원고와 퇴고·검토·작가 결정을 함께 관리할 때 사용한다. `standard + novel`이 기본 추천이며
+현실 참고자료의 출처 검토가 필요하면 `evidence + novel`을 사용한다.
+
+```text
+작가 채택 설정 ↔ 구성(아크·회차·장면) ↔ 집필 원고
+검토 기록 → 작가 결정 → 퇴고본 → 산출물
+```
+
+이미 받은 정보는 다시 묻지 않는다. 작품 제목·장르·독자·제작 단계가 없으면 `UNKNOWN`이나
+기본값으로 시작하며 장르·문체·시점·설정을 임의로 확정하지 않는다.
+
+```bash
+python "<SKILL_ROOT>/scripts/novel_project.py" \
+  --target "<VAULT_ROOT>" --config "<CONFIG>" \
+  --mode new --profile standard --dry-run
+```
+
+계획이 안전하면 `--dry-run`을 제거해 설치한다. 기존 자료 폴더는 `migrate`, 기존 Wiki는
+`upgrade`를 사용한다. upgrade는 GitHub exact commit이 기본이며 개발 중·오프라인 bundle은
+명시적으로 `--source local`을 사용한다. Novel 계약이 없는 원격 bundle은 변경 전에 거부한다.
+기본 `bootstrap.py`도 `--project-mode novel` 또는 config의 `project_mode: novel`을 라우팅하며
+기존 Novel Wiki의 `upgrade.py`는 기본 Wiki와 Novel 자산을 함께 갱신한다.
+
+원본·기존 원고를 보존하고 사용자 문서는 `.wiki-proposed`로 제안한다. 관리 runtime·스킬은
+교체 전 백업한다. 적용 실패는 이전 vault로 복구하며 `rollback_backup`은 적용 전 전체 복사본이다.
+`project_mode_activation_pending`이면 지침 제안을 검토한다. 기존 Game mode를 Novel로 자동 전환하지 않는다.
+
+설치 후 `.agents/skills/novel-project/SKILL.md`, `instructions/novel-project.md`, `wiki/novel/index.md`를 읽는다.
+`tools/novel_check.py status/check/outline/trace`는 읽기 전용 구조 점검이다. 본문의 설정 모순·시점·문체·완성도를
+자동 판정하지 않는다. 작가 채택 설정은 허구 내 정본이며 Evidence의 현실 Claim/Canon과 구분한다.
+참고자료 ingest는 기존 엔진을 사용하고 집필 원고를 Raw로 자동 이동하지 않는다.
 
 # 4. 짧은 인터뷰와 config
 

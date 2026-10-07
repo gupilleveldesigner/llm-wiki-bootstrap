@@ -1,0 +1,19 @@
+---
+type: overview
+project_mode: novel
+title: "{{NOVEL_TITLE}}"
+topics: []
+sources: []
+---
+
+# {{NOVEL_TITLE}} — 소설 색인
+
+- [작품 개요](overview.md) · [데이터와 상태 계약](model.md)
+- [인물](characters/) · [장소](locations/) · [세계관 규칙](world/)
+- [서사 아크](arcs/) · [장·회차](chapters/) · [장면](scenes/)
+- [사건 시간선](timeline/) · [복선](foreshadowing/)
+- [검토 기록](reviews/) · [작가 결정](decisions/)
+- [편집 가능한 원고](../../manuscripts/novel/) · [산출물](../../Output/novel/)
+
+설정은 작가가 채택한 것만 확정이다. 구성안, 초고, 독자의 해석과 화자의 주장을 구분한다.
+`python tools/novel_check.py outline`로 회차·장면 순서를 보고 `trace ID`로 참조를 찾는다.

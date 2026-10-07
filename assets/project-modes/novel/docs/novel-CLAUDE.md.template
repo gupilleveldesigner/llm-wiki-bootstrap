@@ -1,0 +1,6 @@
+# Novel Wiki 규칙
+
+작가가 채택한 설정, 구성안, 집필 원고, 검토와 결정을 분리한다.
+먼저 vault-relative `instructions/novel-project.md`와 `.agents/skills/novel-project/SKILL.md`를 읽는다.
+문서 ID는 유일해야 한다. 원고 내용에서 도출한 설정은 제안으로 남기고 작가 의도를 확인한다.
+자료·그래프·AI의 주장만으로 설정을 자동 확정하거나 원고를 맞춰 덮어쓰지 않는다.

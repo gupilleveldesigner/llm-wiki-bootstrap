@@ -21,6 +21,7 @@ Claude Code 또는 Codex가 폴더 속 원문을 보존하면서 자료를 정�
 - [빠른 시작](#빠른-시작)
 - [Standard](#standard-일반적인-지식-정리)
 - [Evidence](#evidence-ai-답변을-검토-가능한-지식으로-관리)
+- [Novel: 소설 집필](#novel-소설-집필-프로젝트-지원)
 - [안전성](#기존-폴더와-기존-wiki의-안전성)
 - [고급 CLI](#고급-cli)
 
@@ -57,7 +58,8 @@ Claude Code 또는 Codex가 폴더 속 원문을 보존하면서 자료를 정�
 
 `mode`와 `profile`은 독립적인 축입니다. `new + standard`, `migrate + evidence`, `upgrade + evidence`처럼 조합할 수 있습니다. 다만 `upgrade`는 Evidence를 Standard로 자동 축소하지 않습니다.
 
-게임 제작 프로젝트에는 세 번째 축인 프로젝트 모드(`project_mode: game`)가 있습니다. lifecycle mode나 profile이 아니라 실제 엔진 프로젝트와 Wiki를 함께 운영하기 위한 별도 설정입니다.
+세 번째 축인 프로젝트 모드는 일반 지식용 `knowledge`, 게임 제작용 `game`, 소설 집필용 `novel`입니다.
+lifecycle mode나 profile과 별개로 프로젝트 운영 방식을 선택합니다.
 
 ## 빠른 시작
 
@@ -295,6 +297,27 @@ metadata 조회 → default branch → exact SHA → ZIP 검증
 대표 요청은 “방금 넣은 자료 인제스트해줘”, “결론과 근거를 찾아줘”, “깨진 링크를 점검해줘”, `SAVE`입니다. `session-memory`의 원자적 트랜잭션은 저장이 반쯤 적용되지 않는다는 뜻이며 원자적 주장과는 다른 말입니다.
 
 Evidence의 `query`는 현재 결론(`answer`), 넓은 조사(`research`), 특정 주장 확인(`verify`), 반대 근거 탐색(`challenge`), 원문 역추적(`trace`), 출처 비교(`compare`)를 지원합니다.
+
+## Novel: 소설 집필 프로젝트 지원
+
+`project_mode: novel`은 소설·웹소설의 설정, 구성, 원고와 퇴고를 연결합니다.
+`standard + novel`로 시작하고 현실 참고자료의 엄격한 출처 검토가 필요하면 `evidence + novel`을 사용합니다.
+
+- 인물·장소·세계관 규칙·아크·회차·장면·시간선·복선·검토·작가 결정 템플릿 10종
+- 가져온 원본은 불변 `raw/`, 편집 가능한 원고는 `manuscripts/novel/`, 공유용 결과는 `Output/novel/`
+- 작가 채택 설정, 구성안, 집필·퇴고·공개 상태와 검토 결과를 각각 관리
+- 읽기 전용 점검으로 중복 ID·순서, 깨진 연결, 원고 경로, 시간 범위와 복선 연결 확인
+- 기존 원고 보존, dry-run, 지침 충돌 제안, 관리 도구 백업, 적용 실패 시 복구
+
+```bash
+python scripts/novel_project.py --target ./MyNovel --config ./config.novel.example.json --mode new --dry-run
+```
+
+계획을 확인한 뒤 `--dry-run`을 제거합니다. 설치 후 `$novel-project` 또는 `/novel-project`로
+설정·구성·집필·퇴고·의미 검토를 요청할 수 있습니다. 자동 점검은 원고의 모순이나 문체를 판정하지 않습니다.
+설정·시점·인과·문체 검토는 실제 원고의 근거를 기록하는 스킬 흐름으로 수행합니다.
+
+[설정 예시](config.novel.example.json)와 [소설 모드 안내](NOVEL_PROJECT_MODE.ko.md)를 참고하세요.
 
 ## Game 프로젝트 지원
 

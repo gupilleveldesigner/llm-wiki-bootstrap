@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile Python
-        run: python -m compileall -q scripts assets/project-modes/game/runtime assets/project-modes/game/ingest assets/skills-bundle/agents-skills
+        run: python -m compileall -q scripts assets/project-modes/game/runtime assets/project-modes/game/ingest assets/project-modes/novel/runtime assets/skills-bundle/agents-skills
       - name: Validate JSON templates
         run: python scripts/validate_json_templates.py
       - name: Run repository tests

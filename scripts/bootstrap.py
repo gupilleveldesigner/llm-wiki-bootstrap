@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import shutil
+import sys
 import tempfile
 import uuid
 from datetime import datetime
@@ -851,14 +852,36 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--mode", choices=("new", "migrate", "upgrade"), default="new")
     parser.add_argument("--profile", choices=PROFILES, default=None)
+    parser.add_argument("--project-mode", choices=("knowledge", "game", "novel"), default=None)
     args = parser.parse_args()
     try:
-        result = bootstrap(args.target, args.config, args.mode, args.profile)
+        with args.config.open(encoding="utf-8") as stream:
+            config = json.load(stream)
+        if not isinstance(config, dict):
+            raise ValueError("config root must be an object")
+        previous = read_manifest(args.target) or {}
+        project_mode = args.project_mode or config.get("project_mode") or previous.get("project_mode", "knowledge")
+        if previous.get("project_mode") == "novel" and project_mode != "novel":
+            raise ValueError("cannot remove Novel mode through a base Wiki bootstrap")
+        if project_mode == "novel":
+            from novel_project import run_local_novel_project
+
+            result = run_local_novel_project(args.target, args.config, args.mode, args.profile)
+        elif project_mode == "game":
+            if args.project_mode == "game" or config.get("project_mode") == "game":
+                raise ValueError("Game mode requires scripts/game_project.py with --project-root")
+            result = bootstrap(args.target, args.config, args.mode, args.profile)
+        elif project_mode == "knowledge":
+            result = bootstrap(args.target, args.config, args.mode, args.profile)
+        else:
+            raise ValueError(f"unsupported project_mode: {project_mode}")
     except Exception as error:
         result = {"ok": False, "error": str(error), "mode": args.mode, "profile": args.profile}
     print(json.dumps(result, ensure_ascii=False))

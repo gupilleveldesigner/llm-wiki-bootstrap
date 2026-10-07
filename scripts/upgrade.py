@@ -152,10 +152,25 @@ def _write_upgrade_provenance(target: Path, *, repository: str, branch: str, com
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _project_mode(target: Path) -> str:
+    path = target / ".llm-wiki.json"
+    if not path.is_file():
+        return "knowledge"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("Wiki manifest root must be an object")
+    return str(manifest.get("project_mode", "knowledge"))
+
+
 def run_local_upgrade(checkout: Path, target: Path, config: Path, profile: str | None) -> dict[str, Any]:
+    novel = _project_mode(target) == "novel"
+    if novel:
+        from novel_project_contract import validate_novel_checkout
+
+        validate_novel_checkout(checkout)
     command = [
         sys.executable,
-        str(checkout / "scripts/bootstrap.py"),
+        str(checkout / "scripts" / ("novel_project.py" if novel else "bootstrap.py")),
         "--target",
         str(target),
         "--config",
@@ -165,7 +180,9 @@ def run_local_upgrade(checkout: Path, target: Path, config: Path, profile: str |
     ]
     if profile:
         command.extend(("--profile", profile))
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    if novel:
+        command.extend(("--source", "local"))
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=False)
     result = _parse_bootstrap_result(completed.stdout)
     if completed.returncode != 0 or not result.get("ok"):
         detail = completed.stderr.strip()
@@ -176,6 +193,10 @@ def run_local_upgrade(checkout: Path, target: Path, config: Path, profile: str |
 
 
 def upgrade_from_github(target: Path, config: Path, profile: str | None = None) -> dict[str, Any]:
+    if _project_mode(target) == "novel":
+        from novel_project import upgrade_novel_from_github
+
+        return upgrade_novel_from_github(target, config, profile)
     # All network retrieval and archive validation happen before the target Wiki is mutated.
     branch, commit = resolve_latest_commit(OFFICIAL_REPOSITORY)
     archive = download_commit_archive(OFFICIAL_REPOSITORY, commit)
@@ -209,6 +230,8 @@ def upgrade_from_local_bundle(target: Path, config: Path, profile: str | None = 
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(
         description=(
             "Upgrade an existing LLM Wiki. By default this resolves the official GitHub repository's "

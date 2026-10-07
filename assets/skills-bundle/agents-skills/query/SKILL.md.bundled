@@ -22,6 +22,10 @@ LLM Wiki의 컨텍스트는 저장 공간이 아니라 과업별 예산이다. �
 
 ## 핵심 원칙
 
+대상이 `project_mode: novel`이면 `novel-project` 스킬과 `instructions/novel-project.md`를 읽는다.
+채택된 작품 설정, 구성안, 원고 속 화자의 주장과 현실 참고자료를 구분한다. 로컬 설정·구성·원고를
+우선하고, 특정 회차까지의 독자 질문에는 이후 사건이나 복선 회수를 답변 근거에서 제외한다.
+
 대상이 `project_mode: game`이면 `instructions/game-providers.md`의 선택 provider 정책을
 먼저 적용한다. WHAT의 관계 후보는 Graphify, HOW의 코드 질문은 CodeGraph/game-project,
 WHY의 의도·검증·결정은 Wiki를 따른다. 확인된 MCP 연결·기본 corpus가 없으면 로컬 조회로

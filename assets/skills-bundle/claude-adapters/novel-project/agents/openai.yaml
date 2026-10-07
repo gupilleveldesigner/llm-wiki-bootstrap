@@ -1,0 +1,4 @@
+interface:
+  display_name: "Novel Project"
+  short_description: "Plan, draft and review novels with linked canon, scenes and manuscripts"
+  default_prompt: "Use $novel-project to plan, draft, revise or review this novel while separating author-approved canon, proposals, manuscripts and review evidence."

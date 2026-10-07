@@ -8,17 +8,30 @@ Choose a language:
 - **English:** [README.en.md](README.en.md)
 - **게임 프로젝트 모드:** [GAME_PROJECT_MODE.ko.md](GAME_PROJECT_MODE.ko.md)
 - **Game project mode:** [GAME_PROJECT_MODE.en.md](GAME_PROJECT_MODE.en.md)
+- **소설 프로젝트 모드:** [NOVEL_PROJECT_MODE.ko.md](NOVEL_PROJECT_MODE.ko.md)
+- **Novel project mode:** [NOVEL_PROJECT_MODE.en.md](NOVEL_PROJECT_MODE.en.md)
 
 The system separates three orthogonal axes:
 
 - lifecycle: `new` / `migrate` / `upgrade`
 - vault profile: `standard` / `evidence`
-- project mode: implicit `knowledge` / optional `game`
+- project mode: implicit `knowledge` / optional `game` / optional `novel`
 
 Profiles define how knowledge is trusted:
 
 - `standard` — `raw → wiki → Output`
 - `evidence` — `Raw → Source → Claim or Project Decision → Evidence/Conflict/Experiment → reviewed Canon`
+
+Novel mode v1 connects author-approved characters, world rules, arcs, chapters, scenes,
+timelines and foreshadowing to editable manuscripts and review/decision records.
+It installs 10 writing templates, the Codex/Claude `novel-project` skill and a dependency-free,
+read-only `novel_check.py` for IDs, references, reading order, manuscript paths and declared
+timeline/foreshadow links. Semantic and literary review stays with the writer and agent.
+See the [Novel guide](NOVEL_PROJECT_MODE.en.md) and [example config](config.novel.example.json).
+
+```bash
+python scripts/novel_project.py --target ./MyNovel --config ./config.novel.example.json --mode new --dry-run
+```
 
 Game mode adds:
 
