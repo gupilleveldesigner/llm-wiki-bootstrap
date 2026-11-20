@@ -1,6 +1,6 @@
 ---
 name: game-project
-description: `project_mode: game` 볼트에서 설계, live 구현, 기획↔코드 추적, 플레이테스트, 빌드, 결정과 릴리스를 운영한다.
+description: `project_mode: game` LLM Wiki에서 게임 기능·시스템·레벨·콘텐츠·내러티브·UI/UX·기술·에셋을 설계하고, live project 구현 확인, 기획↔코드 양방향 동기화 상태, Git diff 영향 분석, 플레이테스트, 빌드, 버그, 결정, 마일스톤, 릴리스를 운영한다. 게임 기획서/레벨 설계/구현 일치 확인/코드 영향 분석/기획 변경 영향/플레이테스트/빌드 검증 요청에 사용한다. 일반 지식 질의나 game mode가 아닌 볼트에는 사용하지 않는다.
 ---
 
 # game-project 인스톨 어댑터

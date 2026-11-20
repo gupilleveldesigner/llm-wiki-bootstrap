@@ -20,7 +20,7 @@ if str(SCRIPTS_ROOT) not in sys.path:
 
 from find_uningested import resolve_wiki_root, scan  # noqa: E402
 from audit_categories import frontmatter_labels  # noqa: E402
-from ingest_runtime import finalize, graph_strategy, graph_workspace, record_graphify_run, semantic_plan, validate_changed_files, verify  # noqa: E402
+from ingest_runtime import ensure_graphify, finalize, graph_strategy, graph_workspace, record_graphify_run, semantic_plan, validate_changed_files, verify  # noqa: E402
 from install_to_wiki import JOURNAL_NAME, LOCK_NAME, install, install_lock, recover_install  # noqa: E402
 from stitch_explicit_links import stitch  # noqa: E402
 
@@ -362,9 +362,61 @@ class PortableIngestTests(unittest.TestCase):
                 result = finalize(root, ["wiki/sources/source.md"], complete_batch=True)
             self.assertEqual(result["status"], "agent_action_required")
             self.assertIn("graphify install --platform codex", result["codex"]["install"])
+            self.assertIn("ensure-graphify", result["auto_install"])
             self.assertIn("$graphify", result["codex"]["build"])
             self.assertIn('"', result["codex"]["build"])
             self.assertEqual(result["exit_code"], 2)
+
+    def test_ensure_graphify_installs_cli_and_registers_hosts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-graphify-home-") as temporary:
+            home = Path(temporary)
+            (home / ".claude").mkdir()
+            (home / ".codex").mkdir()
+            executable = home / "bin" / "graphify"
+            calls: list[list[str]] = []
+
+            def runner(command, timeout):
+                calls.append(list(command))
+                if command[0] != str(executable):  # an installer
+                    executable.parent.mkdir(exist_ok=True)
+                    executable.write_text("", encoding="utf-8")
+                    return True, ""
+                host = "codex" if "codex" in command else "claude"
+                skill = home / f".{host}" / "skills" / "graphify" / "SKILL.md"
+                skill.parent.mkdir(parents=True)
+                skill.write_text("skill", encoding="utf-8")
+                return True, ""
+
+            def located():
+                return str(executable) if executable.is_file() else None
+
+            with patch("ingest_runtime.Path.home", return_value=home), \
+                    patch("ingest_runtime.graphify_executable", side_effect=located), \
+                    patch("ingest_runtime.graphify_installers", return_value=[["installer", "graphifyy"]]):
+                result = ensure_graphify(runner=runner)
+                again = ensure_graphify(runner=runner)
+
+            self.assertEqual((result["status"], result["exit_code"]), ("installed", 0))
+            self.assertTrue(result["cli"]["installed_now"])
+            self.assertEqual(calls[0], ["installer", "graphifyy"])
+            self.assertIn([str(executable), "install"], calls)
+            self.assertIn([str(executable), "install", "--platform", "codex"], calls)
+            self.assertTrue(all(state["registered_now"] for state in result["hosts"].values()))
+            self.assertEqual(again["status"], "ready")
+            self.assertEqual(len(calls), 3)  # nothing is reinstalled once present
+
+    def test_ensure_graphify_reports_failure_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wiki-graphify-home-") as temporary:
+            home = Path(temporary)
+            (home / ".claude").mkdir()
+            with patch("ingest_runtime.Path.home", return_value=home), \
+                    patch("ingest_runtime.graphify_executable", return_value=None), \
+                    patch("ingest_runtime.graphify_installers", return_value=[["installer", "graphifyy"]]):
+                failed = ensure_graphify(runner=lambda command, timeout: (False, "no network"))
+                checked = ensure_graphify(install=False, runner=lambda command, timeout: self.fail("check must not install"))
+            self.assertEqual((failed["status"], failed["exit_code"]), ("failed", 2))
+            self.assertEqual(failed["cli"]["attempts"][0]["detail"], "no network")
+            self.assertEqual(checked["cli"]["attempts"], [])
 
     def test_category_audit_blocks_complete_batch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wiki-category-gate-") as temporary:

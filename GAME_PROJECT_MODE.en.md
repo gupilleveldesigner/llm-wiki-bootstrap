@@ -26,19 +26,22 @@ canonical design ↔ canonical live code/scenes/data/assets
 
 The live engine project remains authoritative for implementation. Provider graphs
 remain independent; federation uses scoped host queries and file/symbol references.
-The installer never installs, starts, indexes or merges either provider, and does
+The planner (`tools/game_providers.py`) never installs, starts, indexes or merges either provider, and does
 not copy their nodes/edges, query responses or provider-local IDs into the Wiki or
 `traceability.json`. CodeGraph memory does not replace Wiki decisions.
 
-Add these optional settings to the installer config:
+Graphify is installed automatically. Right after a Game install or upgrade, and whenever ingest finds Graphify missing, the agent runs `ingest_runtime.py ensure-graphify`, which installs the `graphifyy` CLI (uv, then pipx, then pip) and registers the host skill. It does nothing when Graphify is present, and a failure leaves Game work running without a graph. CodeGraph auto-install is on hold: it needs a native per-platform binary and a hand-edited MCP entry, so it does not install as uniformly as Graphify; select it only when the user has installed and connected it. Neither path configures an MCP connection, starts a server or builds a graph.
 
-```json
-{"providers": {"code_intelligence": "codegraph", "knowledge_graph": "graphify"}}
+Select each role with an installer flag:
+
+```text
+--knowledge-graph graphify
+--code-intelligence codegraph
 ```
 
 They are stored in `.llm-wiki.json` under `game_project.providers` with
 `provider_schema_version: 1`. Missing slots default to `null` on new installs;
-omission preserves existing selections on upgrade, while explicit `null` disables
+omission preserves existing selections on upgrade, while `none` (config `null`) disables
 a slot. Unknown provider IDs remain inert/unsupported. Wrong slots/types and
 unknown schema versions fail before mutation. Existing v5 configs need no edits;
 trace schema 2, sync baseline 1 and ingest ledger 3 are unchanged.
@@ -159,7 +162,6 @@ Run a dry-run before applying:
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
   --mode migrate \
   --dry-run
 ```
@@ -217,30 +219,39 @@ derived
 
 Upgrades distinguish system files from user-owned documents. A user-edited managed document is proposed or reported as a collision instead of silently overwritten.
 
-## Configuration
+## Configuration — pass flags, not a file
 
-```json
-{
-  "project_name": "My Game Wiki",
-  "domain_summary": "Connect game design to live implementation and validation",
-  "project_root": "../MyGame",
-  "layout": "sidecar",
-  "engine": "auto",
-  "game_title": "My Game",
-  "game_engine": "Godot 4",
-  "game_genre": "2D action puzzle",
-  "target_platforms": "Windows, Web",
-  "project_phase": "prototype",
-  "source_roots": ["scenes/", "scripts/", "assets/"]
-}
+No config JSON has to be written. Pass what you know as flags and omit the rest.
+
+| Flag | Meaning | When omitted |
+| --- | --- | --- |
+| `--project-name` | Wiki name | `<project folder> Wiki` |
+| `--domain-summary` | One sentence on its purpose | Same as the name |
+| `--game-title` | Game title | The Wiki name |
+| `--game-engine`, `--game-genre`, `--target-platforms` | Descriptions for the docs | `UNKNOWN` |
+| `--project-phase` | Production phase | `prototype` |
+| `--source-root` (repeatable) | Project-relative source folder | Engine adapter defaults |
+| `--knowledge-graph graphify\|none` | Optional provider for WHAT questions | Not selected |
+| `--code-intelligence codegraph\|none` | Optional provider for HOW questions | Not selected |
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --game-title "My Game" \
+  --game-engine "Godot 4" \
+  --source-root scenes/ --source-root scripts/ \
+  --knowledge-graph graphify \
+  --mode migrate \
+  --dry-run
 ```
+
+An upgrade inherits these values from the manifest, so pass only what changes. An explicit `--layout` or `--engine` always wins. A config file written earlier still works through `--config`; flags win when both are given.
 
 ## Create or migrate
 
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
   --mode migrate \
   --profile evidence \
   --dry-run
@@ -256,7 +267,6 @@ GitHub exact-SHA upgrade is the default:
 python scripts/game_project.py \
   --project-root ./MyGame \
   --vault-root ../MyGame.wiki \
-  --config ./config.json \
   --mode upgrade
 ```
 
@@ -301,16 +311,19 @@ spec --governed_by-----> decision
 Run from the vault root; the runtime resolves the sidecar project root from `.llm-wiki.json`:
 
 ```bash
-python tools/game_trace.py rebuild
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
 python tools/game_trace.py verify
-python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py verify --strict-sync
 python tools/game_trace.py spec FEATURE-LOCKON-001
 python tools/game_trace.py path src/combat/LockOnSystem.ts#selectTarget
 python tools/game_trace.py affected --base HEAD~1 --head HEAD
 python tools/game_trace.py matrix
 ```
 
-Implementation relations are `current`, `stale`, `unverified`, or `missing`. `stale` means the linked path changed after the last implementation-check revision and requires reinspection; it is not an automatic semantic verdict.
+Sync states are `in_sync`, `design_changed`, `code_changed`, `both_changed`, `unverified`, and `missing`, measured against the baseline last confirmed with `accept`. A detected change means the pair needs reinspection; it never promotes either side automatically and is not a semantic verdict. `rebuild` and `--strict-stale` still work as older names, but new procedures use `scan` and `--strict-sync`.
 
 ## Independent states
 

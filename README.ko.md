@@ -66,7 +66,7 @@ Claude Code 또는 Codex가 폴더 속 원문을 보존하면서 자료를 정�
 - Claude Code 또는 Codex
 - Python 3.10 이상
 - 온라인 `upgrade`에는 GitHub HTTPS 접근
-- Graphify는 선택 사항
+- Graphify는 없으면 자동으로 설치됩니다(처음 한 번 네트워크 필요, 없어도 Wiki는 동작)
 
 Python 실행기는 `python`, `py -3`, `python3`을 사용할 수 있습니다. Windows의 Microsoft Store 실행 별칭만 있고 실제 Python이 설치되지 않은 경우에는 동작하지 않습니다.
 
@@ -318,17 +318,17 @@ Workspace/
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.game.json \
   --mode migrate \
   --profile standard \
   --dry-run
 ```
 
-설정 예시는 [`config.game.example.json`](config.game.example.json), 전체 계약은 [게임 프로젝트 모드](GAME_PROJECT_MODE.ko.md)에 있습니다.
+설정 파일은 필요 없습니다. `--game-title` 같은 값을 플래그로 넘깁니다. 전체 계약은 [게임 프로젝트 모드](GAME_PROJECT_MODE.ko.md)에 있습니다.
 
 Game v6는 두 외부 그래프를 선택 provider로 연결합니다.
-`providers.code_intelligence: "codegraph"`는 HOW(구현 구조)를,
-`providers.knowledge_graph: "graphify"`는 WHAT(프로젝트 관계)을 담당합니다.
+`--code-intelligence codegraph`는 HOW(구현 구조)를,
+`--knowledge-graph graphify`는 WHAT(프로젝트 관계)을 담당합니다.
+Graphify는 자동으로 설치됩니다. CodeGraph 자동 설치는 보류 상태라, 직접 연결해 둔 경우에만 선택합니다.
 WHY(의도·검증·결정)의 정본은 Wiki입니다. MCP가 없으면 로컬 조회로 돌아가며,
 그래프 데이터는 Wiki나 traceability에 복제하지 않습니다. 기존 v5 config와
 trace schema 2·baseline 1은 유지합니다. Game ingest의 핵심 검증은 그래프 없이
@@ -337,36 +337,35 @@ trace schema 2·baseline 1은 유지합니다. Game ingest의 핵심 검증은 �
 
 ## 선택 기능과 보존 경계
 
-Graphify는 탐색·시각화를 돕는 선택 기능입니다. Codex는 `$graphify <WIKI_ROOT>`, Claude Code는 `/graphify <WIKI_ROOT>`로 실행합니다. Raw와 Markdown이 기준이며 Graphify나 embedding이 이를 대체하지 않습니다.
+Graphify는 탐색·시각화를 돕는 기능이고, 직접 설치하지 않아도 됩니다. 설치 직후와 인제스트에서 Graphify가 없을 때 에이전트가 CLI를 설치하고 호스트 스킬을 등록합니다(`ingest_runtime.py ensure-graphify`). 오프라인처럼 설치할 수 없는 환경에서도 Wiki는 동작합니다. 단일 소스 인제스트는 그래프 없이 끝나고, 배치는 사유와 함께 미완료로 보고됩니다. Codex는 `$graphify <WIKI_ROOT>`, Claude Code는 `/graphify <WIKI_ROOT>`로 실행합니다. Raw와 Markdown이 기준이며 Graphify나 embedding이 이를 대체하지 않습니다.
 
-`templates/web-clipper/`의 Obsidian Web Clipper 템플릿은 웹 자료를 `raw/reference/`에 모읍니다. 수집만 된 Raw는 ingest와 검토 전까지 현재 지식이 아닙니다.
+웹 자료는 에이전트에게 URL을 말하면 됩니다. 에이전트가 페이지를 `raw/reference/` 아래 새 파일로 저장하고 인제스트합니다. `templates/web-clipper/`의 Obsidian Web Clipper 템플릿은 브라우저에서 한 번의 클릭으로 모으고 싶을 때만 쓰는 선택 사항이며, Clipper의 Import 창에서 파일 다섯 개를 한꺼번에 선택하는 한 번의 가져오기로 끝납니다. 수집만 된 Raw는 ingest와 검토 전까지 현재 지식이 아닙니다.
 
 오래 보존할 데이터는 `raw/`, `wiki/sources/`, Evidence의 `wiki/claims/`, `wiki/canon/`, `wiki/experiments/`, 필요한 `.session-memory/` 기록입니다. `.wiki-cache/`, Graphify output, 파생 index와 embedding은 다시 만들 수 있습니다.
 
 ## 고급 CLI
 
-기본 config는 [`config.example.json`](config.example.json)과 같습니다.
-
-```json
-{"project_name": "My Wiki", "domain_summary": "프로젝트 목적 한 문장"}
-```
+보통은 에이전트에게 말로 요청하면 되고, 아래는 에이전트가 실행하는 명령입니다. 설정 파일을 만들 필요가 없습니다. 이름은 대상 폴더 이름이 기본값이고 `--project-name`, `--domain-summary`로 바꿉니다. 예전에 만든 config 파일은 `--config`로 계속 쓸 수 있습니다.
 
 Windows에서는 `python` 대신 `py -3`을 사용할 수 있습니다.
 
 ```bash
-python scripts/bootstrap.py --target ./MyWiki --config ./config.json --mode new --profile standard
-python scripts/bootstrap.py --target ./ResearchWiki --config ./config.json --mode new --profile evidence
-python scripts/bootstrap.py --target ./ExistingProject --config ./config.json --mode migrate --profile evidence
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --profile evidence
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --source local
+python scripts/bootstrap.py --target ./MyWiki --domain-summary "프로젝트 목적 한 문장" --mode new --profile standard
+python scripts/bootstrap.py --target ./ResearchWiki --mode new --profile evidence
+python scripts/bootstrap.py --target ./ExistingProject --mode migrate --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki
+python scripts/upgrade.py --target ./ExistingWiki --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki --source local
 ```
 
 ## 설치 후 확인
 
+vault 폴더에서 실행하거나, 절대경로와 `--root` / `--target`을 씁니다.
+
 ```bash
-python ".claude/skills/ingest/scripts/ingest_runtime.py" status
+python ".agents/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
+python ".agents/skills/ingest/scripts/ingest_runtime.py" ensure-graphify --check
 ```
 
 - `wiki/index.md`, `CLAUDE.md`, `raw/CLAUDE.md`, `.llm-wiki.json` 존재 여부

@@ -10,9 +10,10 @@ import tempfile
 import urllib.error
 import urllib.request
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Iterator
 
 
 OFFICIAL_REPOSITORY = "gupilleveldesigner/llm-wiki-bootstrap"
@@ -152,6 +153,32 @@ def _write_upgrade_provenance(target: Path, *, repository: str, branch: str, com
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+@contextmanager
+def config_file(config: Path | None, target: Path, project_name: str | None = None) -> Iterator[Path]:
+    """Yield a config path for the checkout's bootstrap.py, which older versions require.
+
+    An upgrade reads the project name from the Wiki's own manifest, so nobody has
+    to write a config file for it. The temporary one only carries the fallback
+    name used for a legacy Wiki that has no manifest yet.
+    """
+    if config is not None and project_name is None:
+        yield config
+        return
+    data: dict[str, Any] = {}
+    if config is not None:
+        data = json.loads(config.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("config root must be an object")
+    if project_name is not None:
+        data["project_name"] = project_name
+    data.setdefault("project_name", target.expanduser().resolve().name or "LLM Wiki")
+    data.setdefault("domain_summary", data["project_name"])
+    with tempfile.TemporaryDirectory(prefix="llm-wiki-config-") as temporary:
+        path = Path(temporary) / "config.json"
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        yield path
+
+
 def run_local_upgrade(checkout: Path, target: Path, config: Path, profile: str | None) -> dict[str, Any]:
     command = [
         sys.executable,
@@ -216,7 +243,8 @@ def main() -> int:
         )
     )
     parser.add_argument("--target", required=True, type=Path)
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--config", type=Path, default=None, help="Optional. An upgrade reads the Wiki's own manifest.")
+    parser.add_argument("--project-name", default=None, help="Only for a legacy Wiki without a manifest. Default: the folder name.")
     parser.add_argument("--profile", choices=("standard", "evidence"), default=None)
     parser.add_argument(
         "--source",
@@ -227,10 +255,11 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        if args.source == "github":
-            result = upgrade_from_github(args.target, args.config, args.profile)
-        else:
-            result = upgrade_from_local_bundle(args.target, args.config, args.profile)
+        with config_file(args.config, args.target, args.project_name) as config:
+            if args.source == "github":
+                result = upgrade_from_github(args.target, config, args.profile)
+            else:
+                result = upgrade_from_local_bundle(args.target, config, args.profile)
     except Exception as error:
         result = {
             "ok": False,

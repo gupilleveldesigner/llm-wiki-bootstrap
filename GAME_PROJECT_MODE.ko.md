@@ -21,19 +21,22 @@ Game mode v6는 v5의 비파괴 설치·trace 계약을 유지하고 선택 prov
 | [Graphify](https://github.com/Graphify-Labs/graphify) | 코드·문서·스키마·자료를 아우르는 프로젝트 관계 | WHAT |
 
 실제 구현의 기준은 live 엔진 프로젝트다. 두 provider의 그래프는 각각 유지하고,
-호스트의 범위가 확인된 조회와 파일·심볼 참조로 연결한다. 설치기는 provider를
+호스트의 범위가 확인된 조회와 파일·심볼 참조로 연결한다. planner(`tools/game_providers.py`)는 provider를
 설치·시작·인덱싱하지 않는다. 노드·간선·쿼리 응답·provider 내부 ID를 Wiki나
 `traceability.json`에 복제하지 않으며, CodeGraph memory에 결정을 이중 저장하지 않는다.
 
-설치 config에서 두 역할을 각각 선택할 수 있다.
+Graphify는 자동으로 설치된다. Game 설치·업그레이드 직후와 인제스트에서 Graphify가 없을 때 에이전트가 `ingest_runtime.py ensure-graphify`를 실행해 `graphifyy` CLI를 설치하고(uv → pipx → pip) 호스트 스킬을 등록한다. 이미 있으면 아무것도 하지 않고, 실패해도 Game 작업은 그래프 없이 계속된다. CodeGraph 자동 설치는 보류 상태다. 플랫폼별 네이티브 바이너리와 MCP 설정 수동 편집이 필요해 Graphify처럼 한 번에 깔리지 않기 때문이며, 사용자가 직접 설치·연결한 경우에만 선택한다. 어느 쪽이든 MCP 연결 설정, 서버 시작, 그래프 생성은 자동으로 하지 않는다.
 
-```json
-{"providers": {"code_intelligence": "codegraph", "knowledge_graph": "graphify"}}
+두 역할은 설치 플래그로 각각 선택한다.
+
+```text
+--knowledge-graph graphify
+--code-intelligence codegraph
 ```
 
 설정은 `.llm-wiki.json`의 `game_project.providers`와
 `provider_schema_version: 1`에 저장한다. 새 설치에서 생략한 역할은 `null`이며,
-업그레이드에서는 생략한 역할의 기존 선택을 보존한다. 명시적인 `null`은 비활성화다.
+업그레이드에서는 생략한 역할의 기존 선택을 보존한다. `none`(config의 `null`)은 비활성화다.
 알 수 없는 provider ID는 실행하지 않고 unsupported로 표시한다. 잘못된 역할·자료형과
 지원하지 않는 schema version은 변경 전에 거부한다. 기존 v5 config는 수정 없이
 사용할 수 있고 trace schema 2, sync baseline 1, ingest ledger 3은 바뀌지 않는다.
@@ -163,7 +166,6 @@ MyGame/
 python scripts/game_project.py \
   --project-root ./MyGame \
   --layout embedded \
-  --config ./config.json \
   --mode migrate
 ```
 
@@ -178,7 +180,6 @@ python scripts/game_project.py \
   --project-root ./MyGame \
   --vault-root ../ProjectKnowledge/MyGame \
   --layout custom \
-  --config ./config.json \
   --mode migrate
 ```
 
@@ -192,7 +193,6 @@ python scripts/game_project.py \
   --vault-root ./MyGame \
   --layout legacy-in-place \
   --allow-legacy-in-place \
-  --config ./config.json \
   --mode upgrade
 ```
 
@@ -292,7 +292,6 @@ Workspace/                 # 잘못 선택
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
   --mode migrate \
   --dry-run
 ```
@@ -340,7 +339,7 @@ mutation_started: false
 2. 기존 vault를 transaction staging으로 복사
 3. staging에서 base Wiki 생성·업그레이드
 4. staging에서 Game overlay·skills·runtime 설치
-5. traceability rebuild/verify
+5. traceability scan/verify
 6. managed manifest와 정확한 write plan 생성
 7. safe_to_apply 확인
 8. 같은 파일시스템의 rename으로 vault 교체
@@ -395,25 +394,33 @@ derived
 
 업그레이드는 이전 hash와 현재 파일을 비교해 사용자 변경을 구분한다. 사용자 편집 문서를 직접 덮어써야 하는 상황은 충돌로 보고 적용하지 않는다.
 
-## Game config
+## Game 설정 — 플래그로 넘긴다
 
-```json
-{
-  "project_name": "DI LEMMATON Wiki",
-  "domain_summary": "게임 설계와 실제 구현·검증을 연결한다",
-  "project_root": "../DI_LEMMATON",
-  "layout": "sidecar",
-  "engine": "auto",
-  "game_title": "DI:LEMMATON",
-  "game_engine": "Phaser 3",
-  "game_genre": "2D action puzzle",
-  "target_platforms": "Web, Windows",
-  "project_phase": "vertical-slice",
-  "source_roots": ["src/", "public/assets/"]
-}
+설정 JSON 파일을 만들 필요가 없다. 아는 값만 플래그로 주고, 모르는 값은 생략한다.
+
+| 플래그 | 뜻 | 생략 시 |
+| --- | --- | --- |
+| `--project-name` | Wiki 이름 | `<프로젝트 폴더> Wiki` |
+| `--domain-summary` | 목적 한 문장 | 이름과 같게 |
+| `--game-title` | 게임 제목 | Wiki 이름 |
+| `--game-engine`, `--game-genre`, `--target-platforms` | 문서에 적을 설명 | `UNKNOWN` |
+| `--project-phase` | 제작 단계 | `prototype` |
+| `--source-root` (반복) | 프로젝트 기준 소스 폴더 | 엔진 adapter 기본값 |
+| `--knowledge-graph graphify\|none` | WHAT 질문용 선택 provider | 선택 안 함 |
+| `--code-intelligence codegraph\|none` | HOW 질문용 선택 provider | 선택 안 함 |
+
+```bash
+python scripts/game_project.py \
+  --project-root ./MyGame \
+  --game-title "My Game" \
+  --game-engine "Godot 4" \
+  --source-root scenes/ --source-root scripts/ \
+  --knowledge-graph graphify \
+  --mode migrate \
+  --dry-run
 ```
 
-`project_name`과 `domain_summary`는 new/migrate에서 필요하다. `project_root`, `vault_root`는 config 또는 CLI에서 지정할 수 있으며 CLI가 더 명확하다.
+업그레이드는 이 값들을 manifest에서 이어받으므로 바꿀 것만 준다. `--layout`, `--engine`을 명시하면 그 값이 항상 우선한다. 예전에 만든 config 파일은 `--config`로 계속 쓸 수 있고, 같이 주면 플래그가 이긴다.
 
 ## 생성과 전환
 
@@ -422,7 +429,6 @@ derived
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
   --mode migrate \
   --profile standard \
   --dry-run
@@ -435,7 +441,6 @@ python scripts/game_project.py \
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
   --mode migrate \
   --profile evidence
 ```
@@ -448,7 +453,6 @@ GitHub 최신 exact SHA가 기본이다.
 python scripts/game_project.py \
   --project-root ./MyGame \
   --vault-root ../MyGame.wiki \
-  --config ./config.json \
   --mode upgrade
 ```
 
@@ -458,7 +462,6 @@ python scripts/game_project.py \
 python scripts/game_project.py \
   --project-root ./MyGame \
   --vault-root ../MyGame.wiki \
-  --config ./config.json \
   --mode upgrade \
   --source local
 ```
@@ -526,9 +529,12 @@ spec --governed_by-----> decision
 
 ```bash
 cd ../MyGame.wiki
-python tools/game_trace.py rebuild
+python tools/game_trace.py scan
+python tools/game_trace.py status
+python tools/game_trace.py proposals
+python tools/game_trace.py accept wiki/game/implementation/<CHECK>.md
 python tools/game_trace.py verify
-python tools/game_trace.py verify --strict-stale
+python tools/game_trace.py verify --strict-sync
 python tools/game_trace.py spec FEATURE-LOCKON-001
 python tools/game_trace.py path src/combat/LockOnSystem.ts#selectTarget
 python tools/game_trace.py affected --base HEAD~1 --head HEAD
@@ -538,18 +544,26 @@ python tools/game_trace.py matrix
 관계 상태:
 
 ```text
-current
-  마지막 구현 확인 이후 연결된 코드 경로가 바뀌지 않음
+in_sync
+  마지막으로 확정(accept)한 기준점 이후 기획과 코드가 모두 그대로임
 
-stale
-  코드 경로가 바뀌어 기획↔구현 비교를 다시 해야 함
+design_changed
+  기획 문서가 바뀜. 구현이 새 기획을 따르는지 다시 확인해야 함
+
+code_changed
+  코드 경로가 바뀜. 기획↔구현 비교를 다시 해야 함
+
+both_changed
+  양쪽이 모두 바뀜
 
 unverified
-  구현 확인 또는 비교 가능한 revision이 없음
+  구현 확인 또는 확정한 기준점이 없음
 
 missing
   추적한 live path가 존재하지 않음
 ```
+
+변경을 감지해도 어느 한쪽을 자동으로 정본으로 올리지 않는다. 실제 대조를 마친 뒤 `accept`로 기준점을 다시 확정한다. `rebuild`와 `--strict-stale`은 예전 이름으로 계속 동작하지만 새 문서와 절차는 `scan`과 `--strict-sync`를 쓴다.
 
 `stale`은 의미상 오류를 자동 단정하지 않고 재검사를 요구하는 상태다.
 
@@ -609,9 +623,9 @@ Game mode는 다음을 자동으로 보장하지 않는다.
 - 외부 이슈 트래커 대체
 - live source의 자동 재배치
 
-Game mode v5의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.
+Game mode의 설치 계약은 **기존 엔진 구조를 바꾸지 않고, 별도 vault에서 기획·구현·검증·결정을 추적하는 것**이다.
 
-## Game-aware ingest v5
+## Game-aware ingest
 
 Game 모드는 공용 Raw→Source 엔진을 복제하지 않고 Game adapter를 설치한다.
 
