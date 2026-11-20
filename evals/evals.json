@@ -17,7 +17,9 @@
       "id": 2,
       "prompt": "<OUTPUTS>/existing-vault 에 LLM 위키 새로 구축해줘. 주제는 사진 촬영 연구야.",
       "expected_output": "대상 폴더에 기존 위키 마커(CLAUDE.md, raw/)가 있으므로 덮어쓰지 않고 중단·보고. 기존 파일 무변경.",
-      "files": ["existing-vault (사전 배치: CLAUDE.md + raw/ + wiki/)"]
+      "files": [
+        "existing-vault (사전 배치: CLAUDE.md + raw/ + wiki/)"
+      ]
     },
     {
       "id": 3,
@@ -29,7 +31,23 @@
       "id": 4,
       "prompt": "<OUTPUTS>/existing-vault 의 LLM Wiki 스킬들을 최신 버전으로 업그레이드해줘.",
       "expected_output": "scripts/upgrade.py의 GitHub source 경로 사용. gupilleveldesigner/llm-wiki-bootstrap의 현재 default branch HEAD를 조회하고 exact commit SHA archive를 검증한 뒤에만 대상 변경. 기존 skills 백업 후 최신 checkout의 upgrade logic/bundle 적용. 결과와 .llm-wiki.json에 bootstrap_commit 기록. GitHub 실패 시 local bundle로 자동 fallback하지 않음.",
-      "files": ["existing-vault (사전 배치: raw/ + wiki/ + 설치된 운영 스킬)"]
+      "files": [
+        "existing-vault (사전 배치: raw/ + wiki/ + 설치된 운영 스킬)"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "<OUTPUTS>/study-wiki 에 LLM 위키 하나 만들어줘. 게임 레벨 디자인 공부용이야.",
+      "expected_output": "질문 없이 기본값(new + standard + knowledge, 이름은 폴더명)으로 설치하고, 설정 JSON 파일을 만들거나 요구하지 않으며, Graphify를 자동 설치(ensure-graphify)하고 overview/questions를 채운 뒤 다음 할 일 세 줄을 보고한다.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "<OUTPUTS>/MyGame 은 Godot 프로젝트야. 이 게임용 위키를 붙여줘. 그래프 도구도 알아서 깔아줘.",
+      "expected_output": "설정 파일 없이 플래그만으로 Game sidecar를 dry-run 후 적용하고(--knowledge-graph graphify), Graphify는 ensure-graphify로 자동 설치한다. CodeGraph는 자동 설치가 보류 상태임을 알리고 설치하지 않는다. live project는 변경하지 않는다.",
+      "files": [
+        "MyGame (사전 배치: project.godot)"
+      ]
     }
   ]
 }

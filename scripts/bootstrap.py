@@ -4,8 +4,10 @@ import os
 import shutil
 import tempfile
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Iterator
 
 from template_render import render_template
 
@@ -199,6 +201,46 @@ def seed_ingest_ledger(target: Path, *, propose_existing: bool = False) -> list[
         return [proposal.relative_to(target).as_posix()]
     write_text(destination, content)
     return []
+
+
+@contextmanager
+def resolved_config(
+    config_path: Path | None,
+    overrides: dict[str, Any],
+    *,
+    default_name: str | None,
+) -> Iterator[Path]:
+    """Yield a config file for the installer without anyone writing JSON by hand.
+
+    Command-line values win over an optional config file. With default_name, a
+    missing project name or summary falls back to it; pass None where an absent
+    value must stay absent (an upgrade keeps what the Wiki already records, and
+    an injected name would replace it). The merged file is temporary
+    and lives outside the target, so it never ends up inside a vault. Every
+    caller still receives a real file path, which keeps older installed copies
+    of these scripts (that only know --config) working.
+    """
+    if config_path is not None and not overrides:
+        yield config_path
+        return
+    config: dict[str, Any] = {}
+    if config_path is not None:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(config, dict):
+            raise ValueError("config root must be an object")
+        # Relative roots mean "relative to the config file"; keep that meaning after the move.
+        for key in ("project_root", "vault_root"):
+            value = config.get(key)
+            if isinstance(value, str) and value and not Path(value).expanduser().is_absolute():
+                config[key] = str((config_path.parent / Path(value).expanduser()).resolve())
+    config.update(overrides)
+    if default_name is not None:
+        config.setdefault("project_name", default_name)
+        config.setdefault("domain_summary", config["project_name"])
+    with tempfile.TemporaryDirectory(prefix="llm-wiki-config-") as temporary:
+        merged = Path(temporary) / "config.json"
+        merged.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+        yield merged
 
 
 def load_config(config_path: Path, keys: tuple[str, ...]) -> dict:
@@ -747,8 +789,9 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
     resolved_profile, _ = resolve_profile(target, profile, mode)
     validate_profile_bundle(resolved_profile)
     existing_entries = sorted(path.name for path in target.iterdir()) if target.exists() else []
-    target.mkdir(parents=True, exist_ok=True)
+    # Read the config first so a bad one does not leave an empty target behind.
     config = load_config(config_path, ("project_name", "domain_summary"))
+    target.mkdir(parents=True, exist_ok=True)
 
     for directory in BASE_DIRECTORIES + PROFILE_DIRECTORIES[resolved_profile]:
         (target / directory).mkdir(parents=True, exist_ok=True)
@@ -850,18 +893,42 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
     return result
 
 
+def emit_result(result: dict) -> None:
+    """Print the JSON result even when stdout cannot encode it.
+
+    Results list Korean template names. A console or pipe in a code page without
+    those characters would raise and leave no result at all, so fall back to
+    ASCII escapes, which every code page and every JSON reader accepts. The
+    stream's own encoding is kept so a calling process that reads this output
+    with its locale encoding still decodes it.
+    """
+    try:
+        print(json.dumps(result, ensure_ascii=False))
+    except UnicodeEncodeError:
+        print(json.dumps(result, ensure_ascii=True))
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Create, migrate or upgrade an LLM Wiki. No config file is needed.")
     parser.add_argument("--target", required=True, type=Path)
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--project-name", default=None, help="Wiki name. Default: the target folder name.")
+    parser.add_argument("--domain-summary", default=None, help="One sentence on what the Wiki is for. Default: the project name.")
+    parser.add_argument("--config", type=Path, default=None, help="Optional JSON with the same keys; the flags above win.")
     parser.add_argument("--mode", choices=("new", "migrate", "upgrade"), default="new")
     parser.add_argument("--profile", choices=PROFILES, default=None)
     args = parser.parse_args()
+    overrides = {
+        key: value
+        for key, value in (("project_name", args.project_name), ("domain_summary", args.domain_summary))
+        if value is not None
+    }
     try:
-        result = bootstrap(args.target, args.config, args.mode, args.profile)
+        default_name = args.target.expanduser().resolve().name or "LLM Wiki"
+        with resolved_config(args.config, overrides, default_name=default_name) as config_path:
+            result = bootstrap(args.target, config_path, args.mode, args.profile)
     except Exception as error:
         result = {"ok": False, "error": str(error), "mode": args.mode, "profile": args.profile}
-    print(json.dumps(result, ensure_ascii=False))
+    emit_result(result)
     return 0 if result["ok"] else 1
 
 

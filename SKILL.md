@@ -24,6 +24,26 @@ migrate + standard + game
 upgrade + evidence + game
 ```
 
+## 빠른 경로
+
+대부분의 요청은 질문 없이 끝난다. 사용자가 말하지 않은 값은 아래 기본값으로 정하고, 정한 값을 결과 보고에 적는다.
+
+| 정할 것 | 기본값 |
+|---|---|
+| lifecycle | 대상 폴더 상태로 판정한다 (§1 표). 비어 있으면 `new`, 일반 폴더면 `migrate`, 기존 Wiki면 `upgrade` |
+| profile | `standard`. §2의 Evidence 신호가 요청에 있을 때만 `evidence` |
+| project mode | `knowledge`. 실제 게임·엔진 프로젝트와 함께 쓰려는 요청일 때만 `game` |
+| 이름 | 대상 폴더 이름 (`--project-name` 생략) |
+| 목적 한 문장 | 사용자가 한 말에서 뽑는다. 없으면 생략한다 |
+
+1. 위 표로 세 축을 정한다. 대상 경로를 모를 때만 묻는다.
+2. 해당 명령 하나를 실행한다 (§5, Game은 §7·§8). **설정 JSON 파일을 만들거나 사용자에게 만들게 하지 않는다.** 값은 전부 플래그로 넘긴다.
+3. Graphify를 자동 설치한다 (§5.2). 사용자에게 설치 명령을 넘기지 않는다.
+4. 설치 직후 문서를 채운다 (§5.3).
+5. Smoke check (§13) 뒤 결과와 "다음 할 일" 세 줄을 보고한다 (§14).
+
+Game이 아니면 §6~§10과 §12는 읽지 않아도 된다. Evidence가 아니면 §11은 읽지 않아도 된다.
+
 ## 절대 규칙
 
 1. `raw/`는 불변이다. 기존 Raw를 수정·삭제하지 않는다.
@@ -132,77 +152,84 @@ evidence + game
 
 Game → knowledge 자동 제거는 제공하지 않는다. Game 기록과 router를 없애는 작업은 별도 migration이다.
 
-# 4. 짧은 인터뷰와 config
+# 4. 묻는 것과 넘기는 값
 
-이미 받은 정보는 다시 묻지 않는다. 빠진 항목만 한 번에 묻는다.
+이미 받은 정보는 다시 묻지 않는다. 기본값으로 정할 수 있는 것은 묻지 않고, 꼭 필요한 것만 한 번에 묻는다.
 
-공통:
+- 꼭 필요한 것: 대상 경로. Game이면 정확한 live project root.
+- 있으면 쓰는 것: Wiki 주제와 목적 한 문장, 주요 자료 유형, 프로젝트 이름. Game이면 게임 제목·엔진·장르·플랫폼·제작 단계, source roots, sidecar/embedded/custom 배치 선호.
 
-1. Wiki 주제와 목적
-2. 주요 자료 유형
-3. 프로젝트 이름
+모르는 값은 생략한다. 스크립트가 `UNKNOWN`이나 빈 목록으로 시작한다. 엔진 표지를 근거 없이 추정하지 않는다.
 
-Game에서 필요하면:
+값은 플래그로 넘긴다. 사용자가 JSON 파일을 쓰거나 고치는 단계는 없다.
 
-- 정확한 live project root
-- 게임 제목·엔진·장르·플랫폼·제작 단계
-- source roots
-- sidecar/embedded/custom 배치 선호
+| 플래그 | 뜻 | 생략 시 |
+|---|---|---|
+| `--project-name` | Wiki 이름 | 대상 폴더 이름 (Game은 `<프로젝트 폴더> Wiki`) |
+| `--domain-summary` | 목적 한 문장 | 이름과 같게 |
+| `--game-title`, `--game-engine`, `--game-genre`, `--target-platforms`, `--project-phase` | Game 문서에 들어갈 설명 | 제목은 이름, 나머지는 `UNKNOWN`·`prototype` |
+| `--source-root` (반복) | 프로젝트 기준 소스 폴더 | 엔진 adapter 기본값. upgrade는 기록된 값 유지 |
+| `--knowledge-graph graphify\|none` | WHAT 질문용 선택 provider | 새 설치는 비활성, upgrade는 기존 선택 유지 |
+| `--code-intelligence codegraph\|none` | HOW 질문용 선택 provider | 위와 같음 |
 
-모르면 `UNKNOWN` 또는 빈 목록으로 시작한다. 엔진 표지를 근거 없이 추정하지 않는다.
+`--config <파일>`은 예전 설정 파일을 가진 사용자를 위해 계속 받는다. 같이 주면 플래그가 이긴다. 새로 만들라고 안내하지 않는다.
 
-기본 config:
+# 5. Knowledge mode
 
-```json
-{
-  "project_name": "My Wiki",
-  "domain_summary": "프로젝트 목적 한 문장"
-}
-```
+## 5.1 new / migrate / upgrade
 
-Game config:
-
-```json
-{
-  "project_name": "My Game Wiki",
-  "domain_summary": "기획과 실제 구현·검증을 연결한다",
-  "project_root": "../MyGame",
-  "layout": "sidecar",
-  "engine": "auto",
-  "game_title": "My Game",
-  "game_engine": "Godot 4",
-  "game_genre": "2D action puzzle",
-  "target_platforms": "Windows, Web",
-  "project_phase": "prototype",
-  "source_roots": ["scenes/", "scripts/", "assets/"]
-}
-```
-
-# 5. Knowledge mode new / migrate
-
-Standard:
+새 Wiki:
 
 ```bash
 python "<SKILL_ROOT>/scripts/bootstrap.py" \
   --target "<VAULT_ROOT>" \
-  --config "<CONFIG>" \
+  --domain-summary "<목적 한 문장>" \
   --mode new \
   --profile standard
 ```
 
-Evidence:
-
-```bash
-python "<SKILL_ROOT>/scripts/bootstrap.py" \
-  --target "<VAULT_ROOT>" \
-  --config "<CONFIG>" \
-  --mode new \
-  --profile evidence
-```
-
-기존 일반 폴더는 `--mode migrate`를 사용한다.
+Evidence는 `--profile evidence`, 기존 일반 폴더는 `--mode migrate`를 쓴다.
 
 `new`와 `migrate` 모두 적용 전에 target 및 하위 symlink를 검사한다. 하나라도 발견되면 vault 밖 쓰기 가능성을 막기 위해 중단하고 사용자가 실제 파일/폴더로 정리하도록 안내한다.
+
+기존 Wiki 최신화:
+
+```bash
+python "<SKILL_ROOT>/scripts/upgrade.py" --target "<VAULT_ROOT>"
+```
+
+이름과 profile은 Wiki의 manifest에서 읽으므로 다른 인자가 필요 없다. Evidence로 승격할 때만 `--profile evidence`, 사용자가 오프라인 bundle을 명시했을 때만 `--source local`을 붙인다. Game mode Wiki는 이 명령이 아니라 §8을 쓴다.
+
+## 5.2 Graphify 자동 설치
+
+설치·전환·업그레이드가 성공하면 이어서 실행한다. 사용자에게 묻거나 명령을 넘기지 않는다.
+
+```bash
+python "<VAULT_ROOT>/.agents/skills/ingest/scripts/ingest_runtime.py" ensure-graphify
+```
+
+- Graphify CLI가 없으면 `uv tool install graphifyy` → `pipx install graphifyy` → `python -m pip install graphifyy` 순으로 시도하고, 홈 디렉터리가 있는 호스트(Claude, Codex)에 Graphify 스킬을 등록한다. 이미 있으면 아무것도 하지 않는다.
+- 결과의 `status`가 `installed` 또는 `ready`면 끝이다. 새로 등록된 호스트 스킬은 그 호스트의 다음 세션부터 보인다는 점을 보고에 적는다.
+- `failed`(네트워크 차단, Python 3.11 미만 등)여도 Wiki 설치는 유효하다. 실패 사유와 함께 "그래프 없이 시작, 단일 소스 인제스트는 가능"이라고 보고하고 넘어간다. 설치를 완료로 꾸미지 않는다.
+- 그래프 생성은 여기서 하지 않는다. 첫 배치 인제스트에서 호스트 스킬(`/graphify`, `$graphify`)이 만든다.
+
+**CodeGraph는 자동 설치하지 않는다(보류).** 플랫폼별 네이티브 바이너리와 호스트 MCP 설정 편집이 필요해서 Graphify처럼 한 번에 깔리지 않는다. 사용자가 직접 설치해 연결해 둔 경우에만 `--code-intelligence codegraph`로 선택한다.
+
+## 5.3 설치 직후 채우기
+
+`new`와 `migrate` 뒤에는 빈 틀을 사용자에게 넘기지 않는다.
+
+1. `wiki/overview.md`와 `wiki/questions.md`의 `<!-- BOOTSTRAP:FILL … -->` 표시를 찾아, 사용자가 말한 주제·목적·자료 유형으로 내용을 채우고 표시를 지운다.
+2. 사용자가 주제 분야를 말했으면 `wiki/taxonomy.json`에 그 분야의 상위 개념 몇 개를 넣는다. 형식은 파일 안의 기존 항목을 따른다.
+3. 사용자가 말하지 않은 내용은 지어내지 않는다. 채울 근거가 없는 항목은 한 줄 안내만 남긴다.
+
+`migrate`에서 `.wiki-proposed`가 생긴 문서는 덮어쓰지 않고 차이를 요약해 사용자가 고르게 한다.
+
+## 5.4 Web Clipper는 선택 사항
+
+자료를 넣는 기본 방법은 사용자가 URL이나 파일을 말하는 것이다. 설치된 `ingest` 스킬이 URL을 받아 `raw/reference/` 아래에 새 원문 파일로 저장하고 반영한다.
+
+Obsidian Web Clipper를 쓰고 싶은 사용자에게만 `<VAULT_ROOT>/templates/web-clipper/`의 절대경로를 알려 준다. Clipper 설정의 Import에서 그 폴더의 파일 다섯 개를 한 번에 선택하면 된다. 브라우저 확장 저장소는 에이전트가 건드릴 수 없으므로 이 한 번의 가져오기만 사용자 몫이고, 쓰지 않아도 Wiki 기능은 같다.
 
 # 6. Game mode layout safety
 
@@ -259,11 +286,14 @@ MyGame/.llm-wiki/
 ```bash
 python "<SKILL_ROOT>/scripts/game_project.py" \
   --project-root "<PROJECT_ROOT>" \
-  --config "<CONFIG>" \
+  --game-title "<게임 제목>" \
+  --knowledge-graph graphify \
   --mode migrate \
   --profile standard \
   --dry-run
 ```
+
+아는 값만 플래그로 붙인다(§4 표). `--knowledge-graph graphify`는 새 Game 설치의 기본 선택이다. Graphify는 적용 뒤 자동 설치하며(§5.2), 설치에 실패해도 Game 완료 검사는 그래프 없이 통과한다. CodeGraph는 사용자가 이미 연결해 둔 경우에만 `--code-intelligence codegraph`를 붙인다.
 
 Dry-run은 transaction staging에서 실제 설치와 검증을 수행하지만 최종 vault를 만들거나 바꾸지 않는다.
 
@@ -297,10 +327,13 @@ mutation_started: false
 ```bash
 python "<SKILL_ROOT>/scripts/game_project.py" \
   --project-root "<PROJECT_ROOT>" \
-  --config "<CONFIG>" \
+  --game-title "<게임 제목>" \
+  --knowledge-graph graphify \
   --mode migrate \
   --profile standard
 ```
+
+Dry-run과 apply에는 같은 플래그를 준다. 적용이 끝나면 §5.2의 `ensure-graphify`를 실행하고, §5.3처럼 `wiki/game/`의 `overview.md`·`pillars.md`·`roadmap.md`를 사용자가 말한 내용으로 채운다.
 
 적용 계약:
 
@@ -323,7 +356,6 @@ Game mode 또는 Game 추가 upgrade:
 python "<SKILL_ROOT>/scripts/game_project.py" \
   --project-root "<PROJECT_ROOT>" \
   --vault-root "<VAULT_ROOT>" \
-  --config "<CONFIG>" \
   --mode upgrade
 ```
 
@@ -333,7 +365,6 @@ Evidence 승격:
 python "<SKILL_ROOT>/scripts/game_project.py" \
   --project-root "<PROJECT_ROOT>" \
   --vault-root "<VAULT_ROOT>" \
-  --config "<CONFIG>" \
   --mode upgrade \
   --profile evidence
 ```
@@ -344,10 +375,11 @@ python "<SKILL_ROOT>/scripts/game_project.py" \
 python "<SKILL_ROOT>/scripts/game_project.py" \
   --project-root "<PROJECT_ROOT>" \
   --vault-root "<VAULT_ROOT>" \
-  --config "<CONFIG>" \
   --mode upgrade \
   --source local
 ```
+
+Upgrade는 이름·게임 정보·source roots·provider 선택을 manifest에서 이어받으므로 바꿀 값만 플래그로 준다. 선택을 해제할 때는 `--knowledge-graph none`처럼 명시한다. 적용 뒤 rollback backup이 `<프로젝트 옆>/.llm-wiki-transactions/` 아래에 남는다. 경로를 보고하고, 사용자가 필요 없다고 하면 지우거나 다음부터 `--discard-rollback-backup`을 쓴다.
 
 Game mode Wiki에 base `upgrade.py`만 사용하지 않는다. `game_project.py --mode upgrade`가 base Wiki, Game overlay, layout safety, managed manifest, trace runtime을 같은 exact checkout에서 함께 갱신한다.
 
@@ -431,15 +463,18 @@ instructions/game-ingest.md
 
 # 10. Game 운영 계약
 
-Game v6는 선택 provider를 추가한다. config의 `providers.code_intelligence: "codegraph"`,
-`providers.knowledge_graph: "graphify"`를 manifest `game_project.providers`에 저장한다.
+Game v6는 선택 provider를 추가한다. `--knowledge-graph graphify`, `--code-intelligence codegraph`
+(또는 예전 config의 `providers.*`)를 manifest `game_project.providers`에 저장한다.
 WHAT → Graphify / HOW → CodeGraph / WHY → Wiki를 따르며, 기존 config는 수정 없이
-유효하다. 새 설치의 생략은 비활성화, upgrade의 생략은 기존 선택 유지, 명시적 null은 해제다.
+유효하다. 새 설치의 생략은 비활성화, upgrade의 생략은 기존 선택 유지, `none`(config의 null)은 해제다.
 알 수 없는 provider ID는 실행하지 않는다. provider schema version은 1이다.
+
+Graphify CLI와 호스트 스킬은 §5.2로 자동 설치한다. CodeGraph 자동 설치는 보류 상태이며
+사용자가 직접 연결한 경우에만 선택한다.
 
 설치된 `tools/game_providers.py status`와 `route`는 호스트 질의 요청안만 반환한다.
 실제 도구 스키마와 connection_id·서버 기본 corpus를 확인하지 못하면 로컬 조회로 돌아간다.
-MCP 설치·시작·indexing·credential 탐색·graph 복제는 수행하지 않는다.
+이 planner 자체는 MCP 설치·시작·indexing·credential 탐색·graph 복제를 수행하지 않는다.
 `instructions/game-providers.md`를 읽고, Game ingest의 graph 검사 생략과 명시적인
 vault-local `verify --require-graph`를 구분한다. trace schema 2, baseline 1,
 `live_paths`/`checked_paths` 형식과 수동 baseline 승인은 유지한다.
@@ -538,26 +573,29 @@ derived
 
 # 13. Smoke checks
 
+어느 디렉터리에서 실행해도 되도록 vault 절대경로를 넣는다.
+
 공통:
 
 ```bash
-python ".claude/skills/ingest/scripts/ingest_runtime.py" status
-python ".session-memory/scripts/session_memory.py" status
+python "<VAULT_ROOT>/.agents/skills/ingest/scripts/ingest_runtime.py" status --root "<VAULT_ROOT>"
+python "<VAULT_ROOT>/.session-memory/scripts/session_memory.py" status --target "<VAULT_ROOT>"
+python "<VAULT_ROOT>/.agents/skills/ingest/scripts/ingest_runtime.py" ensure-graphify --check
 ```
 
 Evidence:
 
 ```bash
-python -m unittest discover ".agents/skills/ingest/tests" -p "test_*.py"
-python -m unittest discover ".agents/skills/lint/tests" -p "test_*.py"
-python -m unittest discover ".agents/skills/query/tests" -p "test_*.py"
-python "tools/kb.py" selftest
+python -m unittest discover "<VAULT_ROOT>/.agents/skills/ingest/tests" -p "test_*.py"
+python -m unittest discover "<VAULT_ROOT>/.agents/skills/lint/tests" -p "test_*.py"
+python -m unittest discover "<VAULT_ROOT>/.agents/skills/query/tests" -p "test_*.py"
+python "<VAULT_ROOT>/tools/kb.py" selftest
 ```
 
-Game:
+Game (vault를 작업 디렉터리로 두거나 `--vault-root`를 준다):
 
 ```bash
-python "tools/game_trace.py" verify
+python "<VAULT_ROOT>/tools/game_trace.py" --vault-root "<VAULT_ROOT>" verify
 ```
 
 확인:
@@ -576,16 +614,27 @@ python "tools/game_trace.py" verify
 
 # 14. 마무리 보고
 
-1. lifecycle / profile / project mode
-2. project root / vault root / layout / engine adapter
-3. dry-run 또는 apply write plan 요약
-4. protected path writes, collisions, symlink violations, deletes 여부
-5. mutation_started와 rollback backup
-6. project integrity 결과
-7. 설치·갱신 skill/runtime/docs
-8. traceability rebuild/verify 결과
-9. `.wiki-proposed`와 activation pending
-10. upgrade source와 exact commit
-11. 다음 실제 행동
+사용자가 읽는 보고는 짧게, 실제로 실행해 확인한 것만 적는다.
+
+Knowledge mode:
+
+1. 만든(또는 갱신한) 위치와 lifecycle / profile, 기본값으로 정한 것
+2. Graphify 상태 (`installed` / `ready` / `failed`와 사유)
+3. 채운 문서와 사용자 확인이 필요한 `.wiki-proposed`
+4. upgrade면 source와 exact commit
+5. 다음 할 일 세 줄:
+   - 자료를 `raw/inbox/`에 넣거나 URL을 말한다
+   - "인제스트해줘"라고 한다
+   - 세션을 마칠 때 "SAVE"라고 한다
+
+Game mode는 위에 더해:
+
+1. project root / vault root / layout / engine adapter
+2. dry-run 또는 apply write plan 요약
+3. protected path writes, collisions, symlink violations, deletes 여부
+4. mutation_started와 rollback backup 위치
+5. project integrity 결과
+6. traceability scan/verify 결과
+7. activation pending
 
 GitHub 최신 upgrade에서 `bootstrap_commit`을 보고하지 못했거나, Game apply에서 `safe_to_apply`, post-apply verification, project integrity를 확인하지 못했다면 완료라고 말하지 않는다.

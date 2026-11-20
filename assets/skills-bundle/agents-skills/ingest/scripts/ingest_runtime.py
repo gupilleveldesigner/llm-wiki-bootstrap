@@ -152,7 +152,99 @@ def graphify_executable() -> str | None:
         str(executable_root / name)
         for name in ("graphify", "graphify.exe", "Scripts/graphify", "Scripts/graphify.exe")
     )
+    # uv and pipx put tool executables here, which a running shell may not have on PATH yet.
+    candidates.extend(str(Path.home() / ".local" / "bin" / name) for name in ("graphify", "graphify.exe"))
     return next((candidate for candidate in candidates if candidate and Path(candidate).is_file()), None)
+
+
+# The official PyPI package is "graphifyy" (double y); the command it installs is "graphify".
+GRAPHIFY_PACKAGE = "graphifyy"
+GRAPHIFY_HOSTS = {
+    "claude": {"home": ".claude", "register": ["install"]},
+    "codex": {"home": ".codex", "register": ["install", "--platform", "codex"]},
+}
+GRAPHIFY_INSTALL_TIMEOUT = 900
+GRAPHIFY_REGISTER_TIMEOUT = 180
+
+
+def graphify_installers() -> list[list[str]]:
+    """Installers to try in order: isolated tool environments first, plain pip last."""
+    installers: list[list[str]] = []
+    if shutil.which("uv"):
+        installers.append(["uv", "tool", "install", GRAPHIFY_PACKAGE])
+    if shutil.which("pipx"):
+        installers.append(["pipx", "install", GRAPHIFY_PACKAGE])
+    installers.append([sys.executable, "-m", "pip", "install", GRAPHIFY_PACKAGE])
+    return installers
+
+
+def _run_quietly(command: Sequence[str], timeout: int) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            list(command), capture_output=True, text=True, encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL, timeout=timeout, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, str(error)
+    tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-3:]
+    return completed.returncode == 0, " | ".join(tail)
+
+
+def graphify_host_skill(host: str) -> Path:
+    return Path.home() / GRAPHIFY_HOSTS[host]["home"] / "skills" / "graphify" / "SKILL.md"
+
+
+def ensure_graphify(hosts: Sequence[str] | None = None, *, install: bool = True, runner=_run_quietly) -> dict[str, Any]:
+    """Install the Graphify CLI and register its host skill, without asking the user.
+
+    Building a graph still goes through the host skill (/graphify or $graphify),
+    so this only makes that skill available. Nothing is installed when Graphify
+    is already present, and with install=False the current state is only reported.
+    """
+    selected = list(hosts) if hosts else [host for host, spec in GRAPHIFY_HOSTS.items() if (Path.home() / spec["home"]).is_dir()]
+    errors: list[str] = []
+    cli: dict[str, Any] = {"executable": graphify_executable(), "installed_now": False, "installer": None, "attempts": []}
+    if cli["executable"] is None and install:
+        for command in graphify_installers():
+            ok, detail = runner(command, GRAPHIFY_INSTALL_TIMEOUT)
+            cli["attempts"].append({"command": " ".join(command), "ok": ok, "detail": detail})
+            cli["executable"] = graphify_executable()
+            if ok and cli["executable"]:
+                cli.update(installed_now=True, installer=" ".join(command))
+                break
+    if cli["executable"] is None:
+        errors.append("Graphify CLI is not installed" + ("; every installer failed" if cli["attempts"] else ""))
+
+    host_results: dict[str, Any] = {}
+    for host in selected:
+        skill = graphify_host_skill(host)
+        state: dict[str, Any] = {"skill": str(skill), "registered": skill.is_file(), "registered_now": False}
+        host_results[host] = state
+        if state["registered"] or cli["executable"] is None or not install:
+            if not state["registered"] and cli["executable"] is not None:
+                errors.append(f"Graphify host skill is not registered for {host}")
+            continue
+        command = [cli["executable"], *GRAPHIFY_HOSTS[host]["register"]]
+        ok, detail = runner(command, GRAPHIFY_REGISTER_TIMEOUT)
+        state["registered"] = skill.is_file()
+        state["registered_now"] = ok and state["registered"]
+        if not state["registered"]:
+            state["detail"] = detail
+            errors.append(f"could not register the Graphify host skill for {host}")
+
+    changed = cli["installed_now"] or any(state["registered_now"] for state in host_results.values())
+    return {
+        "status": ("failed" if install else "missing") if errors else ("installed" if changed else "ready"),
+        "package": GRAPHIFY_PACKAGE,
+        "cli": cli,
+        "hosts": host_results,
+        "errors": errors,
+        "note": (
+            "A newly registered host skill is picked up by the next session of that host. "
+            "Build the graph through the host skill, not by running graphify from Python."
+        ),
+        "exit_code": 2 if errors else 0,
+    }
 
 
 def graphify_agent_action(root: Path) -> dict[str, Any]:
@@ -161,6 +253,8 @@ def graphify_agent_action(root: Path) -> dict[str, Any]:
     return {
         "status": "agent_action_required",
         "root": str(root),
+        # Run this first and without asking: it installs the CLI and registers the host skill.
+        "auto_install": f"{runtime} ensure-graphify",
         "codex": {
             "install": "python -m pip install graphifyy && graphify install --platform codex",
             "build": f"$graphify {target}",
@@ -175,7 +269,10 @@ def graphify_agent_action(root: Path) -> dict[str, Any]:
             "record": f'{runtime} record-graphify-run --root {target} --host claude',
             "always_on_optional": "graphify claude install",
         },
-        "note": "Run Graphify through the host AI skill so its platform authentication is used. Do not run bare graphify <path> from Python.",
+        "note": (
+            "If Graphify is missing, run auto_install before anything else; the per-host install commands are the manual fallback. "
+            "Run Graphify through the host AI skill so its platform authentication is used. Do not run bare graphify <path> from Python."
+        ),
     }
 
 
@@ -1108,6 +1205,14 @@ def build_parser() -> argparse.ArgumentParser:
             child.add_argument("--changed-file", action="append", default=[])
         if name == "record-graphify-run":
             child.add_argument("--host", choices=("codex", "claude"), required=True)
+    ensure = subparsers.add_parser(
+        "ensure-graphify",
+        help="Install the Graphify CLI and register its host skill when missing.",
+    )
+    ensure.add_argument("--root", default=None, help="Accepted for symmetry; installation is per machine, not per vault.")
+    ensure.add_argument("--host", action="append", choices=tuple(GRAPHIFY_HOSTS), default=None,
+                        help="Host to register (repeatable). Default: every host whose home directory exists.")
+    ensure.add_argument("--check", action="store_true", help="Report the current state without installing anything.")
     return parser
 
 
@@ -1115,6 +1220,11 @@ def main() -> int:
     configure_utf8_stdout()
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "ensure-graphify":
+        # Machine-level setup: handled here so a vault's ingest adapter never intercepts it.
+        result = ensure_graphify(args.host, install=not args.check)
+        print_json(result)
+        return int(result["exit_code"])
     try:
         root = resolve_wiki_root(args.root, skill_root=SCRIPT_ROOT.parent)
         adapter_exit = dispatch_configured_adapter(root, sys.argv[1:], runtime_path=Path(__file__))

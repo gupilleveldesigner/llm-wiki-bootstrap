@@ -208,10 +208,16 @@ def prepare_local_game_project(
         mode=mode,
         allow_legacy_in_place=allow_legacy_in_place,
     )
+    previous_manifest = read_manifest(workspace.vault_root) if workspace.vault_root.exists() else {}
     configured_sources = config.get("source_roots") if isinstance(config.get("source_roots"), list) else None
+    if configured_sources is None:
+        # An upgrade that does not restate the source roots keeps the recorded ones.
+        previous_game = previous_manifest.get("game_project")
+        recorded_sources = previous_game.get("source_roots") if isinstance(previous_game, dict) else None
+        if isinstance(recorded_sources, list) and all(isinstance(item, str) for item in recorded_sources):
+            configured_sources = recorded_sources
     engine = detect_engine(workspace.project_root, requested=resolved_engine, source_roots=configured_sources)
     base_mode = determine_base_mode(workspace.vault_root, mode)
-    previous_manifest = read_manifest(workspace.vault_root) if workspace.vault_root.exists() else {}
     previous_project_mode = str(previous_manifest.get("project_mode", "knowledge"))
     # Refuse unsupported future provider contracts before creating a stage or
     # rewriting metadata. Omitted selections survive upgrades.
@@ -527,7 +533,19 @@ def main() -> int:
     parser.add_argument("--target", type=Path, default=None, help="Deprecated alias for --project-root, or an existing vault with a project-root manifest reference.")
     parser.add_argument("--project-root", type=Path, default=None, help="Live game/engine project root.")
     parser.add_argument("--vault-root", type=Path, default=None, help="Wiki vault root. Defaults to sidecar <project>.wiki.")
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--config", type=Path, default=None, help="Optional JSON with the same keys as the flags below; the flags win.")
+    parser.add_argument("--project-name", default=None, help="Wiki name. Default: '<project folder> Wiki'.")
+    parser.add_argument("--domain-summary", default=None, help="One sentence on what the Wiki is for. Default: the project name.")
+    parser.add_argument("--game-title", default=None)
+    parser.add_argument("--game-engine", default=None, help="Free text for the docs, e.g. 'Godot 4'. Detection uses --engine.")
+    parser.add_argument("--game-genre", default=None)
+    parser.add_argument("--target-platforms", default=None)
+    parser.add_argument("--project-phase", default=None)
+    parser.add_argument("--source-root", action="append", default=None, help="Project-relative source folder; repeat for several.")
+    parser.add_argument("--knowledge-graph", choices=("graphify", "none"), default=None,
+                        help="Optional provider for WHAT questions. Omit to keep the current selection; 'none' clears it.")
+    parser.add_argument("--code-intelligence", choices=("codegraph", "none"), default=None,
+                        help="Optional provider for HOW questions. Omit to keep the current selection; 'none' clears it.")
     parser.add_argument("--mode", choices=("new", "migrate", "upgrade"), default="migrate")
     parser.add_argument("--profile", choices=("standard", "evidence"), default=None)
     parser.add_argument("--layout", choices=SUPPORTED_LAYOUTS, default="auto")
@@ -544,55 +562,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        config_path = args.config.expanduser().resolve()
-        config = read_json_object(config_path)
-        validate_config(config, require_base=args.mode in ("new", "migrate"))
-        project_root, vault_root = resolve_cli_roots(
-            config_path,
-            config,
-            target=args.target,
-            project_root=args.project_root,
-            vault_root=args.vault_root,
-        )
-        layout = str(config.get("layout") or args.layout)
-        engine_name = str(config.get("engine") or args.engine)
-        options = {
-            "layout": layout,
-            "engine_name": engine_name,
-            "dry_run": args.dry_run,
-            "integrity_mode": args.integrity,
-            "keep_rollback_backup": not args.discard_rollback_backup,
-            "allow_legacy_in_place": args.allow_legacy_in_place,
-            "adopt_existing_vault": args.adopt_existing_vault,
-        }
-        provenance = None
-        if args.bootstrap_repository and args.bootstrap_branch and args.bootstrap_commit:
-            provenance = {
-                "repository": args.bootstrap_repository,
-                "branch": args.bootstrap_branch,
-                "commit": args.bootstrap_commit,
-            }
-        if args.mode == "upgrade" and args.source == "github":
-            result = upgrade_game_from_github(project_root, vault_root, config_path, args.profile, **options)
-        elif args.mode == "upgrade":
-            result = upgrade_game_from_local(
-                project_root,
-                vault_root,
-                config_path,
-                args.profile,
-                provenance=provenance,
-                **options,
-            )
-        else:
-            result = run_local_game_project(
-                project_root,
-                config_path,
-                args.mode,
-                args.profile,
-                vault_root=vault_root,
-                provenance=provenance,
-                **options,
-            )
+        with wiki_bootstrap.resolved_config(
+            args.config.expanduser().resolve() if args.config else None,
+            config_overrides(args),
+            default_name=None if args.mode == "upgrade" else default_project_name(args),
+        ) as config_path:
+            result = run_cli(args, config_path)
     except Exception as error:
         result = {
             "ok": False,
@@ -604,8 +579,90 @@ def main() -> int:
             "error": str(error),
         }
 
-    print(json.dumps(result, ensure_ascii=False))
+    wiki_bootstrap.emit_result(result)
     return 0 if result.get("ok") else 1
+
+
+def config_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Config values given as flags, so no JSON file has to be written by hand."""
+    overrides: dict[str, Any] = {
+        key: value
+        for key in ("project_name", "domain_summary", "game_title", "game_engine", "game_genre", "target_platforms", "project_phase")
+        if (value := getattr(args, key)) is not None
+    }
+    if args.source_root is not None:
+        overrides["source_roots"] = args.source_root
+    providers = {
+        slot: None if value == "none" else value
+        for slot, value in (("knowledge_graph", args.knowledge_graph), ("code_intelligence", args.code_intelligence))
+        if value is not None
+    }
+    if providers:
+        overrides["providers"] = providers
+    # An explicit command-line choice must not be silently replaced by a config value.
+    if args.layout != "auto":
+        overrides["layout"] = args.layout
+    if args.engine != "auto":
+        overrides["engine"] = args.engine
+    return overrides
+
+
+def default_project_name(args: argparse.Namespace) -> str:
+    root = args.project_root or args.target
+    name = root.expanduser().resolve().name if root is not None else ""
+    return f"{name} Wiki" if name else "Game Wiki"
+
+
+def run_cli(args: argparse.Namespace, config_path: Path) -> dict[str, Any]:
+    config = read_json_object(config_path)
+    validate_config(config, require_base=args.mode in ("new", "migrate"))
+    project_root, vault_root = resolve_cli_roots(
+        config_path,
+        config,
+        target=args.target,
+        project_root=args.project_root,
+        vault_root=args.vault_root,
+    )
+    layout = str(config.get("layout") or args.layout)
+    engine_name = str(config.get("engine") or args.engine)
+    options = {
+        "layout": layout,
+        "engine_name": engine_name,
+        "dry_run": args.dry_run,
+        "integrity_mode": args.integrity,
+        "keep_rollback_backup": not args.discard_rollback_backup,
+        "allow_legacy_in_place": args.allow_legacy_in_place,
+        "adopt_existing_vault": args.adopt_existing_vault,
+    }
+    provenance = None
+    if args.bootstrap_repository and args.bootstrap_branch and args.bootstrap_commit:
+        provenance = {
+            "repository": args.bootstrap_repository,
+            "branch": args.bootstrap_branch,
+            "commit": args.bootstrap_commit,
+        }
+    if args.mode == "upgrade" and args.source == "github":
+        result = upgrade_game_from_github(project_root, vault_root, config_path, args.profile, **options)
+    elif args.mode == "upgrade":
+        result = upgrade_game_from_local(
+            project_root,
+            vault_root,
+            config_path,
+            args.profile,
+            provenance=provenance,
+            **options,
+        )
+    else:
+        result = run_local_game_project(
+            project_root,
+            config_path,
+            args.mode,
+            args.profile,
+            vault_root=vault_root,
+            provenance=provenance,
+            **options,
+        )
+    return result
 
 
 if __name__ == "__main__":

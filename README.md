@@ -34,12 +34,13 @@ Game mode v6 keeps the live engine project and Wiki as separate roots, retains v
 | HOW: code structure, symbols, impact and tests | CodeGraph (`codegraph-ai/CodeGraph`) |
 | WHY: canonical intent, validation and decisions | LLM Wiki |
 
-Select both in [`config.game.example.json`](config.game.example.json). `tools/game_providers.py` plans scoped host queries and falls back to local files when MCP is missing or incompatible. It never starts providers or merges/copies their graph data. See the [reviewed design](docs/GAME_PROVIDER_FEDERATION_DESIGN.md) and [Game guide](GAME_PROJECT_MODE.en.md#optional-provider-federation-v6).
+Select them with `--knowledge-graph graphify` and `--code-intelligence codegraph`; no config file is needed. Graphify is installed automatically (CLI plus host skill) after install and whenever ingest finds it missing. CodeGraph auto-install is on hold because it needs a native binary and a hand-edited MCP entry, so select it only if you have already connected it. `tools/game_providers.py` plans scoped host queries and falls back to local files when MCP is missing or incompatible. It never starts providers or merges/copies their graph data. See the [reviewed design](docs/GAME_PROVIDER_FEDERATION_DESIGN.md) and [Game guide](GAME_PROJECT_MODE.en.md#optional-provider-federation-v6).
 
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.json \
+  --game-title "My Game" \
+  --knowledge-graph graphify \
   --mode migrate \
   --profile evidence \
   --dry-run

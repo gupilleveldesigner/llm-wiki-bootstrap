@@ -58,7 +58,7 @@ Game projects add a third axis, project mode (`project_mode: game`). It is not a
 - Claude Code or Codex
 - Python 3.10+
 - GitHub HTTPS access for online `upgrade`
-- Graphify is optional
+- Graphify is installed for you when missing (needs network access once; the Wiki works without it)
 
 The skill can use `python`, `py -3`, or `python3`. A Windows Microsoft Store execution alias without a real Python installation is not sufficient.
 
@@ -286,16 +286,17 @@ Inspect the write plan first:
 ```bash
 python scripts/game_project.py \
   --project-root ./MyGame \
-  --config ./config.game.json \
   --mode migrate \
   --profile standard \
   --dry-run
 ```
 
-See [`config.game.example.json`](config.game.example.json) and the [Game project mode guide](GAME_PROJECT_MODE.en.md).
+No config file is needed: pass values such as `--game-title` as flags. The full contract is in the [Game project mode guide](GAME_PROJECT_MODE.en.md).
 
-Game v6 adds optional, independent providers: `providers.code_intelligence: "codegraph"`
-for HOW and `providers.knowledge_graph: "graphify"` for WHAT. WHY stays with canonical
+Game v6 adds optional, independent providers: `--code-intelligence codegraph`
+for HOW and `--knowledge-graph graphify` for WHAT. Graphify is installed
+automatically; CodeGraph auto-install is on hold, so select it only if you have
+already connected it. WHY stays with canonical
 Wiki intent, validation and decisions. The scoped host query planner falls back to
 local reads when MCP is unavailable; graph payloads are never copied into Wiki or
 traceability. Existing v5 configs, trace schema 2 and baseline 1 remain compatible.
@@ -304,36 +305,35 @@ Game ingest keeps its core checks and skips graph checks by default; explicit
 
 ## Optional features and preservation boundary
 
-Graphify is an optional exploration aid. Use `$graphify <WIKI_ROOT>` in Codex or `/graphify <WIKI_ROOT>` in Claude Code. Raw and Markdown remain authoritative.
+Graphify is an exploration aid, and you do not install it yourself. The agent installs the CLI and registers the host skill right after setup and whenever ingest finds it missing (`ingest_runtime.py ensure-graphify`). If installation is impossible, for example offline, the Wiki still works: single-source ingest completes without a graph, and a batch is reported as incomplete with the reason. Use `$graphify <WIKI_ROOT>` in Codex or `/graphify <WIKI_ROOT>` in Claude Code. Raw and Markdown remain authoritative.
 
-Obsidian Web Clipper templates under `templates/web-clipper/` collect material in `raw/reference/`; collected Raw is not current knowledge before ingest and review.
+To add web material, give the agent a URL: it saves the page as a new file under `raw/reference/` and ingests it. The Obsidian Web Clipper templates under `templates/web-clipper/` are optional, for one-click capture from the browser; importing them is a single step (select all five files in the Clipper's Import dialog). Collected Raw is not current knowledge before ingest and review.
 
 Preserve `raw/`, `wiki/sources/`, Evidence `wiki/claims/`, `wiki/canon/`, `wiki/experiments/`, and needed `.session-memory/` records. `.wiki-cache/`, Graphify output, derived indexes, and embeddings are regenerable.
 
 ## Advanced CLI
 
-The basic configuration matches [`config.example.json`](config.example.json).
-
-```json
-{"project_name": "My Wiki", "domain_summary": "One-sentence project purpose"}
-```
+You normally just ask the agent; these are the commands it runs. No config file has to be written. The name defaults to the target folder name, and `--project-name` / `--domain-summary` override it. An existing config file still works through `--config`.
 
 On Windows, `py -3` can replace `python`.
 
 ```bash
-python scripts/bootstrap.py --target ./MyWiki --config ./config.json --mode new --profile standard
-python scripts/bootstrap.py --target ./ResearchWiki --config ./config.json --mode new --profile evidence
-python scripts/bootstrap.py --target ./ExistingProject --config ./config.json --mode migrate --profile evidence
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --profile evidence
-python scripts/upgrade.py --target ./ExistingWiki --config ./config.json --source local
+python scripts/bootstrap.py --target ./MyWiki --domain-summary "One-sentence project purpose" --mode new --profile standard
+python scripts/bootstrap.py --target ./ResearchWiki --mode new --profile evidence
+python scripts/bootstrap.py --target ./ExistingProject --mode migrate --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki
+python scripts/upgrade.py --target ./ExistingWiki --profile evidence
+python scripts/upgrade.py --target ./ExistingWiki --source local
 ```
 
 ## Post-install checks
 
+Run from the vault, or use absolute paths with `--root` / `--target`.
+
 ```bash
-python ".claude/skills/ingest/scripts/ingest_runtime.py" status
+python ".agents/skills/ingest/scripts/ingest_runtime.py" status
 python ".session-memory/scripts/session_memory.py" status
+python ".agents/skills/ingest/scripts/ingest_runtime.py" ensure-graphify --check
 ```
 
 Check core files and placeholders; Evidence runtime and `canon-review`; upgrade results and `.llm-wiki.json.last_upgrade.commit`; and, for Game, `tools/game_trace.py verify` plus project integrity.

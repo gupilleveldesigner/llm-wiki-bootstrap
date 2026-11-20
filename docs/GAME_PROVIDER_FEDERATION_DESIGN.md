@@ -1,5 +1,17 @@
 # Game provider federation design
 
+> **Amendment, 2026-11-20 (owner request).** Graphify is now installed
+> automatically: the bootstrap skill and the ingest runtime run
+> `ingest_runtime.py ensure-graphify`, which installs the `graphifyy` CLI and
+> registers the host skill when they are missing. This replaces "no automatic
+> ... installation" below for Graphify's local CLI and skill only. The planner
+> (`game_providers.py`) is unchanged and still never installs, connects, indexes
+> or edits MCP configuration, and CI still installs neither provider. CodeGraph
+> auto-install was evaluated and put on hold: it needs a native per-platform
+> binary plus a hand-edited MCP entry, so it does not install as uniformly as
+> Graphify. Provider selection moved from a config file to the
+> `--knowledge-graph` / `--code-intelligence` flags; old config files still work.
+
 Status: revision 2 approved by the independent pessimistic reviewer on 2026-09-03,
 before implementation. Revision 1 was rejected for missing connection/default-corpus
 binding; revision 2 resolves that Major finding. No Blocking or material Major
