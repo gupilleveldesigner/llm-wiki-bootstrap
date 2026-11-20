@@ -893,6 +893,21 @@ def bootstrap(target: Path, config_path: Path, mode: str = "new", profile: str |
     return result
 
 
+def emit_result(result: dict) -> None:
+    """Print the JSON result even when stdout cannot encode it.
+
+    Results list Korean template names. A console or pipe in a code page without
+    those characters would raise and leave no result at all, so fall back to
+    ASCII escapes, which every code page and every JSON reader accepts. The
+    stream's own encoding is kept so a calling process that reads this output
+    with its locale encoding still decodes it.
+    """
+    try:
+        print(json.dumps(result, ensure_ascii=False))
+    except UnicodeEncodeError:
+        print(json.dumps(result, ensure_ascii=True))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create, migrate or upgrade an LLM Wiki. No config file is needed.")
     parser.add_argument("--target", required=True, type=Path)
@@ -913,7 +928,7 @@ def main() -> int:
             result = bootstrap(args.target, config_path, args.mode, args.profile)
     except Exception as error:
         result = {"ok": False, "error": str(error), "mode": args.mode, "profile": args.profile}
-    print(json.dumps(result, ensure_ascii=False))
+    emit_result(result)
     return 0 if result["ok"] else 1
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,10 +15,13 @@ sys.path.insert(0, str(SCRIPTS))
 import bootstrap  # noqa: E402
 
 
-def run(script: str, *arguments: str) -> dict:
+def run(script: str, *arguments: str, stdout_encoding: str | None = None) -> dict:
+    environment = dict(os.environ)
+    if stdout_encoding:
+        environment["PYTHONIOENCODING"] = stdout_encoding
     completed = subprocess.run(
         [sys.executable, str(SCRIPTS / script), *arguments],
-        capture_output=True, text=True, encoding="utf-8", check=False,
+        capture_output=True, text=True, encoding=stdout_encoding or "utf-8", check=False, env=environment,
     )
     return json.loads(completed.stdout)
 
@@ -104,6 +108,13 @@ class GameCliTests(unittest.TestCase):
                       "--mode", "upgrade", "--source", "local", "--knowledge-graph", "none")
         self.assertTrue(cleared["ok"], cleared)
         self.assertIsNone(manifest(vault)["game_project"]["providers"]["knowledge_graph"])
+
+    def test_result_survives_a_console_that_cannot_encode_korean(self) -> None:
+        # The result lists Korean template names; a cp1252 console used to raise and print nothing.
+        result = run("game_project.py", "--project-root", str(self.project), "--mode", "new", "--dry-run",
+                     stdout_encoding="cp1252")
+        self.assertTrue(result["ok"], result)
+        self.assertIn("세션", json.dumps(result, ensure_ascii=False))
 
     def test_command_line_layout_beats_config(self) -> None:
         config = Path(self.directory.name) / "config.json"

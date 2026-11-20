@@ -579,7 +579,7 @@ def main() -> int:
             "error": str(error),
         }
 
-    print(json.dumps(result, ensure_ascii=False))
+    wiki_bootstrap.emit_result(result)
     return 0 if result.get("ok") else 1
 
 

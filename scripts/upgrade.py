@@ -235,6 +235,21 @@ def upgrade_from_local_bundle(target: Path, config: Path, profile: str | None = 
     return result
 
 
+def emit_result(result: dict[str, Any]) -> None:
+    """Print the JSON result even when stdout cannot encode it.
+
+    Results list Korean template names. A console or pipe in a code page without
+    those characters would raise and leave no result at all, so fall back to
+    ASCII escapes, which every code page and every JSON reader accepts. The
+    stream's own encoding is kept so a calling process that reads this output
+    with its locale encoding still decodes it.
+    """
+    try:
+        print(json.dumps(result, ensure_ascii=False))
+    except UnicodeEncodeError:
+        print(json.dumps(result, ensure_ascii=True))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -269,7 +284,7 @@ def main() -> int:
             "error": str(error),
         }
 
-    print(json.dumps(result, ensure_ascii=False))
+    emit_result(result)
     return 0 if result.get("ok") else 1
 
 
